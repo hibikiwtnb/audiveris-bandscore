@@ -252,6 +252,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.ExecutionException;
@@ -1448,7 +1449,7 @@ public class PartwiseBuilder
             kind.setValue(kindOf(chordName.getKind().type));
             kind.setText(chordName.getKind().text);
 
-            if (chordName.getKind().parentheses) {
+            if (chordName.getKind().parentheses && !isSixNine(chordName)) {
                 kind.setParenthesesDegrees(YesNo.YES);
             }
 
@@ -1990,9 +1991,11 @@ public class PartwiseBuilder
                     final MeasureRepeat repeat = factory.createMeasureRepeat();
                     repeat.setType(StartStop.STOP);
                     measureStyle.setMeasureRepeat(repeat);
+                    measureStyle.setNumber(current.repeatStyleNumber);
                     getAttributes().getMeasureStyle().add(measureStyle);
 
                     current.repeatStarted = false;
+                    current.repeatStyleNumber = null;
                 }
 
                 if (!measure.isDummy()) {
@@ -2077,6 +2080,16 @@ public class PartwiseBuilder
             Rational timeCounter = Rational.ZERO;
 
             for (Voice voice : measure.getVoices()) {
+                // When copying for a measure repeat sign, copy only the staves with such sign
+                if (current.repeatCopying && (current.repeatStaves != null)) {
+                    final Staff vStaff = voiceStaff(voice);
+
+                    if ((vStaff == null) || !current.repeatStaves.contains(vStaff
+                            .getIndexInPart())) {
+                        continue;
+                    }
+                }
+
                 current.voice = voice;
 
                 // Need a backup?
@@ -2155,6 +2168,8 @@ public class PartwiseBuilder
                 current.endVoice();
             }
 
+            current.measureEndCounter = timeCounter;
+
             // Clefs that occur after time slots, if any
             clefIters.push(null, null);
 
@@ -2183,6 +2198,17 @@ public class PartwiseBuilder
                     repeat.setSlashes(new BigInteger("" + slashes));
                     repeat.setType(StartStop.START);
                     measureStyle.setMeasureRepeat(repeat);
+
+                    // Sign on a single staff of a multi-staff part?
+                    final int partStaves = measure.getPart().getStaves().size();
+
+                    if ((partStaves > 1) && (repeats.size() < partStaves)
+                            && (repeatSign.getStaff() != null)) {
+                        current.repeatStyleNumber = BigInteger.valueOf(
+                                1 + repeatSign.getStaff().getIndexInPart());
+                        measureStyle.setNumber(current.repeatStyleNumber);
+                    }
+
                     getAttributes().getMeasureStyle().add(measureStyle);
 
                     current.repeatStarted = true;
@@ -2210,9 +2236,26 @@ public class PartwiseBuilder
                     precMeasure = precMeasure.getPrecedingInScore();
                 }
 
+                // Staves with a repeat sign (the other staves keep their own content only)
+                final Set<Integer> staves = new HashSet<>();
+                for (MeasureRepeatInter sign : repeats) {
+                    if (sign.getStaff() != null) {
+                        staves.add(sign.getStaff().getIndexInPart());
+                    }
+                }
+
+                // Rewind to measure start, after the content of this measure if any
+                final Rational endCounter = current.measureEndCounter;
+
+                if ((endCounter != null) && (endCounter.compareTo(Rational.ZERO) > 0)
+                        && !toCopy.isEmpty()) {
+                    insertBackup(endCounter);
+                }
+
                 for (int i = 0, iMax = toCopy.size() - 1; i <= iMax; i++) {
                     final Measure sourceMeasure = toCopy.get(i);
                     current.repeatCopying = true;
+                    current.repeatStaves = staves.isEmpty() ? null : staves;
                     logger.debug("{} copying {}", measure, sourceMeasure);
                     processMeasure(sourceMeasure);
 
@@ -2225,6 +2268,7 @@ public class PartwiseBuilder
                     }
 
                     current.repeatCopying = false;
+                    current.repeatStaves = null;
                 }
             }
         } catch (Exception ex) {
@@ -3496,6 +3540,53 @@ public class PartwiseBuilder
 
     //~ Static Methods -----------------------------------------------------------------------------
 
+    //-----------//
+    // isSixNine //
+    //-----------//
+    /**
+     * Report whether the chord name is a "6(9)" chord, i.e. a major/minor sixth with just
+     * an added 9th.
+     * <p>
+     * Readers such as MuseScore merge such degree into a "69" chord kind, so a
+     * parentheses-degrees attribute would only produce an empty pair of parentheses.
+     *
+     * @param chordName the chord name
+     * @return true for a 6(9) chord
+     */
+    private static boolean isSixNine (ChordNameInter chordName)
+    {
+        final ChordNameInter.ChordKind.ChordType type = chordName.getKind().type;
+
+        if ((type != ChordNameInter.ChordKind.ChordType.MAJOR_SIXTH)
+                && (type != ChordNameInter.ChordKind.ChordType.MINOR_SIXTH)) {
+            return false;
+        }
+
+        final List<ChordNameInter.ChordDegree> degrees = chordName.getDegrees();
+
+        return (degrees != null) && (degrees.size() == 1) && (degrees.get(0).value == 9);
+    }
+
+    //------------//
+    // voiceStaff //
+    //------------//
+    /**
+     * Report the staff where the provided voice starts.
+     *
+     * @param voice the voice
+     * @return its (top) staff, or null
+     */
+    private static Staff voiceStaff (Voice voice)
+    {
+        if (voice.isMeasureRest()) {
+            return voice.getWholeChord().getTopStaff();
+        }
+
+        final List<AbstractChordInter> chords = voice.getChords();
+
+        return chords.isEmpty() ? voice.getStartingStaff() : chords.get(0).getTopStaff();
+    }
+
     //---------------------//
     // measureRestDuration //
     //---------------------//
@@ -3854,6 +3945,12 @@ public class PartwiseBuilder
         boolean repeatStarted; // True when in a sequence of repeated measures
 
         boolean repeatCopying; // True when copying measure pure logical content
+
+        Set<Integer> repeatStaves; // Indices in part of staves to copy, when repeatCopying
+
+        BigInteger repeatStyleNumber; // Staff number of current measure-repeat style, if any
+
+        Rational measureEndCounter; // Time counter at end of last exported voice in measure
 
         ScorePartwise.Part.Measure pmMeasure;
 
