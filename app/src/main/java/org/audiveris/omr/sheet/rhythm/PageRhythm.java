@@ -21,6 +21,8 @@
 // </editor-fold>
 package org.audiveris.omr.sheet.rhythm;
 
+import org.audiveris.omr.constant.Constant;
+import org.audiveris.omr.constant.ConstantSet;
 import org.audiveris.omr.math.Rational;
 import org.audiveris.omr.score.Page;
 import org.audiveris.omr.score.PageRef;
@@ -74,6 +76,8 @@ import java.util.List;
 public class PageRhythm
 {
     //~ Static fields/initializers -----------------------------------------------------------------
+
+    private static final Constants constants = new Constants();
 
     private static final Logger logger = LoggerFactory.getLogger(PageRhythm.class);
 
@@ -211,6 +215,17 @@ public class PageRhythm
 
                     // No time info in this page, let's look in the page before
                     prevPageRef = prevPageRef.getPrecedingInScore();
+                }
+
+                // Still unknown? Fall back to user-provided default time signature, if any
+                if (range.duration == null) {
+                    final TimeRational defaultTR = getDefaultTimeRational();
+
+                    if (defaultTR != null) {
+                        range.timeRational = defaultTR;
+                        range.duration = defaultTR.getValue();
+                        logger.info("{} No time signature found, using default {}", page, defaultTR);
+                    }
                 }
             }
         }
@@ -398,5 +413,42 @@ public class PageRhythm
 
             return sb.toString();
         }
+    }
+
+    //------------------------//
+    // getDefaultTimeRational //
+    //------------------------//
+    /**
+     * Report the default time signature to use when none can be found for a page start,
+     * neither in the page itself nor in any preceding page of the same score.
+     *
+     * @return the default TimeRational, or null if not set or invalid
+     */
+    private static TimeRational getDefaultTimeRational ()
+    {
+        final String str = constants.defaultTimeSignature.getValue();
+
+        if ((str == null) || str.isBlank()) {
+            return null;
+        }
+
+        try {
+            return TimeRational.decode(str.trim());
+        } catch (Exception ex) {
+            logger.warn("Invalid defaultTimeSignature constant: \"{}\"", str);
+            return null;
+        }
+    }
+
+    //-----------//
+    // Constants //
+    //-----------//
+    private static class Constants
+            extends ConstantSet
+    {
+        private final Constant.String defaultTimeSignature = new Constant.String(
+                "",
+                "Time signature (e.g. \"4/4\") assumed when a page starts without any known time"
+                        + " signature. Empty means no default (original behavior).");
     }
 }
