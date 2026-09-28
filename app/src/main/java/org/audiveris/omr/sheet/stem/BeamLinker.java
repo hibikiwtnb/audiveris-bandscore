@@ -1626,7 +1626,7 @@ public class BeamLinker
                         final HeadInter head = cl.getSource();
                         final Set<StemInter> stems = head.getSideStems().get(hs);
 
-                        if (stems.size() == 1) {
+                        if ((stems != null) && (stems.size() == 1)) {
                             stem = stems.iterator().next();
                             logger.debug("{} reusing {}", this, stem);
                             break;

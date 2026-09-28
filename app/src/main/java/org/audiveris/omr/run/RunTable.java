@@ -141,7 +141,7 @@ public class RunTable
      * </ul>
      */
     @XmlElement(name = "runs")
-    private final RunSequence[] sequences;
+    private RunSequence[] sequences;
 
     // Transient data
     //---------------
@@ -336,6 +336,10 @@ public class RunTable
     @SuppressWarnings("unused")
     private void afterMarshal (Marshaller m)
     {
+        if (sequences == null) {
+            return;
+        }
+
         for (int i = 0, iBreak = sequences.length; i < iBreak; i++) {
             RunSequence seq = sequences[i];
 
@@ -356,6 +360,11 @@ public class RunTable
     private void afterUnmarshal (Unmarshaller m,
                                  Object parent)
     {
+        if (sequences == null) {
+            // An empty table (no sequence) is marshalled without any 'runs' element
+            sequences = new RunSequence[orientation.isVertical() ? width : height];
+        }
+
         afterMarshal(null);
     }
 
@@ -369,6 +378,10 @@ public class RunTable
     @SuppressWarnings("unused")
     private void beforeMarshal (Marshaller m)
     {
+        if (sequences == null) {
+            return;
+        }
+
         for (int i = 0, iBreak = sequences.length; i < iBreak; i++) {
             RunSequence seq = sequences[i];
 
