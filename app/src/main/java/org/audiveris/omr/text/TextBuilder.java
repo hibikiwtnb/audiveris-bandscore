@@ -388,7 +388,14 @@ public class TextBuilder
 
         for (TextLine line : lines) {
             for (TextWord word : line.getWords()) {
-                Rectangle roi = word.getBounds();
+                // Some OCR engines may report bounds slightly beyond the buffer
+                Rectangle roi = word.getBounds().intersection(
+                        new Rectangle(0, 0, buffer.getWidth(), buffer.getHeight()));
+
+                if (roi.isEmpty()) {
+                    continue;
+                }
+
                 List<Section> wordSections = factory.createSections(buffer, roi);
                 allSections.addAll(wordSections);
             }
