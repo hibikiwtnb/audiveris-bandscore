@@ -2092,8 +2092,10 @@ public class PartwiseBuilder
                     wedgeIters.push(chord.getTimeOffset());
                     processChord(chord);
 
-                    if (stack.getActualDuration() != null) {
-                        timeCounter = stack.getActualDuration();
+                    final Rational restDur = measureRestDuration(stack);
+
+                    if (restDur != null) {
+                        timeCounter = restDur;
                     }
                 } else {
                     for (Slot slot : stack.getSlots()) {
@@ -2414,7 +2416,7 @@ public class PartwiseBuilder
                     final Rational dur;
 
                     if (chord.isMeasureRest()) {
-                        Rational measureDur = current.measure.getStack().getActualDuration();
+                        Rational measureDur = measureRestDuration(current.measure.getStack());
                         dur = (measureDur != null) ? measureDur : Rational.ONE; // Not too bad...
                     } else {
                         dur = chord.getDuration();
@@ -3493,6 +3495,31 @@ public class PartwiseBuilder
     }
 
     //~ Static Methods -----------------------------------------------------------------------------
+
+    //---------------------//
+    // measureRestDuration //
+    //---------------------//
+    /**
+     * Report the duration to export for a measure rest in the provided stack.
+     * <p>
+     * The stack actual duration is the duration of its longest voice.
+     * If it exceeds the expected duration (known time signature), the overflow comes from
+     * some erroneous voice, so we don't propagate it to measure rests of the other voices.
+     *
+     * @param stack the containing stack
+     * @return the measure rest duration, perhaps null
+     */
+    private static Rational measureRestDuration (MeasureStack stack)
+    {
+        final Rational actual = stack.getActualDuration();
+        final Rational expected = stack.getExpectedDuration();
+
+        if ((actual != null) && (expected != null) && (actual.compareTo(expected) > 0)) {
+            return expected;
+        }
+
+        return actual;
+    }
 
     //----------//
     // areEqual //
