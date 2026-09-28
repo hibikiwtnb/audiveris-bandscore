@@ -477,12 +477,13 @@ public class EndingsBuilder
         final RunTable table = segment.getGlyph().getRunTable();
         final Rectangle bounds = segment.getGlyph().getBounds();
         final int x1 = (int) Math.ceil(line.getX1());
-        final int x2 = (int) Math.floor(line.getX2());
+        // Guard against degenerate (sub-pixel or reversed) lines: keep at least 1 pixel
+        final int x2 = Math.max(x1, (int) Math.floor(line.getX2()));
         final int i1 = x1 - bounds.x;
         final int i2 = x2 - bounds.x;
 
         final RunTable t = new RunTable(Orientation.VERTICAL, x2 - x1 + 1, table.getHeight());
-        for (int i = i1; i <= i2; i++) {
+        for (int i = Math.max(i1, 0); i <= Math.min(i2, table.getWidth() - 1); i++) {
             final Iterator<Run> it = table.iterator(i);
             if (it.hasNext()) {
                 t.addRun(i - i1, it.next());
