@@ -142,6 +142,10 @@ public class ChordNameInter
 
     private static final String SUS = "sus";
 
+    private static final String ADD = "add";
+
+    private static final String ADD_VALUE = "addValue";
+
     private static final String KIND = "kind";
 
     private static final String PARS = "pars";
@@ -198,6 +202,10 @@ public class ChordNameInter
     /** Pattern for a suspended indication. sus2 or sus4 */
     private static final String susPat = group(SUS, "([Ss][Uu][Ss][24])");
 
+    /** Pattern for an added degree. add2, add4, add9, add11 or add13 */
+    private static final String addPat = //
+            group(ADD, "[Aa][Dd][Dd]" + group(ADD_VALUE, "(2|4|9|11|13)"));
+
     /** Pattern for the whole kind value. */
     private static final String kindPat = //
             group(KIND, modePat + "?" + parMajPat + "?" + degsPat + "?" + susPat + "?");
@@ -217,7 +225,8 @@ public class ChordNameInter
      * TODO: add a pattern for functions
      */
     private static final String[] raws = new String[] //
-    { rootPat + kindPat + "?" + "(" + parPat + "|" + noParPat + ")" + "?" + bassPat + "?" };
+    { rootPat + kindPat + "?" + addPat + "?" + "(" + parPat + "|" + noParPat + ")" + "?" + bassPat
+            + "?" };
 
     /** Compiled patterns for whole chord symbol. */
     private static List<Pattern> patterns;
@@ -632,6 +641,13 @@ public class ChordNameInter
                     if (!noParStr.isEmpty()) {
                         degrees.addAll(ChordDegree.createList(noParStr, firstDeg));
                     }
+                }
+
+                // Added degree (e.g. add9)
+                final String addStr = getGroup(matcher, ADD_VALUE);
+
+                if (!addStr.isEmpty()) {
+                    degrees.add(new ChordDegree(Integer.parseInt(addStr), 0, ChordDegree.DegreeType.ADD));
                 }
 
                 return new ChordStructure(root, kind, bass, degrees);
