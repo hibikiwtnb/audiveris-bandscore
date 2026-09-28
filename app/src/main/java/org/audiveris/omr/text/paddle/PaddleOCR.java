@@ -130,7 +130,7 @@ public class PaddleOCR
 
             try {
                 final HttpRequest request = HttpRequest.newBuilder(uri("/health"))
-                        .timeout(Duration.ofSeconds(5)).GET().build();
+                        .timeout(Duration.ofSeconds(60)).GET().build(); // Server may be busy
                 final HttpResponse<String> response = client.send(
                         request,
                         HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
