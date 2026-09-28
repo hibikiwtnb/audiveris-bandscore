@@ -636,6 +636,53 @@ public class TextLine
     }
 
     //--------------------//
+    // mergeChordSuffixes //
+    //--------------------//
+    /**
+     * Merge a chord root word with the following chord suffix word, when they are printed
+     * with a small gap, such as "D sus4" or "E add9".
+     * <p>
+     * Merge is performed only if the root word is a valid chord name, the suffix word is not,
+     * their concatenation is a valid chord name and the gap is smaller than the root height.
+     */
+    public void mergeChordSuffixes ()
+    {
+        final List<TextWord> toAdd = new ArrayList<>();
+        final List<TextWord> toRemove = new ArrayList<>();
+        TextWord prevWord = null;
+
+        for (TextWord word : getWords()) {
+            if ((prevWord != null) && !toRemove.contains(prevWord)) {
+                final Rectangle pb = prevWord.getBounds();
+                final Rectangle wb = word.getBounds();
+
+                if ((pb != null) && (wb != null) && (wb.x - (pb.x + pb.width) < pb.height)
+                        && (ChordNameInter.createValid(word) == null)
+                        && (ChordNameInter.createValid(prevWord) != null)) {
+                    final TextWord bigWord = TextWord.mergeOf(prevWord, word);
+
+                    if (ChordNameInter.createValid(bigWord) != null) {
+                        logger.debug("   chord merged {} & {} into {}", prevWord, word, bigWord);
+                        toRemove.add(prevWord);
+                        toRemove.add(word);
+                        toAdd.add(bigWord);
+                        prevWord = null;
+
+                        continue;
+                    }
+                }
+            }
+
+            prevWord = word;
+        }
+
+        if (!toAdd.isEmpty()) {
+            addWords(toAdd);
+            removeWords(toRemove);
+        }
+    }
+
+    //--------------------//
     // mergeStandardWords //
     //--------------------//
     public void mergeStandardWords ()

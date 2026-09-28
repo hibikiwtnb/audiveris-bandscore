@@ -141,7 +141,8 @@ public enum TextRole
 
         final Point2D boxCenter = GeoUtil.center2D(box);
 
-        // Is line made entirely of potential chord symbols?
+        // Is line made entirely of potential chord symbols? (once "D sus4" is merged as "Dsus4")
+        line.mergeChordSuffixes();
         boolean isAllChords = line.isAllChordNames();
 
         // Is line mainly in italic? (Not very reliable...)
