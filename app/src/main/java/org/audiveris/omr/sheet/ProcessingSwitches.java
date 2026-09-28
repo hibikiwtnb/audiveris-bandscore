@@ -256,6 +256,8 @@ public class ProcessingSwitches
 
         final Constant.Boolean articulations = new Constant.Boolean(true, "Articulations");
 
+        final Constant.Boolean endings = new Constant.Boolean(true, "Endings (volta brackets)");
+
         final Constant.Boolean dynamicsAboveStaff = new Constant.Boolean(
                 true,
                 "Dynamics located above staff");

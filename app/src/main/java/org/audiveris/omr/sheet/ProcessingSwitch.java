@@ -67,6 +67,7 @@ public enum ProcessingSwitch
     lyrics(ProcessingSwitches.constants.lyrics),
     lyricsAboveStaff(ProcessingSwitches.constants.lyricsAboveStaff),
     articulations(ProcessingSwitches.constants.articulations),
+    endings(ProcessingSwitches.constants.endings),
     dynamicsAboveStaff(ProcessingSwitches.constants.dynamicsAboveStaff),
     dynamicsBelowStaff(ProcessingSwitches.constants.dynamicsBelowStaff),
 

@@ -24,6 +24,7 @@ package org.audiveris.omr.sheet.curve;
 import org.audiveris.omr.OMR;
 import org.audiveris.omr.constant.Constant;
 import org.audiveris.omr.constant.ConstantSet;
+import org.audiveris.omr.sheet.ProcessingSwitch;
 import org.audiveris.omr.sheet.Sheet;
 import org.audiveris.omr.sheet.ui.ImageView;
 import org.audiveris.omr.sheet.ui.PixelBoard;
@@ -151,10 +152,12 @@ public class Curves
         watch.start("buildWedges");
         wedgesBuilder.buildWedges();
 
-        // Build endings out of segments
-        EndingsBuilder endingsBuilder = new EndingsBuilder(this);
-        watch.start("buildEndings");
-        endingsBuilder.buildEndings();
+        // Build endings out of segments, unless the score is known to have none
+        if (sheet.getStub().getProcessingSwitches().getValue(ProcessingSwitch.endings)) {
+            EndingsBuilder endingsBuilder = new EndingsBuilder(this);
+            watch.start("buildEndings");
+            endingsBuilder.buildEndings();
+        }
 
         // Build rehearsals out of segments
         RehearsalsBuilder rehearsalsBuilder = new RehearsalsBuilder(this);
