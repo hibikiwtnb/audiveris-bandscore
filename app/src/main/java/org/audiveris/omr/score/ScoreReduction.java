@@ -162,9 +162,16 @@ public class ScoreReduction
     public int reduce (List<SheetStub> stubs)
     {
         final List<List<PartRef>> sequences = buildSequences(score.getPageRefs(stubs));
-        final PartCollation collation = new PartCollation(
-                sequences,
-                score.isLogicalsLocked() ? score.getLogicalParts() : null);
+        List<LogicalPart> logicals = score.isLogicalsLocked() ? score.getLogicalParts() : null;
+        boolean hinted = false;
+
+        if (logicals == null) {
+            // Use the user parts hint, if any
+            logicals = PartCollation.getHintedLogicals();
+            hinted = logicals != null;
+        }
+
+        final PartCollation collation = new PartCollation(sequences, logicals, hinted);
         final List<Record> records = collation.getRecords();
 
         if (logger.isDebugEnabled()) {

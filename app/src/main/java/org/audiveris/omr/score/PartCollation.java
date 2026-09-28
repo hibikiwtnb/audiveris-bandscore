@@ -68,6 +68,9 @@ public class PartCollation
 
     private static final Logger logger = LoggerFactory.getLogger(PartCollation.class);
 
+    /** Cost of a system part that cannot be mapped to any hinted logical. */
+    private static final double UNMAPPED_COST = 10;
+
     public static final List<StaffConfig> PIANO_CONFIG = StaffConfig.decodeCsv(
             constants.pianoStaffConfig.getValue());
 
@@ -88,6 +91,11 @@ public class PartCollation
      */
     private boolean logicalsLocked;
 
+    /**
+     * Are the LogicalPart's provided by the user parts hint?.
+     */
+    private boolean hinted;
+
     //~ Constructors -------------------------------------------------------------------------------
 
     /**
@@ -99,12 +107,30 @@ public class PartCollation
     public PartCollation (List<List<PartRef>> sequences,
                           List<LogicalPart> logicals)
     {
+        this(sequences, logicals, false);
+    }
+
+    /**
+     * Creates a new <code>PartCollation</code> object.
+     *
+     * @param sequences the list of sequences of parts
+     * @param logicals  the pre-populated list of LogicalPart's, or null if un-locked
+     * @param hinted    true if logicals come from the user parts hint
+     */
+    public PartCollation (List<List<PartRef>> sequences,
+                          List<LogicalPart> logicals,
+                          boolean hinted)
+    {
+        this.hinted = hinted && (logicals != null);
+
         if (logicals != null) {
-            logicalsLocked = true;
+            logicalsLocked = !this.hinted;
 
             // Allocate the records
             for (LogicalPart logical : logicals) {
-                records.add(new Record(logical));
+                final Record record = new Record(logical);
+                record.hint = this.hinted;
+                records.add(record);
 
                 final String logicalName = logical.getName();
                 if (logicalName != null) {
@@ -205,6 +231,11 @@ public class PartCollation
                 }
             }
 
+            if (hinted) {
+                align(sequence, manuals);
+                continue;
+            }
+
             if (iSeq == 0) {
                 dispatch(sequence, records, +1, manuals);
             } else {
@@ -238,6 +269,231 @@ public class PartCollation
         if (!logicalsLocked) {
             // Assign ids to logical parts
             renumberRecords();
+        }
+
+        if (hinted) {
+            // Hinted logicals without any affiliated part are kept (dummy parts on export)
+            logger.info(
+                    "Parts hint: {} logical(s), {} extra",
+                    records.stream().filter(r -> r.hint).count(),
+                    records.stream().filter(r -> !r.hint).count());
+        }
+    }
+
+    //-------//
+    // align //
+    //-------//
+    /**
+     * Map the parts of a system to the hinted logical parts.
+     * <p>
+     * Staff count and vertical order are strict constraints, while the part name is only used
+     * as a soft cost, since OCR on part names is not reliable.
+     * Hinted logicals absent from the system (e.g. hidden empty staves) are simply skipped.
+     * A system part that cannot be mapped gets a new (extra) logical, so that no content is lost.
+     *
+     * @param sequence the system parts, top down
+     * @param manuals  records already used by manual assignment
+     */
+    private void align (List<PartRef> sequence,
+                        Set<Record> manuals)
+    {
+        final List<PartRef> parts = new ArrayList<>();
+        for (PartRef partRef : sequence) {
+            if (!partRef.isManual()) {
+                parts.add(partRef);
+            }
+        }
+
+        final List<Record> hints = new ArrayList<>();
+        for (Record record : records) {
+            if (record.hint) {
+                hints.add(record);
+            }
+        }
+
+        // cost[i][j]: best cost to process parts[0..i) with hints[0..j)
+        final int m = parts.size();
+        final int n = hints.size();
+        final double[][] cost = new double[m + 1][n + 1];
+        final int[][] move = new int[m + 1][n + 1]; // 1: match, 2: skip hint, 3: skip part
+
+        for (int i = 0; i <= m; i++) {
+            for (int j = 0; j <= n; j++) {
+                if (i == 0 && j == 0) {
+                    continue;
+                }
+
+                cost[i][j] = Double.MAX_VALUE;
+
+                if (i > 0 && j > 0) {
+                    final Record record = hints.get(j - 1);
+                    final PartRef partRef = parts.get(i - 1);
+
+                    if (!manuals.contains(record)
+                            && record.logical.getStaffCount() == partRef.getStaffCount()) {
+                        final double c = cost[i - 1][j - 1] + nameCost(partRef.getName(), record);
+
+                        if (c < cost[i][j]) {
+                            cost[i][j] = c;
+                            move[i][j] = 1;
+                        }
+                    }
+                }
+
+                if (j > 0 && cost[i][j - 1] < cost[i][j]) {
+                    cost[i][j] = cost[i][j - 1];
+                    move[i][j] = 2;
+                }
+
+                if (i > 0 && cost[i - 1][j] + UNMAPPED_COST < cost[i][j]) {
+                    cost[i][j] = cost[i - 1][j] + UNMAPPED_COST;
+                    move[i][j] = 3;
+                }
+            }
+        }
+
+        // Backtrack
+        final Record[] mapped = new Record[m];
+        for (int i = m, j = n; i > 0 || j > 0;) {
+            switch (move[i][j]) {
+            case 1 -> mapped[--i] = hints.get(--j);
+            case 2 -> j--;
+            default -> i--;
+            }
+        }
+
+        for (int i = 0; i < m; i++) {
+            final PartRef partRef = parts.get(i);
+            final Record record = mapped[i];
+
+            if (record != null) {
+                if (record.partRefs.isEmpty()) {
+                    // Adopt the actual staff configuration (line counts, small)
+                    record.logical.setStaffConfigs(partRef.getStaffConfigs());
+                }
+
+                record.partRefs.add(partRef);
+                logger.debug("{} mapped to hinted {}", partRef, record.logical);
+            } else {
+                logger.info("Part {} does not fit parts hint, extra logical", partRef);
+                addExtraRecord(partRef);
+            }
+        }
+    }
+
+    //----------------//
+    // addExtraRecord //
+    //----------------//
+    /**
+     * Assign a part that does not fit the parts hint to an extra record.
+     *
+     * @param partRef the unmapped part
+     */
+    private void addExtraRecord (PartRef partRef)
+    {
+        for (Record record : records) {
+            if (!record.hint
+                    && record.logical.getStaffCount() == partRef.getStaffCount()
+                    && Objects.equals(record.logical.getName(), partRef.getName())) {
+                record.partRefs.add(partRef);
+                return;
+            }
+        }
+
+        addRecord(+1, partRef, records);
+    }
+
+    //----------//
+    // nameCost //
+    //----------//
+    /**
+     * Report how badly an OCR'ed part name fits a hinted record.
+     *
+     * @param ocrName the part name as read by OCR, perhaps null
+     * @param record  the hinted record
+     * @return the cost, 0 for a perfect fit
+     */
+    private static double nameCost (String ocrName,
+                                     Record record)
+    {
+        final PartName ocr = PartName.parse(ocrName);
+
+        if (ocr == null) {
+            return 0;
+        }
+
+        double best = Double.MAX_VALUE;
+
+        for (String alias : new String[]{record.logical.getName(), record.logical.getAbbreviation()}) {
+            final PartName hint = PartName.parse(alias);
+
+            if (hint != null) {
+                best = Math.min(best, ocr.costTo(hint));
+            }
+        }
+
+        return (best == Double.MAX_VALUE) ? 0 : best;
+    }
+
+    //-------------------//
+    // getHintedLogicals //
+    //-------------------//
+    /**
+     * Build the logical parts defined by the user parts hint, if any.
+     * <p>
+     * Syntax: parts separated by ';', each part as <code>name[|abbreviation]:staffCount</code>,
+     * top down. Names are optional, e.g. "A.Piano|A.pf:2; Strings I|Str. I:1" or "2;1;1".
+     *
+     * @return the hinted logicals, or null if no (valid) hint
+     */
+    public static List<LogicalPart> getHintedLogicals ()
+    {
+        final String str = constants.partsHint.getValue();
+
+        if ((str == null) || str.isBlank()) {
+            return null;
+        }
+
+        try {
+            final List<LogicalPart> logicals = new ArrayList<>();
+
+            for (String token : str.split(";")) {
+                token = token.trim();
+
+                if (token.isEmpty()) {
+                    continue;
+                }
+
+                final int colon = token.lastIndexOf(':');
+                final String names = (colon == -1) ? "" : token.substring(0, colon).trim();
+                final int staffCount = Integer.parseInt(token.substring(colon + 1).trim());
+                final List<StaffConfig> configs = new ArrayList<>();
+
+                for (int i = 0; i < staffCount; i++) {
+                    configs.add(new StaffConfig(5, false));
+                }
+
+                final LogicalPart logical = new LogicalPart(
+                        logicals.size() + 1,
+                        staffCount,
+                        configs);
+
+                if (!names.isEmpty()) {
+                    final String[] aliases = names.split("\\|");
+                    logical.setName(aliases[0].trim());
+
+                    if (aliases.length > 1) {
+                        logical.setAbbreviation(aliases[1].trim());
+                    }
+                }
+
+                logicals.add(logical);
+            }
+
+            return logicals.isEmpty() ? null : logicals;
+        } catch (Exception ex) {
+            logger.warn("Invalid partsHint constant: \"{}\"", str);
+            return null;
         }
     }
 
@@ -453,6 +709,104 @@ public class PartCollation
         private final Constant.String pianoStaffConfig = new Constant.String(
                 "5,5",
                 "Typical staff configuration for the piano part");
+
+        private final Constant.String partsHint = new Constant.String(
+                "",
+                "Parts of the score, top down, as \"name[|abbrev]:staffCount\" separated by ';'"
+                        + " (e.g. \"Piano:2; Violin I|Vn. I:1\"). Empty means no hint.");
+    }
+
+    //----------//
+    // PartName //
+    //----------//
+    /**
+     * A part name split into its family (e.g. "strings") and its numeral (e.g. 2 for "II"),
+     * tolerant to typical OCR confusions on roman numerals (l, |, 1 for I; u, n, H for II).
+     */
+    static class PartName
+    {
+        /** Letters of the name, without numeral, lower case. Perhaps empty. */
+        final String family;
+
+        /** Numeral value, or null if none or unreadable. */
+        final Integer numeral;
+
+        PartName (String family,
+                  Integer numeral)
+        {
+            this.family = family;
+            this.numeral = numeral;
+        }
+
+        static PartName parse (String name)
+        {
+            if ((name == null) || name.isBlank()) {
+                return null;
+            }
+
+            final String[] tokens = name.toLowerCase().trim().split("[\\s.]+");
+            int end = tokens.length;
+            final StringBuilder strokes = new StringBuilder();
+
+            while (end > 0 && tokens[end - 1].matches("[il|!1unhv0-9'\u2018\u2019]+")) {
+                strokes.insert(0, tokens[--end]);
+            }
+
+            final StringBuilder family = new StringBuilder();
+            for (int i = 0; i < end; i++) {
+                family.append(tokens[i].replaceAll("[^a-z]", ""));
+            }
+
+            return new PartName(family.toString(), numeralOf(strokes.toString()));
+        }
+
+        private static Integer numeralOf (String strokes)
+        {
+            if (strokes.isEmpty()) {
+                return null;
+            }
+
+            final String digits = strokes.replaceAll("[^2-9]", "");
+            if (!digits.isEmpty()) {
+                return Integer.valueOf(digits.substring(0, 1));
+            }
+
+            final String roman = strokes.replaceAll("[l|!1]", "i").replaceAll("[unh]", "ii")
+                    .replaceAll("[^iv]", "");
+
+            return switch (roman) {
+            case "i" -> 1;
+            case "ii" -> 2;
+            case "iii" -> 3;
+            case "iv" -> 4;
+            case "v" -> 5;
+            case "vi" -> 6;
+            default -> null;
+            };
+        }
+
+        double costTo (PartName that)
+        {
+            double cost = 0;
+
+            if (!family.isEmpty() && !that.family.isEmpty()) {
+                if (!family.startsWith(that.family) && !that.family.startsWith(family)) {
+                    final boolean samePrefix = family.length() >= 2 && that.family.length() >= 2
+                            && family.substring(0, 2).equals(that.family.substring(0, 2));
+                    cost += samePrefix ? 0.5 : 2;
+                }
+            }
+
+            if (numeral != null && that.numeral != null) {
+                if (!numeral.equals(that.numeral)) {
+                    cost += 1.5;
+                }
+            } else if (numeral != null || that.numeral != null) {
+                cost += 0.25;
+            }
+
+            return cost;
+        }
     }
 
     //--------//
@@ -468,6 +822,9 @@ public class PartCollation
 
         /** Affiliated candidate parts. */
         final List<PartRef> partRefs = new ArrayList<>();
+
+        /** True if logical comes from user parts hint. */
+        boolean hint;
 
         public Record (LogicalPart logical)
         {
