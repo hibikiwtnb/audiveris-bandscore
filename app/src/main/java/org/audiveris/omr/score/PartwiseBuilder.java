@@ -3733,7 +3733,8 @@ public class PartwiseBuilder
                 for (HorizontalSide side : HorizontalSide.values()) {
                     AbstractChordInter chord = wedge.getChord(side);
 
-                    if ((chord != null) && (chord.getMeasure() == measure)) {
+                    if ((chord != null) && (chord.getMeasure() == measure)
+                            && (chord.getTimeOffset() != null)) {
                         // We take the first note of the chord as reference
                         AbstractNoteInter refNote = (AbstractNoteInter) chord.getNotes().get(0);
                         events.add(new TimedWedge(wedge, side, refNote, chord.getTimeOffset()));
