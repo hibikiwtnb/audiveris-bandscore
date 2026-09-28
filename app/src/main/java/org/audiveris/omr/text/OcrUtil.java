@@ -25,6 +25,7 @@ import org.audiveris.omr.constant.Constant;
 import org.audiveris.omr.constant.ConstantSet;
 import org.audiveris.omr.sheet.Sheet;
 import org.audiveris.omr.text.OCR.LayoutMode;
+import org.audiveris.omr.text.paddle.PaddleOCR;
 import org.audiveris.omr.text.tesseract.TesseractOCR;
 
 import org.slf4j.Logger;
@@ -50,8 +51,8 @@ public abstract class OcrUtil
 
     private static final Logger logger = LoggerFactory.getLogger(OcrUtil.class);
 
-    /** The related OCR. */
-    private static final OCR ocr = TesseractOCR.getInstance();
+    /** The related OCR, selected on first use. */
+    private static OCR ocr;
 
     //~ Constructors -------------------------------------------------------------------------------
     /** Not meant to be instantiated. */
@@ -68,9 +69,42 @@ public abstract class OcrUtil
      *
      * @return the available OCR engine, or null
      */
-    public static OCR getOcr ()
+    public static synchronized OCR getOcr ()
     {
+        if (ocr == null) {
+            ocr = selectOcr();
+        }
+
         return ocr;
+    }
+
+    //-----------//
+    // selectOcr //
+    //-----------//
+    /**
+     * Select the OCR engine according to the ocrEngine constant.
+     * If PaddleOCR is requested but its server is not reachable, we fall back to Tesseract.
+     *
+     * @return the selected OCR engine
+     */
+    private static OCR selectOcr ()
+    {
+        final String engine = constants.ocrEngine.getValue().trim();
+
+        if (engine.equalsIgnoreCase("paddle")) {
+            final OCR paddle = PaddleOCR.getInstance();
+
+            if (paddle.isAvailable()) {
+                logger.info("Using {}", paddle.identify());
+                return paddle;
+            }
+
+            logger.warn("PaddleOCR requested but not available, falling back to Tesseract");
+        } else if (!engine.equalsIgnoreCase("tesseract")) {
+            logger.warn("Unknown ocrEngine \"{}\", using Tesseract", engine);
+        }
+
+        return TesseractOCR.getInstance();
     }
 
     //------//
@@ -95,6 +129,8 @@ public abstract class OcrUtil
                                        Sheet sheet,
                                        String label)
     {
+        final OCR ocr = getOcr();
+
         // Make sure we can use the OCR
         if (!ocr.isAvailable()) {
             logger.info("No OCR available");
@@ -163,6 +199,10 @@ public abstract class OcrUtil
                 "pixels",
                 10,
                 "Margin of white pixels added around image to OCR");
+
+        private final Constant.String ocrEngine = new Constant.String(
+                "tesseract",
+                "OCR engine: tesseract or paddle (local PaddleOCR server)");
 
         private final Constant.Boolean dumpWords = new Constant.Boolean(
                 false,
