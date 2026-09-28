@@ -33,6 +33,7 @@ import org.audiveris.omr.sheet.SystemInfo;
 import org.audiveris.omr.sheet.rhythm.Measure;
 import org.audiveris.omr.sig.SIGraph;
 import org.audiveris.omr.sig.inter.Inters;
+import org.audiveris.omr.sig.inter.Inter;
 import org.audiveris.omr.sig.inter.RehearsalInter;
 import org.audiveris.omr.sig.inter.SegmentInter;
 import org.audiveris.omr.sig.inter.WordInter;
@@ -214,6 +215,19 @@ public class RehearsalsBuilder
         rehearsal.setStaff(staff);
 
         final SIGraph sig = system.getSig();
+
+        // Remove any word previously OCR'd over the enclosure (same text, read through the frame)
+        for (Inter inter : new ArrayList<>(sig.inters(WordInter.class))) {
+            final Rectangle wb = inter.getBounds();
+            final Rectangle common = wb.intersection(scene);
+
+            if (!common.isEmpty()
+                    && (common.width * common.height >= 0.7 * wb.width * wb.height)) {
+                logger.debug("Removing {} within rehearsal enclosure", inter);
+                inter.remove();
+            }
+        }
+
         sig.addVertex(rehearsal);
 
         // Retrieve and link the member words
