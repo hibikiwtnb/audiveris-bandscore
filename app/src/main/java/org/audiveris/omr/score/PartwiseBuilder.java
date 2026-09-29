@@ -3701,8 +3701,10 @@ public class PartwiseBuilder
      * Report the duration to export for a measure rest in the provided stack.
      * <p>
      * The stack actual duration is the duration of its longest voice.
-     * If it exceeds the expected duration (known time signature), the overflow comes from
-     * some erroneous voice, so we don't propagate it to measure rests of the other voices.
+     * When the expected duration is known (time signature), a measure rest lasts exactly that:
+     * a longer or shorter actual duration comes from some erroneous voice, which must not be
+     * propagated to the measure rests of the other voices.
+     * Only an implicit measure (pickup, repeat second half) may keep a shorter duration.
      *
      * @param stack the containing stack
      * @return the measure rest duration, perhaps null
@@ -3712,11 +3714,21 @@ public class PartwiseBuilder
         final Rational actual = stack.getActualDuration();
         final Rational expected = stack.getExpectedDuration();
 
-        if ((actual != null) && (expected != null) && (actual.compareTo(expected) > 0)) {
-            return expected;
+        if (expected == null) {
+            return actual;
         }
 
-        return actual;
+        // A measure rest fills the whole measure: once the time signature is known, it lasts
+        // the expected duration, whatever the other voices of the stack actually last.
+        // Longer: one voice over-filled by an OMR error (e.g. a missed flag).
+        // Shorter: one voice lost a note or rest, and the measure rests of all other parts
+        // would be shortened with it.
+        // Only an implicit measure (pickup, repeat second half) is short by design.
+        if (stack.isImplicit() && (actual != null) && (actual.compareTo(expected) < 0)) {
+            return actual;
+        }
+
+        return expected;
     }
 
     //----------//
