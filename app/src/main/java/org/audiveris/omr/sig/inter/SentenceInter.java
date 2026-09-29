@@ -452,10 +452,28 @@ public class SentenceInter
                             final Rectangle box = new Rectangle(bounds);
                             box.grow(xGapMax, 0);
 
-                            final AbstractChordInter chord = stack.getEventChord(
-                                    location,
-                                    box,
-                                    true);
+                            AbstractChordInter chord = stack.getEventChord(location, box, true);
+
+                            // Above chord is only a rest: a real chord just below is a better host
+                            if (chord instanceof RestChordInter) {
+                                final AbstractChordInter below = stack.getStandardChordBelow(
+                                        location,
+                                        box);
+
+                                if ((below != null) && !(below instanceof RestChordInter)) {
+                                    chord = below;
+                                }
+                            }
+
+                            // Nothing within abscissa range: never drop the direction,
+                            // relax the abscissa constraint, then take closest chord in stack
+                            if (chord == null) {
+                                chord = stack.getEventChord(location, null, true);
+                            }
+
+                            if (chord == null) {
+                                chord = stack.getClosestChord(stack.getStandardChords(), location);
+                            }
 
                             if (chord != null) {
                                 sig.addEdge(chord, this, new ChordSentenceRelation());
