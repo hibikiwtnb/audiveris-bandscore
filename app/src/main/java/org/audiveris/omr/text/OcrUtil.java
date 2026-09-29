@@ -99,12 +99,15 @@ public abstract class OcrUtil
                 return paddle;
             }
 
-            logger.warn("PaddleOCR requested but not available, falling back to Tesseract");
-        } else if (!engine.equalsIgnoreCase("tesseract")) {
-            logger.warn("Unknown ocrEngine \"{}\", using Tesseract", engine);
+            throw new IllegalStateException(
+                    "PaddleOCR engine requested (ocrEngine=paddle) but the server at "
+                    + "http://127.0.0.1:8868 is not reachable. "
+                    + "Silent fallback to Tesseract is strictly forbidden.");
+        } else if (engine.equalsIgnoreCase("tesseract")) {
+            return TesseractOCR.getInstance();
+        } else {
+            throw new IllegalArgumentException("Unknown ocrEngine \"" + engine + "\"");
         }
-
-        return TesseractOCR.getInstance();
     }
 
     //------//
