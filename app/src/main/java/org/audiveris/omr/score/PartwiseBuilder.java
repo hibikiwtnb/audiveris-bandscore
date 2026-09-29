@@ -2105,7 +2105,8 @@ public class PartwiseBuilder
                     }
 
                     if (!pitched.isEmpty() && !pureRests.isEmpty()) {
-                        final int baseVoiceId = (st != null && st.getIndexInPart() == 1) ? 5 : 1;
+                        // Audiveris numbering: voices 1-4 on the 1st staff of a part, 5-8 on the 2nd, 9-12 on the 3rd...
+                        final int baseVoiceId = (st != null) ? 1 + 4 * Math.max(0, st.getIndexInPart()) : 1;
 
                         for (int i = 0; i < pitched.size(); i++) {
                             final Voice pv = pitched.get(i);
