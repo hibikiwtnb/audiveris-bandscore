@@ -945,7 +945,7 @@ public class PartwiseBuilder
         try {
             Forward forward = factory.createForward();
             forward.setDuration(new BigDecimal(current.page.simpleDurationOf(delta)));
-            forward.setVoice("" + current.voice.getId());
+            forward.setVoice("" + getExportVoiceId(current.voice));
             current.pmMeasure.getNoteOrBackupOrForward().add(forward);
 
             // Staff? (only if more than one staff in logicalPart)
@@ -2079,7 +2079,59 @@ public class PartwiseBuilder
             // Now voice per voice
             Rational timeCounter = Rational.ZERO;
 
-            for (Voice voice : measure.getVoices()) {
+            final List<Voice> voicesToExport = new ArrayList<>();
+
+            if (constants.dropGhostRests.getValue()) {
+                final Map<Staff, List<Voice>> staffVoices = new LinkedHashMap<>();
+
+                for (Voice v : measure.getVoices()) {
+                    final Staff st = voiceStaff(v);
+                    staffVoices.computeIfAbsent(st, k -> new ArrayList<>()).add(v);
+                }
+
+                for (Map.Entry<Staff, List<Voice>> entry : staffVoices.entrySet()) {
+                    final Staff st = entry.getKey();
+                    final List<Voice> vList = entry.getValue();
+
+                    final List<Voice> pitched = new ArrayList<>();
+                    final List<Voice> pureRests = new ArrayList<>();
+
+                    for (Voice v : vList) {
+                        if (voiceHasPitchedNotes(v, stack)) {
+                            pitched.add(v);
+                        } else {
+                            pureRests.add(v);
+                        }
+                    }
+
+                    if (!pitched.isEmpty() && !pureRests.isEmpty()) {
+                        final int baseVoiceId = (st != null && st.getIndexInPart() == 1) ? 5 : 1;
+
+                        for (int i = 0; i < pitched.size(); i++) {
+                            final Voice pv = pitched.get(i);
+                            voicesToExport.add(pv);
+
+                            final int targetId = baseVoiceId + i;
+                            if (pv.getId() != targetId) {
+                                current.voiceIdMap.put(pv, targetId);
+                            }
+                        }
+
+                        logger.info(
+                                "{}: dropped ghost rest voice(s) {} on staff {}, keeping pitched voice(s) {}",
+                                measure,
+                                pureRests.stream().map(Voice::getId).toList(),
+                                (st != null ? st.getId() : "?"),
+                                pitched.stream().map(Voice::getId).toList());
+                    } else {
+                        voicesToExport.addAll(vList);
+                    }
+                }
+            } else {
+                voicesToExport.addAll(measure.getVoices());
+            }
+
+            for (Voice voice : voicesToExport) {
                 // When copying for a measure repeat sign, copy only the staves with such sign
                 if (current.repeatCopying && (current.repeatStaves != null)) {
                     final Staff vStaff = voiceStaff(voice);
@@ -2528,7 +2580,7 @@ public class PartwiseBuilder
             Voice voice = chord.getVoice();
 
             if (voice != null) {
-                current.pmNote.setVoice("" + voice.getId());
+                current.pmNote.setVoice("" + getExportVoiceId(voice));
             } else {
                 logger.warn("No voice for {}", chord);
             }
@@ -3587,6 +3639,60 @@ public class PartwiseBuilder
         return chords.isEmpty() ? voice.getStartingStaff() : chords.get(0).getTopStaff();
     }
 
+    //----------------------//
+    // voiceHasPitchedNotes //
+    //----------------------//
+    /**
+     * Report whether the voice has any pitched notes (i.e. not pure rests).
+     *
+     * @param voice the voice to check
+     * @param stack the measure stack
+     * @return true if voice contains at least one non-rest chord
+     */
+    private static boolean voiceHasPitchedNotes (Voice voice,
+                                                 MeasureStack stack)
+    {
+        if (voice.isMeasureRest()) {
+            return false;
+        }
+
+        for (AbstractChordInter chord : voice.getChords()) {
+            if (!(chord instanceof RestChordInter)) {
+                return true;
+            }
+        }
+
+        if (stack != null) {
+            for (Slot slot : stack.getSlots()) {
+                SlotVoice info = voice.getSlotInfo(slot);
+
+                if ((info != null) && (info.status == SlotVoice.ChordStatus.BEGIN)) {
+                    if (!(info.chord instanceof RestChordInter)) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    //------------------//
+    // getExportVoiceId //
+    //------------------//
+    private int getExportVoiceId (Voice voice)
+    {
+        if (voice != null && current.voiceIdMap != null) {
+            Integer mapped = current.voiceIdMap.get(voice);
+
+            if (mapped != null) {
+                return mapped;
+            }
+        }
+
+        return (voice != null) ? voice.getId() : 1;
+    }
+
     //---------------------//
     // measureRestDuration //
     //---------------------//
@@ -3904,6 +4010,10 @@ public class PartwiseBuilder
                 "count",
                 1,
                 "Default value for multirest measure count");
+
+        private final Constant.Boolean dropGhostRests = new Constant.Boolean(
+                true,
+                "Eliminate spurious multi-voice whole rests when a staff contains pitched notes in another voice");
     }
 
     //---------//
@@ -3967,6 +4077,8 @@ public class PartwiseBuilder
 
         Notations pmNotations;
 
+        final Map<Voice, Integer> voiceIdMap = new HashMap<>();
+
         // Cleanup at end of measure
         void endMeasure ()
         {
@@ -3974,6 +4086,7 @@ public class PartwiseBuilder
             pmMeasure = null;
             voice = null;
             pmAttributes = null;
+            voiceIdMap.clear();
 
             endVoice();
         }
