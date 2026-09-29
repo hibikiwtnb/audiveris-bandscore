@@ -441,8 +441,10 @@ public class PartCollation
     /**
      * Build the logical parts defined by the user parts hint, if any.
      * <p>
-     * Syntax: parts separated by ';', each part as <code>name[|abbreviation]:staffCount</code>,
-     * top down. Names are optional, e.g. "A.Piano|A.pf:2; Strings I|Str. I:1" or "2;1;1".
+     * Syntax: parts separated by ';', each part as
+     * <code>name[|abbreviation]:staffCount[:lyrics]</code>, top down.
+     * Names are optional, e.g. "A.Piano|A.pf:2; Strings I|Str. I:1" or "2;1;1".
+     * The optional ":lyrics" flag is used by {@link #getHintedLyricsStaves()}.
      *
      * @return the hinted logicals, or null if no (valid) hint
      */
@@ -464,9 +466,9 @@ public class PartCollation
                     continue;
                 }
 
-                final int colon = token.lastIndexOf(':');
-                final String names = (colon == -1) ? "" : token.substring(0, colon).trim();
-                final int staffCount = Integer.parseInt(token.substring(colon + 1).trim());
+                final HintEntry entry = HintEntry.parse(token);
+                final String names = entry.names;
+                final int staffCount = entry.staffCount;
                 final List<StaffConfig> configs = new ArrayList<>();
 
                 for (int i = 0; i < staffCount; i++) {
@@ -493,6 +495,51 @@ public class PartCollation
             return logicals.isEmpty() ? null : logicals;
         } catch (Exception ex) {
             logger.warn("Invalid partsHint constant: \"{}\"", str);
+            return null;
+        }
+    }
+
+    //-----------------------//
+    // getHintedLyricsStaves //
+    //-----------------------//
+    /**
+     * Report, for each staff of a complete system (top down, as described by the parts hint),
+     * whether lyrics may be found there: only the staves of parts flagged ":lyrics".
+     * <p>
+     * Which parts carry lyrics is known by the user (e.g. "Vocal|Vo.:1:lyrics; Guitar:2"),
+     * while text roles are guessed (TEXTS step) long before parts are collated.
+     *
+     * @return the per-staff lyrics flags, or null if no hint or no part is flagged for lyrics
+     */
+    public static List<Boolean> getHintedLyricsStaves ()
+    {
+        final String str = constants.partsHint.getValue();
+
+        if ((str == null) || str.isBlank()) {
+            return null;
+        }
+
+        try {
+            final List<Boolean> flags = new ArrayList<>();
+            boolean any = false;
+
+            for (String token : str.split(";")) {
+                token = token.trim();
+
+                if (token.isEmpty()) {
+                    continue;
+                }
+
+                final HintEntry entry = HintEntry.parse(token);
+                any |= entry.lyrics;
+
+                for (int i = 0; i < entry.staffCount; i++) {
+                    flags.add(entry.lyrics);
+                }
+            }
+
+            return any ? flags : null;
+        } catch (Exception ex) {
             return null;
         }
     }
@@ -712,8 +759,59 @@ public class PartCollation
 
         private final Constant.String partsHint = new Constant.String(
                 "",
-                "Parts of the score, top down, as \"name[|abbrev]:staffCount\" separated by ';'"
-                        + " (e.g. \"Piano:2; Violin I|Vn. I:1\"). Empty means no hint.");
+                "Parts of the score, top down, as \"name[|abbrev]:staffCount[:lyrics]\""
+                        + " separated by ';' (e.g. \"Vocal:1:lyrics; Piano:2; Violin I|Vn. I:1\")."
+                        + " ':lyrics' restricts lyrics to the flagged parts. Empty means no hint.");
+    }
+
+    //-----------//
+    // HintEntry //
+    //-----------//
+    /**
+     * One part of the parts hint: "name[|abbrev]:staffCount[:lyrics]".
+     */
+    private static class HintEntry
+    {
+        final String names;
+
+        final int staffCount;
+
+        final boolean lyrics;
+
+        HintEntry (String names,
+                   int staffCount,
+                   boolean lyrics)
+        {
+            this.names = names;
+            this.staffCount = staffCount;
+            this.lyrics = lyrics;
+        }
+
+        static HintEntry parse (String token)
+        {
+            final String[] fields = token.split(":");
+            boolean lyrics = false;
+            int last = fields.length - 1;
+
+            // Trailing flags, after the staff count
+            while ((last > 0) && !fields[last].trim().matches("\\d+")) {
+                final String flag = fields[last].trim();
+
+                if (flag.equalsIgnoreCase("lyrics")) {
+                    lyrics = true;
+                } else {
+                    throw new IllegalArgumentException("Unknown partsHint flag: " + flag);
+                }
+
+                last--;
+            }
+
+            final int staffCount = Integer.parseInt(fields[last].trim());
+            final String names = String.join(":", java.util.Arrays.copyOfRange(fields, 0, last))
+                    .trim();
+
+            return new HintEntry(names, staffCount, lyrics);
+        }
     }
 
     //----------//

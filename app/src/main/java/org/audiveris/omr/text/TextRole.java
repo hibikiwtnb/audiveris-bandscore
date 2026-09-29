@@ -23,6 +23,7 @@ package org.audiveris.omr.text;
 
 import org.audiveris.omr.constant.ConstantSet;
 import org.audiveris.omr.math.GeoUtil;
+import org.audiveris.omr.score.PartCollation;
 import org.audiveris.omr.score.StaffPosition;
 import org.audiveris.omr.sheet.Part;
 import org.audiveris.omr.sheet.ProcessingSwitch;
@@ -41,6 +42,7 @@ import org.slf4j.LoggerFactory;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.geom.Point2D;
+import java.util.List;
 import java.util.regex.Matcher;
 
 /**
@@ -166,6 +168,11 @@ public enum TextRole
         // Vertical position wrt (part) staves
         Part part = system.getPartAtOrAbove(left);
         StaffPosition partPosition = part.getStaffPosition(left);
+
+        // User parts hint may restrict lyrics to some parts (flag ":lyrics")
+        if (lyricsAllowed) {
+            lyricsAllowed = isHintedLyricsPart(system, part, partPosition);
+        }
 
         // Vertical distance from closest staff
         Staff staff = system.getClosestStaff(left);
@@ -304,6 +311,50 @@ public enum TextRole
 
         // Default
         return UnknownRole;
+    }
+
+    //--------------------//
+    // isHintedLyricsPart //
+    //--------------------//
+    /**
+     * Check whether the parts hint allows lyrics for the text located wrt the provided part.
+     * <p>
+     * With no part flagged ":lyrics" in the hint, everything stays allowed (standard behavior).
+     * Otherwise lyrics are allowed only below (or above) the staves of flagged parts; a system
+     * whose staves do not match the hint gets no lyrics at all (rather than lyrics everywhere).
+     *
+     * @param system       the containing system
+     * @param part         the part at or above the text
+     * @param partPosition text position wrt this part
+     * @return true if lyrics are allowed there
+     */
+    private static boolean isHintedLyricsPart (SystemInfo system,
+                                               Part part,
+                                               StaffPosition partPosition)
+    {
+        final List<Boolean> flags = PartCollation.getHintedLyricsStaves();
+
+        if (flags == null) {
+            return true;
+        }
+
+        final List<Staff> staves = system.getStaves();
+
+        if (staves.size() != flags.size()) {
+            logger.debug(
+                    "System#{}: {} staves vs {} in parts hint, no lyrics",
+                    system.getId(),
+                    staves.size(),
+                    flags.size());
+
+            return false;
+        }
+
+        final Staff ref = (partPosition == StaffPosition.ABOVE_STAVES) ? part.getFirstStaff()
+                : part.getLastStaff();
+        final int index = staves.indexOf(ref);
+
+        return (index >= 0) && flags.get(index);
     }
 
     //~ Inner Classes ------------------------------------------------------------------------------
