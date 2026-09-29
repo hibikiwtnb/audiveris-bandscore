@@ -20,6 +20,17 @@ os.environ.setdefault('PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK', 'True')
 
 import numpy as np
 from PIL import Image
+import paddle.inference
+
+# Workaround: PaddlePaddle 3.x on Windows CPU fails in oneDNN instruction when handling
+# pir::ArrayAttribute<pir::DoubleAttribute>. Disabling mkldnn ensures stable native CPU inference.
+_orig_create_predictor = paddle.inference.create_predictor
+def _safe_create_predictor(config):
+    if hasattr(config, 'disable_mkldnn'):
+        config.disable_mkldnn()
+    return _orig_create_predictor(config)
+paddle.inference.create_predictor = _safe_create_predictor
+
 from paddleocr import PaddleOCR
 
 
