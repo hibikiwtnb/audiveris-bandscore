@@ -3,7 +3,7 @@
 針對**樂團譜／鍵盤譜（bandscore）**改修的 [Audiveris](https://github.com/Audiveris/audiveris) 分支。
 目標是讓 OMR 直接輸出**可以在 MuseScore 正確播放的 MusicXML**，把原本辨識完還得手動修補的問題，移到 Audiveris 核心裡一次解決。
 
-- 基底：上游 Audiveris **5.11.0**（`7a36078`），之上共 22 個 commit
+- 基底：上游 Audiveris **5.11.0**（`7a36078`），改動見第 2 節
 - 分支：`bandscore`（預設分支）
 - 授權：與上游相同，[AGPL-3.0](LICENSE)
 
