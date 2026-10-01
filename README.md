@@ -66,7 +66,7 @@ Audiveris 是成熟的開源 OMR 引擎，對古典譜（IMSLP 類）效果很�
 
 | Patch | 啟用方式 | 能力／效果 |
 |---|---|---|
-| **partsHint：聲部拓撲提示**<br>`6a28ce4` | `org.audiveris.omr.score.PartCollation.partsHint=`<br>`A.Piano\|A.pf:2; Strings I\|Str. I:1; ...` | 由上到下給出全曲聲部（`名稱[\|縮寫]:譜表數`）。每行系統以動態規劃對齊到這組邏輯聲部：譜表數與上下順序為硬條件，OCR 名稱只作軟性成本（容忍 `I/l/\|/1` 等誤讀）。缺席聲部匯出為空聲部，對不上的不丟內容。 |
+| **partsHint：聲部拓撲提示**<br>`6a28ce4` | `org.audiveris.omr.score.PartCollation.partsHint=`<br>`A.Piano\|A.pf:2; Strings I\|Str. I:1; ...` | 由上到下給出全曲聲部（`名稱[\|縮寫]:譜表數`）。每行系統的譜表依數量與上下位置排出是完整系統的第幾行，再對到提示中涵蓋那幾行的聲部；排不出位置時改用譜表數加 OCR 名稱比對（容忍 `I/l/\|/1` 等誤讀）。缺席聲部匯出為空聲部，對不上的不丟內容。 |
 | **partsHint `:lyrics` 標記**<br>`8192fd8` | 在人聲聲部後加 `:lyrics`，<br>例 `Vocal\|Vo.:1:lyrics` | 只有被標記聲部下方的文字可判成歌詞；其他譜面文字（`pizz.`、`Woodwind`、`Bell (15ma)`）一律成為 words。譜表數對不上提示的系統不判歌詞（保守）；標記打錯會讓提示失效並寫 WARN，不會悄悄忽略。 |
 | **partsHint `:drums` 標記** | 在鼓聲部後加 `:drums`，<br>例 `Drums\|Dr.:1:drums` | 被標記的聲部一律當鼓組匯出，不管譜面印的是什麼譜號（樂團譜的鼓常用低音譜號）：輸出打擊樂譜號、`<unpitched>` 音符與 GM 鼓音色。第三間的實心符頭 → snare，最下一間 → kick（對應表見 `app/res/drum-set.xml`）。需要寫聲部名稱。 |
 | **預設拍號**<br>`06a58f6` | `org.audiveris.omr.sheet.rhythm.PageRhythm.defaultTimeSignature=4/4` | 頁面開頭沒有拍號、前面頁面也找不到時，退回使用者給的拍號。逐頁 OMR 不再整頁失去時值檢查。 |
@@ -76,12 +76,11 @@ Audiveris 是成熟的開源 OMR 引擎，對古典譜（IMSLP 類）效果很�
 
 | Patch | 啟用方式 | 能力／效果 |
 |---|---|---|
-| **PaddleOCR 引擎**<br>`89895eb` `83cab4a` `0bb1f3a` | `org.audiveris.omr.text.OcrUtil.ocrEngine=paddle`<br>＋ 啟動 [`dev/paddleocr/paddle_ocr_server.py`](dev/paddleocr/paddle_ocr_server.py) | 改用本機 PP-OCRv5 服務（HTTP，預設 `127.0.0.1:8868`），回傳行／字／字元框，字元框貼齊實際墨跡。和弦名辨識率約 **59% → 90%+**，排練記號不再被讀成漢字。CPU 上關閉 mkldnn，避開 PaddlePaddle 3.x 的 oneDNN 崩潰。 |
-| **禁止靜默退回 Tesseract**<br>`247887e` | 隨 `ocrEngine=paddle` 生效 | 指定 paddle 但服務連不上時**直接報錯**，不再默默改用 Tesseract 產出低品質結果；未知的 `ocrEngine` 值同樣報錯。 |
+| **PaddleOCR 引擎**<br>`89895eb` `83cab4a` `0bb1f3a` `247887e` | `org.audiveris.omr.text.OcrUtil.ocrEngine=paddle`<br>＋ 啟動 [`dev/paddleocr/paddle_ocr_server.py`](dev/paddleocr/paddle_ocr_server.py) | 改用本機 PP-OCRv5 服務（HTTP，預設 `127.0.0.1:8868`），回傳行／字／字元框，字元框貼齊實際墨跡。和弦名辨識率約 **59% → 90%+**，排練記號不再被讀成漢字。CPU 上關閉 mkldnn，避開 PaddlePaddle 3.x 的 oneDNN 崩潰。服務連不上時直接報錯，不會退回 Tesseract。 |
 | **和弦名 add 音**<br>`5720d71` | 預設生效 | 支援 `add2 / add4 / add9 / add11 / add13`（如 `Bbadd9`、`F#madd11`、`Cadd9/E`），以 `degree-type add` 匯出。 |
 | **和弦根音與後綴合併**<br>`af3e7d9` | 預設生效 | 印刷時中間有空隙的和弦（`E sus4`）在判定文字角色前合併為 `Esus4`；只在根音合法、合併後也合法且間距小於字高時才合併。 |
 | **排練記號框內文字清除**<br>`4194106` | 預設生效 | 能穿透方框讀字的 OCR（PaddleOCR）會在排練記號上生出一般文字，進而殺掉排練記號；現在先移除這些重疊文字。 |
-| **Direction 文字不再遺失**<br>`57de5c2` | 預設生效 | 附近沒有和弦時放寬水平範圍、再找整格最近的和弦，不再丟掉 direction 文字；上方只有休止符時，優先掛到下方的實音和弦。 |
+| **Direction 文字不再遺失**<br>`230b6db` | 預設生效 | 附近沒有和弦時放寬水平範圍、再找整格最近的和弦，不再丟掉 direction 文字；上方只有休止符時，優先掛到下方的實音和弦。 |
 
 ### 2.4 MusicXML 匯出（PartwiseBuilder）
 
