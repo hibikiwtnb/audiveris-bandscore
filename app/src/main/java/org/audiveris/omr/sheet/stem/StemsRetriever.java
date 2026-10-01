@@ -36,6 +36,7 @@ import org.audiveris.omr.sheet.Scale;
 import org.audiveris.omr.sheet.Sheet;
 import org.audiveris.omr.sheet.SystemInfo;
 import org.audiveris.omr.sheet.SystemManager;
+import org.audiveris.omr.sheet.note.NoteHeadsBuilder;
 import org.audiveris.omr.sheet.stem.BeamLinker.BLinker;
 import org.audiveris.omr.sheet.stem.BeamLinker.BLinker.VLinker;
 import org.audiveris.omr.sheet.stem.HeadLinker.SLinker;
@@ -616,7 +617,7 @@ public class StemsRetriever
 
         // The abscissa-sorted head interpretations for this system
         watch.start("Heads linkers");
-        systemHeads = sig.inters(ShapeSet.getTemplateNotesStem(system.getSheet()));
+        systemHeads = sig.inters(NoteHeadsBuilder.getStemHeadShapes(system.getSheet()));
         Collections.sort(systemHeads, Inters.byAbscissa);
 
         for (Inter h : systemHeads) {
@@ -673,7 +674,7 @@ public class StemsRetriever
 
         // Heads second
         watch.start("Heads linking phase 1");
-        systemHeads = sig.inters(ShapeSet.getTemplateNotesStem(system.getSheet()));
+        systemHeads = sig.inters(NoteHeadsBuilder.getStemHeadShapes(system.getSheet()));
         Collections.sort(systemHeads, Inters.byReverseGrade);
         final List<HeadInter> unlinkedHeads = new ArrayList<>();
 
@@ -1022,7 +1023,7 @@ public class StemsRetriever
         ///final Integer typicalBeamGap;
         /** The abscissa-sorted head interpretations for this system. */
         final List<Inter> systemHeads = sig.inters(
-                ShapeSet.getTemplateNotesStem(system.getSheet()));
+                NoteHeadsBuilder.getStemHeadShapes(system.getSheet()));
 
         public Finalizer ()
         {

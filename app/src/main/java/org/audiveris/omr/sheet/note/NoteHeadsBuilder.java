@@ -50,6 +50,7 @@ import org.audiveris.omr.math.ReversePathIterator;
 import org.audiveris.omr.run.Orientation;
 import org.audiveris.omr.score.DrumSet;
 import org.audiveris.omr.score.DrumSet.DrumInstrument;
+import org.audiveris.omr.score.PartCollation;
 import org.audiveris.omr.sheet.Part;
 import org.audiveris.omr.sheet.Picture;
 import org.audiveris.omr.sheet.Scale;
@@ -94,6 +95,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -210,6 +212,16 @@ public class NoteHeadsBuilder
     /** All hollow head templates for this sheet. */
     private final EnumSet<Shape> sheetTemplateNotesHollow;
 
+    /** Staves flagged as drums by the parts hint, though not printed with a percussion clef. */
+    private final Set<Staff> hintedDrumStaves;
+
+    /** Head templates for these staves: the sheet ones plus cross heads. */
+    private final EnumSet<Shape> drumTemplateNotesAll;
+
+    private final EnumSet<Shape> drumTemplateNotesStem;
+
+    private final EnumSet<Shape> drumTemplateNotesHollow;
+
     /** Collector for seed-based heads. */
     private final HeadSeedTally tally;
 
@@ -260,6 +272,15 @@ public class NoteHeadsBuilder
         sheetTemplateNotesAll = ShapeSet.getTemplateNotesAll(sheet);
         sheetTemplateNotesStem = ShapeSet.getTemplateNotesStem(sheet);
         sheetTemplateNotesHollow = ShapeSet.getTemplateNotesHollow(sheet);
+
+        hintedDrumStaves = getHintedDrumStaves(system);
+        drumTemplateNotesAll = withCrosses(sheetTemplateNotesAll, ShapeSet.getTemplateNotesAll(null));
+        drumTemplateNotesStem = withCrosses(
+                sheetTemplateNotesStem,
+                ShapeSet.getTemplateNotesStem(null));
+        drumTemplateNotesHollow = withCrosses(
+                sheetTemplateNotesHollow,
+                ShapeSet.getTemplateNotesHollow(null));
 
         params = new Parameters(scale);
 
@@ -1150,7 +1171,117 @@ public class NoteHeadsBuilder
         }
     }
 
+    //-------------//
+    // isDrumStaff //
+    //-------------//
+    /**
+     * Report whether heads on this staff are matched against the drum set.
+     *
+     * @param staff the staff at hand
+     * @return true for a percussion staff, or a staff hinted as drums
+     */
+    private boolean isDrumStaff (Staff staff)
+    {
+        return staff.isDrum() || hintedDrumStaves.contains(staff);
+    }
+
     //~ Static Methods -----------------------------------------------------------------------------
+
+    //-------------------//
+    // getStemHeadShapes //
+    //-------------------//
+    /**
+     * Report the head shapes that get linked to stems: the sheet ones, plus the cross heads
+     * when the parts hint flags drums (the cross heads matched on the drum staves).
+     *
+     * @param sheet the sheet at hand
+     * @return the stem head shapes
+     */
+    public static EnumSet<Shape> getStemHeadShapes (Sheet sheet)
+    {
+        final EnumSet<Shape> shapes = ShapeSet.getTemplateNotesStem(sheet);
+
+        if (PartCollation.getHintedDrumStaves() == null) {
+            return shapes;
+        }
+
+        return withCrosses(shapes, ShapeSet.getTemplateNotesStem(null));
+    }
+
+    //---------------------//
+    // getHintedDrumStaves //
+    //---------------------//
+    /**
+     * Report the staves of this system that the parts hint flags as drums.
+     * <p>
+     * The hint describes a complete system top down, so a staff is identified by its index
+     * among the staves that are not tablatures (a tablature is often missed, harmlessly).
+     * If the system has another count of such staves (one was missed), no staff is flagged:
+     * the parts of this system cannot be trusted anyway, the missed staff must be fixed first.
+     *
+     * @param system the system at hand
+     * @return the flagged staves, perhaps empty
+     */
+    private static Set<Staff> getHintedDrumStaves (SystemInfo system)
+    {
+        final Set<Staff> set = new HashSet<>();
+        final List<Boolean> flags = PartCollation.getHintedDrumStaves();
+
+        if (flags == null) {
+            return set;
+        }
+
+        final List<Staff> staves = new ArrayList<>();
+
+        for (Staff staff : system.getStaves()) {
+            if (!staff.isTablature()) {
+                staves.add(staff);
+            }
+        }
+
+        if (staves.size() != flags.size()) {
+            logger.warn(
+                    "System#{}: {} staves (tablatures aside) vs {} in parts hint,"
+                            + " drum staff not identified",
+                    system.getId(),
+                    staves.size(),
+                    flags.size());
+
+            return set;
+        }
+
+        for (int i = 0; i < staves.size(); i++) {
+            if (flags.get(i) && !staves.get(i).isDrum()) {
+                set.add(staves.get(i));
+            }
+        }
+
+        return set;
+    }
+
+    //-------------//
+    // withCrosses //
+    //-------------//
+    /**
+     * Report the sheet templates plus the cross head ones.
+     *
+     * @param sheetShapes the templates allowed by the sheet processing switches
+     * @param allShapes   all the templates of this kind
+     * @return the sheet templates plus the cross heads of allShapes
+     */
+    private static EnumSet<Shape> withCrosses (EnumSet<Shape> sheetShapes,
+                                               EnumSet<Shape> allShapes)
+    {
+        final EnumSet<Shape> shapes = sheetShapes.clone();
+
+        for (Shape shape : ShapeSet.HeadsCross) {
+            if (allShapes.contains(shape)) {
+                shapes.add(shape);
+            }
+        }
+
+        return shapes;
+    }
 
     //------------------//
     // getStemLessBoost //
@@ -1575,17 +1706,22 @@ public class NoteHeadsBuilder
             // Determine shapes relevant for this scanner pitch value.
             final EnumSet<Shape> scannerShapes = buildShapeList();
 
+            // Cross heads only on the staves hinted as drums (unless switched on for the sheet)
+            final boolean hinted = hintedDrumStaves.contains(line.getStaff());
+
             scannerTemplateNotesAll = scannerShapes.clone();
-            scannerTemplateNotesAll.retainAll(sheetTemplateNotesAll);
+            scannerTemplateNotesAll.retainAll(hinted ? drumTemplateNotesAll : sheetTemplateNotesAll);
 
             scannerTemplateNotesStem = scannerShapes.clone();
-            scannerTemplateNotesStem.retainAll(sheetTemplateNotesStem);
+            scannerTemplateNotesStem.retainAll(
+                    hinted ? drumTemplateNotesStem : sheetTemplateNotesStem);
 
             scannerTemplateNotesHollow = scannerShapes.clone();
-            scannerTemplateNotesHollow.retainAll(sheetTemplateNotesHollow);
+            scannerTemplateNotesHollow.retainAll(
+                    hinted ? drumTemplateNotesHollow : sheetTemplateNotesHollow);
 
             if (constants.dumpTemplateNotes.isSet()) {
-                if (!line.getStaff().isDrum()) {
+                if (!isDrumStaff(line.getStaff())) {
                     dumpShapeList(null, "all", scannerTemplateNotesAll);
                     dumpShapeList(null, "stem", scannerTemplateNotesStem);
                     dumpShapeList(null, "hollow", scannerTemplateNotesHollow);
@@ -1630,7 +1766,7 @@ public class NoteHeadsBuilder
         {
             final Staff staff = line.getStaff();
 
-            if (!staff.isDrum()) {
+            if (!isDrumStaff(staff)) {
                 return sheetTemplateNotesAll;
             }
 

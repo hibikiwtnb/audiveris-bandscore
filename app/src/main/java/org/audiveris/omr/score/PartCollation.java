@@ -543,6 +543,54 @@ public class PartCollation
         }
     }
 
+    //---------------------//
+    // getHintedDrumStaves //
+    //---------------------//
+    /**
+     * Report, for each staff of a complete system (top down, as described by the parts hint),
+     * whether it belongs to a part flagged ":drums".
+     * Tablatures (":tab") are left out: they are often missed by the GRID step, while the other
+     * staves must all be there for the score to be right.
+     * <p>
+     * Heads are matched (HEADS step) long before parts are collated, and a drum staff printed
+     * with a bass clef is not recognized as such: the hint tells which staff to match against
+     * the drum set (one head motif per staff position, e.g. only crosses for the hi-hat).
+     *
+     * @return the per-staff drum flags, or null if no hint or no part is flagged for drums
+     */
+    public static List<Boolean> getHintedDrumStaves ()
+    {
+        final String str = constants.partsHint.getValue();
+
+        if ((str == null) || str.isBlank()) {
+            return null;
+        }
+
+        try {
+            final List<Boolean> flags = new ArrayList<>();
+            boolean any = false;
+
+            for (String token : str.split(";")) {
+                token = token.trim();
+
+                if (token.isEmpty()) {
+                    continue;
+                }
+
+                final HintEntry entry = HintEntry.parse(token);
+                any |= entry.drums;
+
+                for (int i = 0; i < entry.staffCount - ((entry.tabLines > 0) ? 1 : 0); i++) {
+                    flags.add(entry.drums);
+                }
+            }
+
+            return any ? flags : null;
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
     //-----------------------//
     // getHintedLyricsStaves //
     //-----------------------//
@@ -803,17 +851,20 @@ public class PartCollation
 
         private final Constant.String partsHint = new Constant.String(
                 "",
-                "Parts of the score, top down, as \"name[|abbrev]:staffCount[:lyrics|:drums]\""
-                        + " separated by ';' (e.g. \"Vocal:1:lyrics; Piano:2; Drums|Dr.:1:drums\")."
+                "Parts of the score, top down, as"
+                        + " \"name[|abbrev]:staffCount[:lyrics][:drums][:tab|:tab4]\""
+                        + " separated by ';' (e.g. \"Vocal:1:lyrics; Guitar:2:tab; Drums|Dr.:1:drums\")."
                         + " ':lyrics' restricts lyrics to the flagged parts,"
-                        + " ':drums' exports the flagged part as drum set. Empty means no hint.");
+                        + " ':drums' exports the flagged part as drum set,"
+                        + " ':tab' (':tab4') tells that the last staff of the part is a 6-line"
+                        + " (4-line) tablature. Empty means no hint.");
     }
 
     //-----------//
     // HintEntry //
     //-----------//
     /**
-     * One part of the parts hint: "name[|abbrev]:staffCount[:lyrics][:drums]".
+     * One part of the parts hint: "name[|abbrev]:staffCount[:lyrics][:drums][:tab|:tab4]".
      */
     private static class HintEntry
     {
@@ -825,15 +876,20 @@ public class PartCollation
 
         final boolean drums;
 
+        /** Line count of the tablature, the last staff of the part, or 0 if none. */
+        final int tabLines;
+
         HintEntry (String names,
                    int staffCount,
                    boolean lyrics,
-                   boolean drums)
+                   boolean drums,
+                   int tabLines)
         {
             this.names = names;
             this.staffCount = staffCount;
             this.lyrics = lyrics;
             this.drums = drums;
+            this.tabLines = tabLines;
         }
 
         static HintEntry parse (String token)
@@ -841,6 +897,7 @@ public class PartCollation
             final String[] fields = token.split(":");
             boolean lyrics = false;
             boolean drums = false;
+            int tabLines = 0;
             int last = fields.length - 1;
 
             // Trailing flags, after the staff count
@@ -851,6 +908,10 @@ public class PartCollation
                     lyrics = true;
                 } else if (flag.equalsIgnoreCase("drums")) {
                     drums = true;
+                } else if (flag.equalsIgnoreCase("tab") || flag.equalsIgnoreCase("tab6")) {
+                    tabLines = 6;
+                } else if (flag.equalsIgnoreCase("tab4")) {
+                    tabLines = 4;
                 } else {
                     throw new IllegalArgumentException("Unknown partsHint flag: " + flag);
                 }
@@ -866,7 +927,11 @@ public class PartCollation
                 throw new IllegalArgumentException("partsHint ':drums' needs a part name");
             }
 
-            return new HintEntry(names, staffCount, lyrics, drums);
+            if ((tabLines > 0) && (staffCount < 2)) {
+                throw new IllegalArgumentException("partsHint ':tab' needs 2 staves or more");
+            }
+
+            return new HintEntry(names, staffCount, lyrics, drums, tabLines);
         }
     }
 
