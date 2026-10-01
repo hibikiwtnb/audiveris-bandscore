@@ -382,7 +382,7 @@ public class CrossTemplate
         /** Notch offsets: mask pixels left white by the template near the center. */
         final int[] ndx, ndy;
 
-        /** Ink offsets: template pixels mostly ink (glyph and bounds). */
+        /** Ink offsets: template pixels mostly ink, head body only (glyph and bounds). */
         final int[] idx, idy;
 
         Scaled (float[][] ink,
@@ -440,8 +440,21 @@ public class CrossTemplate
             tNorm = Math.sqrt(norm);
             ndx = notch.stream().mapToInt(a -> a[0]).toArray();
             ndy = notch.stream().mapToInt(a -> a[1]).toArray();
-            idx = fore.stream().mapToInt(a -> a[0]).toArray();
-            idy = fore.stream().mapToInt(a -> a[1]).toArray();
+            // Head body only: drop the rows as thin as a stem (a stem the seeds shared, going
+            // up or down from the head, would else enlarge the head and shift its stem anchors)
+            final Map<Integer, Integer> perRow = new HashMap<>();
+            fore.forEach(a -> perRow.merge(a[1], 1, Integer::sum));
+            final int widest = perRow.values().stream().max(Integer::compare).orElse(0);
+            final List<int[]> body = new ArrayList<>();
+
+            for (int[] a : fore) {
+                if (perRow.get(a[1]) >= (widest / 4.0)) {
+                    body.add(a);
+                }
+            }
+
+            idx = body.stream().mapToInt(a -> a[0]).toArray();
+            idy = body.stream().mapToInt(a -> a[1]).toArray();
         }
 
         /** Normalized correlation of template and band ink at (x, y), over the mask. */
