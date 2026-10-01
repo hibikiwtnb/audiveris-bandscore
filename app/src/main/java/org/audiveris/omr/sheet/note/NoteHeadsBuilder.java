@@ -215,6 +215,10 @@ public class NoteHeadsBuilder
     /** Staves flagged as drums by the parts hint, though not printed with a percussion clef. */
     private final Set<Staff> hintedDrumStaves;
 
+    /** Book-made cross template, if any: it then finds the cross heads of drum staves. */
+    private final CrossTemplate crossTemplate = CrossTemplate.getLoaded(
+            constants.templateDir.getValue());
+
     /** Head templates for these staves: the sheet ones plus cross heads. */
     private final EnumSet<Shape> drumTemplateNotesAll;
 
@@ -386,6 +390,20 @@ public class NoteHeadsBuilder
             watch.start("Staff #" + staff.getId() + " range");
             ch.addAll(processStaff(staff, false));
 
+            // Cross heads of a drum staff, by the book template if any
+            if ((crossTemplate != null) && isDrumStaff(staff)) {
+                watch.start("Staff #" + staff.getId() + " crosses");
+
+                for (HeadInter head : crossTemplate.lookup(
+                        staff,
+                        image,
+                        constants.crossMinGrade.getValue())) {
+                    sig.addVertex(head);
+                    ch.add(head);
+                    tallyStem(head);
+                }
+            }
+
             // Remove duplicates for current staff
             Collections.sort(ch, Inters.byFullAbscissa);
             watch.start("Staff #" + staff.getId() + " duplicates");
@@ -437,6 +455,50 @@ public class NoteHeadsBuilder
 
         logger.debug("S#{} seeds {}", system.getId(), seedsPerf);
         logger.debug("    range {}", rangePerf);
+    }
+
+    //-----------//
+    // tallyStem //
+    //-----------//
+    /**
+     * Record where the stem seed crossing a template-made head actually is, so that STEMS
+     * links stems there (e.g. at the center of a cross), as done for seed-based heads.
+     *
+     * @param head the head made by a book template
+     */
+    private void tallyStem (HeadInter head)
+    {
+        final Rectangle box = head.getBounds();
+        final double yc = box.getCenterY();
+        final double xc = box.getCenterX();
+        final double reach = 0.5 * scale.getInterline();
+        Double best = null;
+
+        for (Glyph seed : systemSeeds) {
+            final Rectangle sb = seed.getBounds();
+
+            if ((sb.y > yc) || (sb.y + sb.height <= yc)) {
+                continue; // Seed does not reach the head center row
+            }
+
+            final Point2D top = seed.getStartPoint(Orientation.VERTICAL);
+            final Point2D bot = seed.getStopPoint(Orientation.VERTICAL);
+            final double x = LineUtil.xAtY(top, bot, yc);
+
+            if ((x < box.x - reach) || (x > box.x + box.width + reach)) {
+                continue;
+            }
+
+            if ((best == null) || (Math.abs(x - xc) < Math.abs(best - xc))) {
+                best = x;
+            }
+        }
+
+        if (best != null) {
+            // Dx is positive if outside head box and negative if inside
+            tally.putDx(head, HorizontalSide.LEFT, box.x - best + 0.5);
+            tally.putDx(head, HorizontalSide.RIGHT, best + 0.5 - (box.x + box.width - 1));
+        }
     }
 
     //-------------------------//
@@ -1352,6 +1414,15 @@ public class NoteHeadsBuilder
     private static class Constants
             extends ConstantSet
     {
+        private final Constant.String templateDir = new Constant.String(
+                "",
+                "Folder of the book's symbol templates (cross.png, cross_mask.png),"
+                        + " empty for none");
+
+        private final Constant.Ratio crossMinGrade = new Constant.Ratio(
+                0.7,
+                "Minimum correlation for a cross head found by the book template");
+
         private final Constant.Boolean dumpTemplateNotes = new Constant.Boolean(
                 false,
                 "Should we dump the template notes for standard and drum staves?");
@@ -1706,8 +1777,10 @@ public class NoteHeadsBuilder
             // Determine shapes relevant for this scanner pitch value.
             final EnumSet<Shape> scannerShapes = buildShapeList();
 
-            // Cross heads only on the staves hinted as drums (unless switched on for the sheet)
-            final boolean hinted = hintedDrumStaves.contains(line.getStaff());
+            // Cross heads only on the staves hinted as drums (unless switched on for the sheet),
+            // and not there either when the book template finds them
+            final boolean hinted = hintedDrumStaves.contains(line.getStaff())
+                    && (crossTemplate == null);
 
             scannerTemplateNotesAll = scannerShapes.clone();
             scannerTemplateNotesAll.retainAll(hinted ? drumTemplateNotesAll : sheetTemplateNotesAll);

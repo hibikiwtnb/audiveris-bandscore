@@ -488,6 +488,26 @@ public class HeadStemRelation
     }
 
     //~ Static Methods -----------------------------------------------------------------------------
+    //-----------//
+    // isCentral //
+    //-----------//
+    /**
+     * Report whether the stem line crosses the head near its middle (within a quarter of the
+     * head width), rather than along one of its sides.
+     *
+     * @param head     the head
+     * @param stemLine the stem median line
+     * @return true if so
+     */
+    private static boolean isCentral (HeadInter head,
+                                      Line2D stemLine)
+    {
+        final Rectangle box = head.getBounds();
+        final double xStem = LineUtil.xAtY(stemLine, box.getCenterY());
+
+        return Math.abs(xStem - box.getCenterX()) < (0.25 * box.width);
+    }
+
     //---------------//
     // checkRelation //
     //---------------//
@@ -515,8 +535,17 @@ public class HeadStemRelation
 
         // Relation head -> stem
         final int yDir = (headToTail == TOP) ? (-1) : 1;
-        final int xDir = -stemLine.relativeCCW(head.getCenter());
-        final HorizontalSide hSide = (xDir < 0) ? LEFT : RIGHT;
+        final HorizontalSide hSide;
+
+        if (isCentral(head, stemLine)) {
+            // Stem through the head middle (e.g. some cross heads): the side follows the
+            // stem direction, as for a stem on the normal side
+            hSide = (headToTail == TOP) ? RIGHT : LEFT;
+        } else {
+            hSide = (stemLine.relativeCCW(head.getCenter()) > 0) ? LEFT : RIGHT;
+        }
+
+        final int xDir = (hSide == LEFT) ? -1 : 1;
         final Point2D refPt = head.getStemReferencePoint(hSide, headToTail);
         final HeadStemRelation hRel = new HeadStemRelation();
         hRel.setHeadSide(hSide);
