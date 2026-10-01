@@ -320,6 +320,93 @@ public class PartCollation
             }
         }
 
+        final int m = parts.size();
+        final Record[] mapped = parts.stream().allMatch(p -> p.getHintRank() != null)
+                ? mapByRank(parts, hints, manuals)
+                : mapByCost(parts, hints, manuals);
+
+        for (int i = 0; i < m; i++) {
+            final PartRef partRef = parts.get(i);
+            final Record record = mapped[i];
+
+            if (record != null) {
+                if (record.partRefs.isEmpty()
+                        && (partRef.getStaffCount() == record.logical.getStaffCount())) {
+                    // Adopt the actual staff configuration (line counts, small)
+                    // Otherwise, the hinted configuration is kept for the missing staves
+                    record.logical.setStaffConfigs(partRef.getStaffConfigs());
+                }
+
+                // NOTA: a tablature part gets the logical id of its standard part, which comes
+                // first in the system, so that only the standard part is exported
+                record.partRefs.add(partRef);
+                logger.debug("{} mapped to hinted {}", partRef, record.logical);
+            } else {
+                logger.info("Part {} does not fit parts hint, extra logical", partRef);
+                addExtraRecord(partRef);
+            }
+        }
+    }
+
+    //-----------//
+    // mapByRank //
+    //-----------//
+    /**
+     * Map each part to the hinted logical whose staves include the part hint rank.
+     * <p>
+     * The ranks come from the HEADS step, which places each staff found within the hinted
+     * complete system, by staff count and position only (see NoteHeadsBuilder).
+     *
+     * @param parts   the non-manual system parts, top down
+     * @param hints   the hinted records, in hint order
+     * @param manuals records already used by manual assignment
+     * @return the record mapped to each part, null for no mapping
+     */
+    private static Record[] mapByRank (List<PartRef> parts,
+                                       List<Record> hints,
+                                       Set<Record> manuals)
+    {
+        final Record[] mapped = new Record[parts.size()];
+
+        for (int i = 0; i < parts.size(); i++) {
+            final PartRef partRef = parts.get(i);
+            final int rank = partRef.getHintRank();
+            int start = 0;
+
+            for (Record record : hints) {
+                final int end = start + record.logical.getStaffCount();
+
+                if (rank >= start && rank < end) {
+                    if (!manuals.contains(record) && rank + partRef.getStaffCount() <= end) {
+                        mapped[i] = record;
+                    }
+
+                    break;
+                }
+
+                start = end;
+            }
+        }
+
+        return mapped;
+    }
+
+    //-----------//
+    // mapByCost //
+    //-----------//
+    /**
+     * Map the parts to the hinted records by staff counts, vertical order and part names,
+     * when staff ranks are not available.
+     *
+     * @param parts   the non-manual system parts, top down
+     * @param hints   the hinted records, in hint order
+     * @param manuals records already used by manual assignment
+     * @return the record mapped to each part, null for no mapping
+     */
+    private Record[] mapByCost (List<PartRef> parts,
+                                List<Record> hints,
+                                Set<Record> manuals)
+    {
         // cost[i][j]: best cost to process parts[0..i) with hints[0..j)
         final int m = parts.size();
         final int n = hints.size();
@@ -400,27 +487,8 @@ public class PartCollation
             }
         }
 
-        for (int i = 0; i < m; i++) {
-            final PartRef partRef = parts.get(i);
-            final Record record = mapped[i];
 
-            if (record != null) {
-                if (record.partRefs.isEmpty()
-                        && (partRef.getStaffCount() == record.logical.getStaffCount())) {
-                    // Adopt the actual staff configuration (line counts, small)
-                    // Otherwise, the hinted configuration is kept for the missing staves
-                    record.logical.setStaffConfigs(partRef.getStaffConfigs());
-                }
-
-                // NOTA: a tablature part gets the logical id of its standard part, which comes
-                // first in the system, so that only the standard part is exported
-                record.partRefs.add(partRef);
-                logger.debug("{} mapped to hinted {}", partRef, record.logical);
-            } else {
-                logger.info("Part {} does not fit parts hint, extra logical", partRef);
-                addExtraRecord(partRef);
-            }
-        }
+        return mapped;
     }
 
     //----------------//
@@ -628,9 +696,7 @@ public class PartCollation
     //---------------------//
     /**
      * Report, for each staff of a complete system (top down, as described by the parts hint),
-     * whether it belongs to a part flagged ":drums".
-     * Tablatures (":tab") are left out: they are often missed by the GRID step, while the other
-     * staves must all be there for the score to be right.
+     * whether it belongs to a part flagged ":drums". All staves count, tablatures included.
      * <p>
      * Heads are matched (HEADS step) long before parts are collated, and a drum staff printed
      * with a bass clef is not recognized as such: the hint tells which staff to match against
@@ -660,7 +726,7 @@ public class PartCollation
                 final HintEntry entry = HintEntry.parse(token);
                 any |= entry.drums;
 
-                for (int i = 0; i < entry.staffCount - ((entry.tabLines > 0) ? 1 : 0); i++) {
+                for (int i = 0; i < entry.staffCount; i++) {
                     flags.add(entry.drums);
                 }
             }
@@ -669,6 +735,23 @@ public class PartCollation
         } catch (Exception ex) {
             return null;
         }
+    }
+
+    //---------------------//
+    // getHintedStaffCount //
+    //---------------------//
+    /**
+     * Report the staff count of a complete system described by the parts hint, all staves
+     * (tablatures included).
+     *
+     * @return the staff count, or null if no hint
+     */
+    public static Integer getHintedStaffCount ()
+    {
+        final List<LogicalPart> logicals = getHintedLogicals();
+
+        return (logicals == null) ? null
+                : logicals.stream().mapToInt(LogicalPart::getStaffCount).sum();
     }
 
     //-----------------------//

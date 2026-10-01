@@ -85,6 +85,12 @@ public class PartRef
     @XmlJavaTypeAdapter(type = boolean.class, value = Jaxb.BooleanPositiveAdapter.class)
     private boolean manual;
 
+    /**
+     * Rank of the part first staff in the complete system described by the parts hint, if any.
+     */
+    @XmlAttribute(name = "hint-rank")
+    private Integer hintRank;
+
     // Transient data
     //---------------
 
@@ -160,6 +166,16 @@ public class PartRef
     public Integer getLogicalId ()
     {
         return logicalId;
+    }
+
+    public Integer getHintRank ()
+    {
+        return hintRank;
+    }
+
+    public void setHintRank (Integer hintRank)
+    {
+        this.hintRank = hintRank;
     }
 
     public String getName ()

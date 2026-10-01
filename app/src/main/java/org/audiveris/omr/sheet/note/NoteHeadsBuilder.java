@@ -51,6 +51,7 @@ import org.audiveris.omr.run.Orientation;
 import org.audiveris.omr.score.DrumSet;
 import org.audiveris.omr.score.DrumSet.DrumInstrument;
 import org.audiveris.omr.score.PartCollation;
+import org.audiveris.omr.score.PartRef;
 import org.audiveris.omr.sheet.Part;
 import org.audiveris.omr.sheet.Picture;
 import org.audiveris.omr.sheet.Scale;
@@ -95,6 +96,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -1282,12 +1284,12 @@ public class NoteHeadsBuilder
     // getHintedDrumStaves //
     //---------------------//
     /**
-     * Report the staves of this system that the parts hint flags as drums.
+     * Report the staves of this system that the parts hint flags as drums, and record in
+     * each part the hint rank of its first staff.
      * <p>
-     * The hint describes a complete system top down, so a staff is identified by its index
-     * among the staves that are not tablatures (a tablature is often missed, harmlessly).
-     * If the system has another count of such staves (one was missed), no staff is flagged:
-     * the parts of this system cannot be trusted anyway, the missed staff must be fixed first.
+     * The hint describes a complete system top down: every staff counts, whatever its kind.
+     * When staves were missed, the missing ones are put back where the room is (see
+     * {@link #staffSlots}), so that each staff found keeps its rank in the hint.
      *
      * @param system the system at hand
      * @return the flagged staves, perhaps empty
@@ -1295,38 +1297,197 @@ public class NoteHeadsBuilder
     private static Set<Staff> getHintedDrumStaves (SystemInfo system)
     {
         final Set<Staff> set = new HashSet<>();
+        final Integer expected = PartCollation.getHintedStaffCount();
+
+        if (expected == null) {
+            return set;
+        }
+
+        final List<Staff> staves = system.getStaves();
+        final int[] slots = staffSlots(system, expected);
+
+        if (slots == null) {
+            logger.warn(
+                    "System#{}: {} staves vs {} in parts hint, staves not ranked",
+                    system.getId(),
+                    staves.size(),
+                    expected);
+
+            return set;
+        }
+
+        // Each part keeps the hint rank of its first staff, for the parts collation
+        for (Part part : system.getParts()) {
+            final PartRef ref = part.getRef();
+
+            if (ref != null) {
+                ref.setHintRank(slots[staves.indexOf(part.getFirstStaff())]);
+            }
+        }
+
         final List<Boolean> flags = PartCollation.getHintedDrumStaves();
 
         if (flags == null) {
             return set;
         }
 
-        final List<Staff> staves = new ArrayList<>();
-
-        for (Staff staff : system.getStaves()) {
-            if (!staff.isTablature()) {
-                staves.add(staff);
-            }
-        }
-
-        if (staves.size() != flags.size()) {
-            logger.warn(
-                    "System#{}: {} staves (tablatures aside) vs {} in parts hint,"
-                            + " drum staff not identified",
-                    system.getId(),
-                    staves.size(),
-                    flags.size());
-
-            return set;
-        }
-
         for (int i = 0; i < staves.size(); i++) {
-            if (flags.get(i) && !staves.get(i).isDrum()) {
+            if (flags.get(slots[i]) && !staves.get(i).isDrum()) {
                 set.add(staves.get(i));
             }
         }
 
         return set;
+    }
+
+    //------------//
+    // staffSlots //
+    //------------//
+    /**
+     * Report the rank, in the hinted complete system, of each staff found in the system.
+     * <p>
+     * As a reader would: with as many staves as expected, ranks are just the order. With fewer,
+     * a missed staff leaves room: an unusually large gap between two staves found, or the
+     * system start line going on above the first staff or below the last one. Each missing
+     * staff is put in the largest room left (a typical staff spacing per staff).
+     *
+     * @param system   the system at hand
+     * @param expected the staff count of the hinted complete system
+     * @return the ranks, or null if no consistent placement
+     */
+    private static int[] staffSlots (SystemInfo system,
+                                     int expected)
+    {
+        final List<Staff> staves = system.getStaves();
+        final int n = staves.size();
+        final int[] slots = new int[n];
+
+        for (int i = 0; i < n; i++) {
+            slots[i] = i;
+        }
+
+        if (n == expected) {
+            return slots;
+        }
+
+        if ((n > expected) || (n < 2)) {
+            return null;
+        }
+
+        // Staff centers and half heights, at staff left side
+        final double[] center = new double[n];
+        final double[] half = new double[n];
+
+        for (int i = 0; i < n; i++) {
+            final Staff staff = staves.get(i);
+            final int x = staff.getAbscissa(HorizontalSide.LEFT);
+            final double top = staff.getFirstLine().yAt(x);
+            final double bot = staff.getLastLine().yAt(x);
+            center[i] = (top + bot) / 2;
+            half[i] = (bot - top) / 2;
+        }
+
+        final double[] gaps = new double[n - 1];
+
+        for (int i = 0; i < n - 1; i++) {
+            gaps[i] = center[i + 1] - center[i];
+        }
+
+        final double typical = Arrays.stream(gaps).sorted().toArray()[(n - 1) / 2];
+
+        // Room for missing staves: above the first, between staves, below the last
+        final ByteProcessor image = system.getSheet().getPicture().getSource(
+                Picture.SourceKey.BINARY);
+        final Staff first = staves.get(0);
+        final Staff last = staves.get(n - 1);
+        final double[] room = new double[n + 1];
+        room[0] = startLineReach(image, first, center[0], -1) - half[0];
+        room[n] = startLineReach(image, last, center[n - 1], 1) - half[n - 1];
+
+        for (int i = 1; i < n; i++) {
+            room[i] = gaps[i - 1] - typical;
+        }
+
+        final int[] missing = new int[n + 1];
+
+        for (int k = 0; k < expected - n; k++) {
+            int best = 0;
+
+            for (int j = 1; j <= n; j++) {
+                if (room[j] > room[best]) {
+                    best = j;
+                }
+            }
+
+            if (room[best] < 0.5 * typical) {
+                return null; // No room for the staves missing
+            }
+
+            missing[best]++;
+            room[best] -= typical;
+        }
+
+        int shift = 0;
+
+        for (int i = 0; i < n; i++) {
+            shift += missing[i];
+            slots[i] = i + shift;
+        }
+
+        logger.info(
+                "System#{}: {} staves found for {} in parts hint, ranks {}",
+                system.getId(),
+                n,
+                expected,
+                Arrays.toString(slots));
+
+        return slots;
+    }
+
+    //----------------//
+    // startLineReach //
+    //----------------//
+    /**
+     * Report how far the system start line (bracket or start barline, left of the staff)
+     * goes from the staff center, upwards (dir -1) or downwards (dir +1).
+     *
+     * @param image  the binary image
+     * @param staff  the first or last staff of the system
+     * @param center the staff center ordinate
+     * @param dir    -1 for up, +1 for down
+     * @return the distance reached from the center, in pixels
+     */
+    private static double startLineReach (ByteProcessor image,
+                                          Staff staff,
+                                          double center,
+                                          int dir)
+    {
+        final int il = staff.getSpecificInterline();
+        final int left = staff.getAbscissa(HorizontalSide.LEFT);
+        final int maxGap = Math.max(2, il / 6);
+        int best = 0;
+
+        for (int x = Math.max(0, left - il); x <= Math.min(image.getWidth() - 1, left + il / 2);
+                x++) {
+            int y = (int) Math.round(center);
+            int lastInk = y;
+            int gap = 0;
+
+            while ((y > 0) && (y < image.getHeight() - 1) && (gap <= maxGap)) {
+                y += dir;
+
+                if (image.get(x, y) == 0) {
+                    lastInk = y;
+                    gap = 0;
+                } else {
+                    gap++;
+                }
+            }
+
+            best = Math.max(best, Math.abs(lastInk - (int) Math.round(center)));
+        }
+
+        return best;
     }
 
     //-------------//
