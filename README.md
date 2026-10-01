@@ -66,9 +66,11 @@ Audiveris 是成熟的開源 OMR 引擎，對古典譜（IMSLP 類）效果很�
 
 | Patch | 啟用方式 | 能力／效果 |
 |---|---|---|
-| **partsHint：聲部拓撲提示**<br>`6a28ce4` | `org.audiveris.omr.score.PartCollation.partsHint=`<br>`A.Piano\|A.pf:2; Strings I\|Str. I:1; ...` | 由上到下給出全曲聲部（`名稱[\|縮寫]:譜表數`）。每行系統的譜表依數量與上下位置排出是完整系統的第幾行，再對到提示中涵蓋那幾行的聲部；排不出位置時改用譜表數加 OCR 名稱比對（容忍 `I/l/\|/1` 等誤讀）。缺席聲部匯出為空聲部，對不上的不丟內容。 |
+| **partsHint：聲部拓撲提示**<br>`6a28ce4` `0b598ed` | `org.audiveris.omr.score.PartCollation.partsHint=`<br>`A.Piano\|A.pf:2; Strings I\|Str. I:1; ...` | 由上到下給出完整系統的全部聲部（`名稱[\|縮寫]:譜表數[:lyrics][:drums][:tab\|:tab4]`），譜表數是這個聲部印了幾行譜表（五線譜、TAB、一線譜都是一行）。每行系統的譜表依數量與上下位置排出是完整系統的第幾行，再對到提示中涵蓋那幾行的聲部；排不出位置時改用譜表數加 OCR 名稱比對（容忍 `I/l/\|/1` 等誤讀）。缺席聲部匯出為空聲部，對不上的不丟內容。 |
 | **partsHint `:lyrics` 標記**<br>`8192fd8` | 在人聲聲部後加 `:lyrics`，<br>例 `Vocal\|Vo.:1:lyrics` | 只有被標記聲部下方的文字可判成歌詞；其他譜面文字（`pizz.`、`Woodwind`、`Bell (15ma)`）一律成為 words。譜表數對不上提示的系統不判歌詞（保守）；標記打錯會讓提示失效並寫 WARN，不會悄悄忽略。 |
-| **partsHint `:drums` 標記** | 在鼓聲部後加 `:drums`，<br>例 `Drums\|Dr.:1:drums` | 被標記的聲部一律當鼓組匯出，不管譜面印的是什麼譜號（樂團譜的鼓常用低音譜號）：輸出打擊樂譜號、`<unpitched>` 音符與 GM 鼓音色。第三間的實心符頭 → snare，最下一間 → kick（對應表見 `app/res/drum-set.xml`）。需要寫聲部名稱。 |
+| **partsHint `:drums` 標記**<br>`a0a9f6d` `8561b79` | 在鼓聲部後加 `:drums`，<br>例 `Drums\|Dr.:1:drums` | 被標記的譜表照鼓組（`app/res/drum-set.xml`）找符頭，hi-hat／crash 的叉頭也找；匯出時一律當鼓組，不管譜面印的是什麼譜號（樂團譜的鼓常用低音譜號）：輸出打擊樂譜號、`<unpitched>` 音符與 GM 鼓音色。需要寫聲部名稱。 |
+| **鼓譜叉頭模板**<br>`a023953` `2d10c7b` `ee7db9c` | `org.audiveris.omr.sheet.note.NoteHeadsBuilder.templateDir=<資料夾>` | `:drums` 譜表上的叉頭改用模板比對找：同一本樂譜集字型相同，模板做一次整本共用。資料夾放 `cross.png`（墨色深，行距 20 像素的比例）和 `cross_mask.png`（白色 = 參與比對的像素）。比對用灰階原圖（3×3 中值後，灰度 160 以下算墨），所以輸入圖檔要還在；讀不到時寫 WARN、不用模板。 |
+| **partsHint `:tab`／`:tab4` 標記**<br>`77f293e` | 在聲部後加 `:tab`（6 線）或 `:tab4`（4 線），<br>例 `E.Guitar\|E.G.:2:tab` | 這個聲部的最後一行是 TAB。TAB 沒被認出來、或被拆成獨立聲部時，仍匯出成同一個聲部，譜表數照提示（含 TAB 這一行）。 |
 | **預設拍號**<br>`06a58f6` | `org.audiveris.omr.sheet.rhythm.PageRhythm.defaultTimeSignature=4/4` | 頁面開頭沒有拍號、前面頁面也找不到時，退回使用者給的拍號。逐頁 OMR 不再整頁失去時值檢查。 |
 | **endings 開關（房子偵測）**<br>`eda9db9` | `org.audiveris.omr.sheet.ProcessingSwitches.endings=false` | 已知全曲沒有 1、2 房子時關閉偵測，避免 `— pizz. —↓` 之類的延續線被誤判成 Volta。預設 `true`（行為不變）。 |
 
@@ -90,7 +92,7 @@ Audiveris 是成熟的開源 OMR 引擎，對古典譜（IMSLP 類）效果很�
 | **鬼休止符 voice 消除**<br>`c8a90a6` `8d8bdf7` | 預設生效；<br>`org.audiveris.omr.score.PartwiseBuilder.dropGhostRests=false` 可關閉 | 有實音的譜表上，丟掉只有休止符的多餘 voice，並把剩下的 voice 依 Audiveris 的譜表 id 家族（1–4／5–8／9–12）重新編號。避免播放游標膨脹與聲部倒置，不會丟失任何實音。 |
 | **`%` 小節反覆展開修正**<br>`0c63a21` | 預設生效 | 只出現在部分譜表（如鋼琴左手）的 `%`：只複製這些譜表的 voice，並先倒回小節起點；不再拼出 4/4 裡 8 拍的小節。 |
 | **6(9) 和弦匯出**<br>`0c63a21` | 預設生效 | 六和弦只加 9 音時不輸出括號度數，避免 MuseScore 合併成 `69` 後留下空括號。 |
-| **鼓音色編號修正** | 預設生效 | `<midi-unpitched>` 依 MusicXML 規格是 1–128，上游直接寫 GM 編號（0 起算），所有鼓都低一個鍵播放（kick 變成另一種大鼓、hi-hat 變成 tom）；現在寫 GM 編號 + 1。 |
+| **鼓音色編號修正**<br>`a0a9f6d` | 預設生效 | `<midi-unpitched>` 依 MusicXML 規格是 1–128，上游直接寫 GM 編號（0 起算），所有鼓都低一個鍵播放（kick 變成另一種大鼓、hi-hat 變成 tom）；現在寫 GM 編號 + 1。 |
 
 ### 2.5 穩定性
 
@@ -137,11 +139,11 @@ Audiveris -batch -export -output out/ \
 
 `partsHint` 撰寫要點：
 
-- 順序與譜表數必須與原譜完全一致（大譜表寫 `:2`，單行寫 `:1`）。
+- 寫完整系統（所有聲部都在的那一行），順序與譜表數必須與原譜完全一致（大譜表寫 `:2`，五線譜加 TAB 寫 `:2:tab`，單行寫 `:1`）。
 - 用 `|` 列出全名與縮寫，讓首頁與後續頁都能對上。
 - 器樂譜（沒有人聲）可以直接關掉歌詞：`org.audiveris.omr.sheet.ProcessingSwitches.lyrics=false`。
 
-已存好的 `.omr` 若只需要套用新的匯出邏輯，不必重跑 OMR：
+已存好的 `.omr` 若只需要套用新的匯出邏輯，不必重跑 OMR（改了 `partsHint` 或 `templateDir` 則要重跑）：
 
 ```bash
 Audiveris -batch -export -output out/ -- page01.omr
