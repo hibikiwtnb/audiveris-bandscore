@@ -391,6 +391,51 @@ public class PartwiseBuilder
         getNotations().getTiedOrSlurOrTuplet().add(pmSlur);
     }
 
+    //---------------//
+    // isHintedDrums //
+    //---------------//
+    /**
+     * Report whether the provided logical part is flagged ":drums" in the parts hint.
+     *
+     * @param logicalPart the logical part
+     * @return true if so
+     */
+    private static boolean isHintedDrums (LogicalPart logicalPart)
+    {
+        final String name = logicalPart.getName();
+
+        return (name != null) && PartCollation.getHintedDrumNames().contains(name);
+    }
+
+    //------------------//
+    // percussionStepOf //
+    //------------------//
+    /**
+     * Report the display step of a pitch position on a 5-line percussion staff
+     * (positioned as on a treble staff, middle line is B4).
+     *
+     * @param pitch the integer pitch position (0 for middle line, positive downwards)
+     * @return the display step
+     */
+    private static Step percussionStepOf (int pitch)
+    {
+        return stepOf(HeadInter.NoteStep.values()[(71 - pitch) % 7]);
+    }
+
+    //--------------------//
+    // percussionOctaveOf //
+    //--------------------//
+    /**
+     * Report the display octave of a pitch position on a 5-line percussion staff.
+     *
+     * @param pitch the integer pitch position (0 for middle line, positive downwards)
+     * @return the display octave
+     */
+    private static int percussionOctaveOf (int pitch)
+    {
+        return (34 - pitch) / 7;
+    }
+
     //-----------//
     // buildClef //
     //-----------//
@@ -403,7 +448,8 @@ public class PartwiseBuilder
             pmClef.setNumber(new BigInteger("" + (1 + clef.getStaff().getIndexInPart())));
         }
 
-        Shape shape = clef.getShape();
+        // A drum set may be printed with another clef (often a bass clef)
+        Shape shape = current.isDrumPart ? Shape.PERCUSSION_CLEF : clef.getShape();
 
         if (shape != Shape.PERCUSSION_CLEF) {
             /**
@@ -580,6 +626,7 @@ public class PartwiseBuilder
                 }
             }
         }
+        isDrumLogicalPart |= isHintedDrums(logicalPart);
         if (isDrumLogicalPart) {
             // If so, retrieve drumset and export all midi instruments in xml preamble.
             final DrumSet drumSet = DrumSet.getInstance();
@@ -599,7 +646,8 @@ public class PartwiseBuilder
                 midiInstrument.setId(scoreInstrument);
                 midiInstrument.setMidiChannel(10); // in [1..16] range
                 midiInstrument.setMidiProgram(1);
-                midiInstrument.setMidiUnpitched(sound.getMidi());
+                // midi-unpitched is 1-based (1..128), while GM key numbers are 0-based
+                midiInstrument.setMidiUnpitched(sound.getMidi() + 1);
                 midiInstrument.setVolume(new BigDecimal(score.getVolume()));
             }
             current.instrumentMap = instrumentMap;
@@ -2406,8 +2454,14 @@ public class PartwiseBuilder
 
                 if (!current.measure.isDummy() && !staff.isOneLineStaff()) {
                     // Set displayStep & displayOctave for rest
-                    rest.setDisplayStep(stepOf(note.getStep()));
-                    rest.setDisplayOctave(note.getOctave() + getOctaveShift(note));
+                    if (current.isDrumPart) {
+                        final int p = note.getIntegerPitch();
+                        rest.setDisplayStep(percussionStepOf(p));
+                        rest.setDisplayOctave(percussionOctaveOf(p));
+                    } else {
+                        rest.setDisplayStep(stepOf(note.getStep()));
+                        rest.setDisplayOctave(note.getOctave() + getOctaveShift(note));
+                    }
                 }
 
                 current.pmNote.setRest(rest);
@@ -2434,10 +2488,11 @@ public class PartwiseBuilder
                     unpitched.setDisplayOctave(4);
                     current.pmNote.setUnpitched(unpitched);
                 } else if (current.isDrumPart) {
-                    // Unpitched 5-line percussion staff
+                    // Unpitched 5-line percussion staff, whatever the printed clef
+                    final int p = note.getIntegerPitch();
                     Unpitched unpitched = factory.createUnpitched();
-                    unpitched.setDisplayStep(stepOf(note.getStep()));
-                    unpitched.setDisplayOctave(note.getOctave());
+                    unpitched.setDisplayStep(percussionStepOf(p));
+                    unpitched.setDisplayOctave(percussionOctaveOf(p));
                     current.pmNote.setUnpitched(unpitched);
                 } else {
                     // Pitch
@@ -3318,14 +3373,14 @@ public class PartwiseBuilder
             final Part systemPart = system.getPartById(current.logicalPart.getId());
 
             if (systemPart != null) {
-                current.isDrumPart = systemPart.isDrumPart();
+                current.isDrumPart = systemPart.isDrumPart() || isHintedDrums(current.logicalPart);
                 processPart(systemPart);
             } else {
                 // Need to build a dummy system Part on-the-fly
                 // Based on the first usable (i.e. not tablature) part
                 final Part dummyPart = system.getFirstStandardPart().createDummyPart(
                         current.logicalPart.getId());
-                current.isDrumPart = dummyPart.isDrumPart();
+                current.isDrumPart = dummyPart.isDrumPart() || isHintedDrums(current.logicalPart);
                 processPart(dummyPart);
             }
 

@@ -29,6 +29,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
@@ -444,7 +445,8 @@ public class PartCollation
      * Syntax: parts separated by ';', each part as
      * <code>name[|abbreviation]:staffCount[:lyrics]</code>, top down.
      * Names are optional, e.g. "A.Piano|A.pf:2; Strings I|Str. I:1" or "2;1;1".
-     * The optional ":lyrics" flag is used by {@link #getHintedLyricsStaves()}.
+     * The optional ":lyrics" flag is used by {@link #getHintedLyricsStaves()},
+     * the optional ":drums" flag by {@link #getHintedDrumNames()}.
      *
      * @return the hinted logicals, or null if no (valid) hint
      */
@@ -496,6 +498,48 @@ public class PartCollation
         } catch (Exception ex) {
             logger.warn("Invalid partsHint constant: \"{}\"", str);
             return null;
+        }
+    }
+
+    //--------------------//
+    // getHintedDrumNames //
+    //--------------------//
+    /**
+     * Report the names of the hinted parts flagged ":drums".
+     * <p>
+     * Which part is the drum set is known by the user (e.g. "Bass:1; Drums|Dr.:1:drums"),
+     * while Audiveris recognizes a drum staff only by its percussion clef: many band scores
+     * print the drums with a bass clef.
+     *
+     * @return the (main) names of the flagged parts, perhaps empty
+     */
+    public static Set<String> getHintedDrumNames ()
+    {
+        final Set<String> names = new HashSet<>();
+        final String str = constants.partsHint.getValue();
+
+        if ((str == null) || str.isBlank()) {
+            return names;
+        }
+
+        try {
+            for (String token : str.split(";")) {
+                token = token.trim();
+
+                if (token.isEmpty()) {
+                    continue;
+                }
+
+                final HintEntry entry = HintEntry.parse(token);
+
+                if (entry.drums && !entry.names.isEmpty()) {
+                    names.add(entry.names.split("\\|")[0].trim());
+                }
+            }
+
+            return names;
+        } catch (Exception ex) {
+            return new HashSet<>();
         }
     }
 
@@ -759,16 +803,17 @@ public class PartCollation
 
         private final Constant.String partsHint = new Constant.String(
                 "",
-                "Parts of the score, top down, as \"name[|abbrev]:staffCount[:lyrics]\""
-                        + " separated by ';' (e.g. \"Vocal:1:lyrics; Piano:2; Violin I|Vn. I:1\")."
-                        + " ':lyrics' restricts lyrics to the flagged parts. Empty means no hint.");
+                "Parts of the score, top down, as \"name[|abbrev]:staffCount[:lyrics|:drums]\""
+                        + " separated by ';' (e.g. \"Vocal:1:lyrics; Piano:2; Drums|Dr.:1:drums\")."
+                        + " ':lyrics' restricts lyrics to the flagged parts,"
+                        + " ':drums' exports the flagged part as drum set. Empty means no hint.");
     }
 
     //-----------//
     // HintEntry //
     //-----------//
     /**
-     * One part of the parts hint: "name[|abbrev]:staffCount[:lyrics]".
+     * One part of the parts hint: "name[|abbrev]:staffCount[:lyrics][:drums]".
      */
     private static class HintEntry
     {
@@ -778,19 +823,24 @@ public class PartCollation
 
         final boolean lyrics;
 
+        final boolean drums;
+
         HintEntry (String names,
                    int staffCount,
-                   boolean lyrics)
+                   boolean lyrics,
+                   boolean drums)
         {
             this.names = names;
             this.staffCount = staffCount;
             this.lyrics = lyrics;
+            this.drums = drums;
         }
 
         static HintEntry parse (String token)
         {
             final String[] fields = token.split(":");
             boolean lyrics = false;
+            boolean drums = false;
             int last = fields.length - 1;
 
             // Trailing flags, after the staff count
@@ -799,6 +849,8 @@ public class PartCollation
 
                 if (flag.equalsIgnoreCase("lyrics")) {
                     lyrics = true;
+                } else if (flag.equalsIgnoreCase("drums")) {
+                    drums = true;
                 } else {
                     throw new IllegalArgumentException("Unknown partsHint flag: " + flag);
                 }
@@ -810,7 +862,11 @@ public class PartCollation
             final String names = String.join(":", java.util.Arrays.copyOfRange(fields, 0, last))
                     .trim();
 
-            return new HintEntry(names, staffCount, lyrics);
+            if (drums && names.isEmpty()) {
+                throw new IllegalArgumentException("partsHint ':drums' needs a part name");
+            }
+
+            return new HintEntry(names, staffCount, lyrics, drums);
         }
     }
 
