@@ -68,6 +68,7 @@ Audiveris 是成熟的開源 OMR 引擎，對古典譜（IMSLP 類）效果很�
 |---|---|---|
 | **partsHint：聲部拓撲提示**<br>`6a28ce4` | `org.audiveris.omr.score.PartCollation.partsHint=`<br>`A.Piano\|A.pf:2; Strings I\|Str. I:1; ...` | 由上到下給出全曲聲部（`名稱[\|縮寫]:譜表數`）。每行系統以動態規劃對齊到這組邏輯聲部：譜表數與上下順序為硬條件，OCR 名稱只作軟性成本（容忍 `I/l/\|/1` 等誤讀）。缺席聲部匯出為空聲部，對不上的不丟內容。 |
 | **partsHint `:lyrics` 標記**<br>`8192fd8` | 在人聲聲部後加 `:lyrics`，<br>例 `Vocal\|Vo.:1:lyrics` | 只有被標記聲部下方的文字可判成歌詞；其他譜面文字（`pizz.`、`Woodwind`、`Bell (15ma)`）一律成為 words。譜表數對不上提示的系統不判歌詞（保守）；標記打錯會讓提示失效並寫 WARN，不會悄悄忽略。 |
+| **partsHint `:drums` 標記** | 在鼓聲部後加 `:drums`，<br>例 `Drums\|Dr.:1:drums` | 被標記的聲部一律當鼓組匯出，不管譜面印的是什麼譜號（樂團譜的鼓常用低音譜號）：輸出打擊樂譜號、`<unpitched>` 音符與 GM 鼓音色。第三間的實心符頭 → snare，最下一間 → kick（對應表見 `app/res/drum-set.xml`）。需要寫聲部名稱。 |
 | **預設拍號**<br>`06a58f6` | `org.audiveris.omr.sheet.rhythm.PageRhythm.defaultTimeSignature=4/4` | 頁面開頭沒有拍號、前面頁面也找不到時，退回使用者給的拍號。逐頁 OMR 不再整頁失去時值檢查。 |
 | **endings 開關（房子偵測）**<br>`eda9db9` | `org.audiveris.omr.sheet.ProcessingSwitches.endings=false` | 已知全曲沒有 1、2 房子時關閉偵測，避免 `— pizz. —↓` 之類的延續線被誤判成 Volta。預設 `true`（行為不變）。 |
 
@@ -90,6 +91,7 @@ Audiveris 是成熟的開源 OMR 引擎，對古典譜（IMSLP 類）效果很�
 | **鬼休止符 voice 消除**<br>`c8a90a6` `8d8bdf7` | 預設生效；<br>`org.audiveris.omr.score.PartwiseBuilder.dropGhostRests=false` 可關閉 | 有實音的譜表上，丟掉只有休止符的多餘 voice，並把剩下的 voice 依 Audiveris 的譜表 id 家族（1–4／5–8／9–12）重新編號。避免播放游標膨脹與聲部倒置，不會丟失任何實音。 |
 | **`%` 小節反覆展開修正**<br>`0c63a21` | 預設生效 | 只出現在部分譜表（如鋼琴左手）的 `%`：只複製這些譜表的 voice，並先倒回小節起點；不再拼出 4/4 裡 8 拍的小節。 |
 | **6(9) 和弦匯出**<br>`0c63a21` | 預設生效 | 六和弦只加 9 音時不輸出括號度數，避免 MuseScore 合併成 `69` 後留下空括號。 |
+| **鼓音色編號修正** | 預設生效 | `<midi-unpitched>` 依 MusicXML 規格是 1–128，上游直接寫 GM 編號（0 起算），所有鼓都低一個鍵播放（kick 變成另一種大鼓、hi-hat 變成 tom）；現在寫 GM 編號 + 1。 |
 
 ### 2.5 穩定性
 
