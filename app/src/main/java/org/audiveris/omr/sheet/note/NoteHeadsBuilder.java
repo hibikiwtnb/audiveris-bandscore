@@ -390,13 +390,21 @@ public class NoteHeadsBuilder
             watch.start("Staff #" + staff.getId() + " range");
             ch.addAll(processStaff(staff, false));
 
-            // Cross heads of a drum staff, by the book template if any
-            if ((crossTemplate != null) && isDrumStaff(staff)) {
+            // Cross heads of a drum staff, by the book template if any (on the gray image)
+            final ByteProcessor gray = ((crossTemplate != null) && isDrumStaff(staff))
+                    ? sheet.getPicture().getSource(Picture.SourceKey.GRAY)
+                    : null;
+
+            if ((crossTemplate != null) && isDrumStaff(staff) && (gray == null)) {
+                logger.warn("No gray image for staff#{}, cross template not used", staff.getId());
+            }
+
+            if (gray != null) {
                 watch.start("Staff #" + staff.getId() + " crosses");
 
                 for (HeadInter head : crossTemplate.lookup(
                         staff,
-                        image,
+                        gray,
                         constants.crossMinGrade.getValue())) {
                     sig.addVertex(head);
                     ch.add(head);

@@ -61,6 +61,8 @@ import javax.imageio.ImageIO;
  * the X strokes and the white around them, not the stem going up or down, nor ledgers).
  * Both are made once per book by <code>tools/learn_template.py</code> (bandscore-omr-skill).
  * <p>
+ * The gray image is used, with the 3x3 median and the ink threshold of the learning tool, so
+ * that template and page are seen alike (a binarization may thicken thin strokes).
  * On a drum staff, staff lines and ledger rows are erased where white above and below, then the
  * template is matched (normalized correlation over the mask) around every drum-set pitch where a
  * cross motif is defined. A match is kept when its correlation reaches the minimum grade and the
@@ -74,6 +76,9 @@ public class CrossTemplate
 
     /** Staff interline of the template images. */
     public static final int INTERLINE = 20;
+
+    /** Gray level below which a pixel is ink (after a 3x3 median), as when learning. */
+    private static final int INK_GRAY = 160;
 
     /** Maximum ink ratio in the notches of the X. */
     private static final double MAX_NOTCH_INK = 0.25;
@@ -109,7 +114,7 @@ public class CrossTemplate
      * Find the cross heads of the provided drum staff.
      *
      * @param staff    the drum staff
-     * @param image    the binary sheet image
+     * @param image    the gray sheet image (thresholded here as when learning the template)
      * @param minGrade minimum correlation for a cross
      * @return the cross heads found (not yet in sig)
      */
@@ -321,7 +326,7 @@ public class CrossTemplate
 
             for (int y = 0; y < hgt; y++) {
                 for (int x = 0; x < w; x++) {
-                    ink[y][x] = image.get(x + x0, y + y0) == 0;
+                    ink[y][x] = median3(image, x + x0, y + y0) < INK_GRAY;
                 }
             }
 
@@ -349,6 +354,27 @@ public class CrossTemplate
                     }
                 }
             }
+        }
+
+        /** Median gray level of the 3x3 neighborhood (scan speckles out). */
+        private static int median3 (ByteProcessor image,
+                                    int x,
+                                    int y)
+        {
+            final int[] v = new int[9];
+            int n = 0;
+
+            for (int dy = -1; dy <= 1; dy++) {
+                for (int dx = -1; dx <= 1; dx++) {
+                    final int xx = Math.min(Math.max(x + dx, 0), image.getWidth() - 1);
+                    final int yy = Math.min(Math.max(y + dy, 0), image.getHeight() - 1);
+                    v[n++] = image.get(xx, yy);
+                }
+            }
+
+            java.util.Arrays.sort(v);
+
+            return v[4];
         }
 
         boolean at (int x,
