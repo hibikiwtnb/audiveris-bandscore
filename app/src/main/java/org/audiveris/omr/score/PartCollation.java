@@ -72,6 +72,9 @@ public class PartCollation
     /** Cost of a system part that cannot be mapped to any hinted logical. */
     private static final double UNMAPPED_COST = 10;
 
+    /** Cost of a hinted tablature not found in the system. */
+    private static final double MISSING_TAB_COST = 1;
+
     public static final List<StaffConfig> PIANO_CONFIG = StaffConfig.decodeCsv(
             constants.pianoStaffConfig.getValue());
 
@@ -291,6 +294,11 @@ public class PartCollation
      * as a soft cost, since OCR on part names is not reliable.
      * Hinted logicals absent from the system (e.g. hidden empty staves) are simply skipped.
      * A system part that cannot be mapped gets a new (extra) logical, so that no content is lost.
+     * <p>
+     * Without a brace, GRID makes a separate part of each staff: a hinted part ending with a
+     * tablature (":tab") may thus be found as a standard part followed by a tablature part,
+     * or as the standard part alone when the tablature was missed.
+     * Either way, the logical keeps the hinted staves, the missing ones are exported empty.
      *
      * @param sequence the system parts, top down
      * @param manuals  records already used by manual assignment
@@ -316,7 +324,8 @@ public class PartCollation
         final int m = parts.size();
         final int n = hints.size();
         final double[][] cost = new double[m + 1][n + 1];
-        final int[][] move = new int[m + 1][n + 1]; // 1: match, 2: skip hint, 3: skip part
+        // 1: match, 2: skip hint, 3: skip part, 4: match standard part + tablature part
+        final int[][] move = new int[m + 1][n + 1];
 
         for (int i = 0; i <= m; i++) {
             for (int j = 0; j <= n; j++) {
@@ -329,14 +338,37 @@ public class PartCollation
                 if (i > 0 && j > 0) {
                     final Record record = hints.get(j - 1);
                     final PartRef partRef = parts.get(i - 1);
+                    final int hintCount = record.logical.getStaffCount();
+                    final boolean tab = hasTablature(record.logical);
 
-                    if (!manuals.contains(record)
-                            && record.logical.getStaffCount() == partRef.getStaffCount()) {
-                        final double c = cost[i - 1][j - 1] + nameCost(partRef.getName(), record);
+                    if (!manuals.contains(record)) {
+                        final double name = nameCost(partRef.getName(), record);
+                        double c = Double.MAX_VALUE;
+
+                        if (hintCount == partRef.getStaffCount()) {
+                            c = cost[i - 1][j - 1] + name;
+                        } else if (tab && !isTablature(partRef)
+                                && (hintCount - 1 == partRef.getStaffCount())) {
+                            c = cost[i - 1][j - 1] + name + MISSING_TAB_COST; // Tab missed
+                        }
 
                         if (c < cost[i][j]) {
                             cost[i][j] = c;
                             move[i][j] = 1;
+                        }
+
+                        if (tab && (i > 1) && isTablature(partRef)) {
+                            final PartRef stdRef = parts.get(i - 2);
+
+                            if (!isTablature(stdRef)
+                                    && (hintCount - 1 == stdRef.getStaffCount())) {
+                                c = cost[i - 2][j - 1] + nameCost(stdRef.getName(), record);
+
+                                if (c < cost[i][j]) {
+                                    cost[i][j] = c;
+                                    move[i][j] = 4;
+                                }
+                            }
                         }
                     }
                 }
@@ -359,6 +391,11 @@ public class PartCollation
             switch (move[i][j]) {
             case 1 -> mapped[--i] = hints.get(--j);
             case 2 -> j--;
+            case 4 -> {
+                final Record record = hints.get(--j);
+                mapped[--i] = record; // Tablature part
+                mapped[--i] = record; // Standard part
+            }
             default -> i--;
             }
         }
@@ -368,11 +405,15 @@ public class PartCollation
             final Record record = mapped[i];
 
             if (record != null) {
-                if (record.partRefs.isEmpty()) {
+                if (record.partRefs.isEmpty()
+                        && (partRef.getStaffCount() == record.logical.getStaffCount())) {
                     // Adopt the actual staff configuration (line counts, small)
+                    // Otherwise, the hinted configuration is kept for the missing staves
                     record.logical.setStaffConfigs(partRef.getStaffConfigs());
                 }
 
+                // NOTA: a tablature part gets the logical id of its standard part, which comes
+                // first in the system, so that only the standard part is exported
                 record.partRefs.add(partRef);
                 logger.debug("{} mapped to hinted {}", partRef, record.logical);
             } else {
@@ -402,6 +443,44 @@ public class PartCollation
         }
 
         addRecord(+1, partRef, records);
+    }
+
+    //--------------//
+    // hasTablature //
+    //--------------//
+    /**
+     * Report whether the provided logical ends with a tablature.
+     *
+     * @param logical the logical part
+     * @return true if so
+     */
+    private static boolean hasTablature (LogicalPart logical)
+    {
+        final List<StaffConfig> configs = logical.getStaffConfigs();
+
+        return (logical.getStaffCount() > 1) && !configs.isEmpty()
+                && isTablature(configs.get(configs.size() - 1));
+    }
+
+    //-------------//
+    // isTablature //
+    //-------------//
+    private static boolean isTablature (StaffConfig config)
+    {
+        return (config.count == 4) || (config.count == 6);
+    }
+
+    /**
+     * Report whether the provided part is a tablature alone.
+     *
+     * @param partRef the system part
+     * @return true if so
+     */
+    private static boolean isTablature (PartRef partRef)
+    {
+        final List<StaffConfig> configs = partRef.getStaffConfigs();
+
+        return (configs.size() == 1) && isTablature(configs.get(0));
     }
 
     //----------//
@@ -474,7 +553,8 @@ public class PartCollation
                 final List<StaffConfig> configs = new ArrayList<>();
 
                 for (int i = 0; i < staffCount; i++) {
-                    configs.add(new StaffConfig(5, false));
+                    final boolean tab = (entry.tabLines > 0) && (i == staffCount - 1);
+                    configs.add(new StaffConfig(tab ? entry.tabLines : 5, false));
                 }
 
                 final LogicalPart logical = new LogicalPart(

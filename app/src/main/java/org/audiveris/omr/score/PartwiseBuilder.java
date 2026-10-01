@@ -2006,6 +2006,52 @@ public class PartwiseBuilder
         }
     }
 
+    //----------------------//
+    // processMissingStaves //
+    //----------------------//
+    /**
+     * Declare the staves of the current logical part that the system part lacks.
+     * <p>
+     * The parts hint describes the staves really printed (e.g. a guitar staff and its
+     * tablature), while GRID may miss some of them: they are exported empty, with their clef
+     * and line count, so that the exported score keeps the printed structure.
+     *
+     * @param physicalCount the count of staves in the system part
+     */
+    private void processMissingStaves (int physicalCount)
+    {
+        final LogicalPart logical = current.logicalPart;
+        final List<StaffConfig> configs = logical.getStaffConfigs();
+
+        for (int index = physicalCount; index < logical.getStaffCount(); index++) {
+            final int lineCount = (index < configs.size()) ? configs.get(index).count : 5;
+            final boolean tab = (lineCount == 4) || (lineCount == 6);
+            final BigInteger number = new BigInteger("" + (1 + index));
+
+            final StaffDetails staffDetails = factory.createStaffDetails();
+            staffDetails.setNumber(number);
+
+            if (lineCount != 5) {
+                staffDetails.setStaffLines(new BigInteger("" + lineCount));
+            }
+
+            getAttributes().getStaffDetails().add(staffDetails);
+
+            final Clef pmClef = factory.createClef();
+            pmClef.setNumber(number);
+
+            if (tab) {
+                pmClef.setSign(ClefSign.TAB);
+                pmClef.setLine(new BigInteger("" + (lineCount - 1)));
+            } else {
+                pmClef.setSign(ClefSign.G);
+                pmClef.setLine(new BigInteger("2"));
+            }
+
+            getAttributes().getClef().add(pmClef);
+        }
+    }
+
     //----------------//
     // processMeasure //
     //----------------//
@@ -4337,6 +4383,9 @@ public class PartwiseBuilder
                 }
 
                 getAttributes().getStaffDetails().add(staffDetails);
+
+                // Staves of the logical part missing in this system part (missed tablature...)
+                processMissingStaves(measure.getPart().getStaves().size());
             }
 
             // Measure numbering?

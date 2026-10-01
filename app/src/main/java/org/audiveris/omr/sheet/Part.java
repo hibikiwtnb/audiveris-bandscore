@@ -356,7 +356,10 @@ public class Part
         dummyPart.setDummy();
         dummyPart.setId(id);
 
-        Measure refMeasure = refPart.getFirstMeasure();
+        // A hinted part may have been missed everywhere: a single staff, without clef, will do
+        // (the exporter adds the staves still missing in the logical part)
+        final Measure refMeasure = (refPart != null) ? refPart.getFirstMeasure() : null;
+        final int refStaffCount = (refPart != null) ? refPart.getStaves().size() : 1;
 
         // Loop on measures
         boolean isFirstMeasure = true;
@@ -368,7 +371,7 @@ public class Part
             dummyMeasure.setStack(measure.getStack());
 
             // Loop on staves found in reference part
-            for (int staffIndex = 0; staffIndex < refPart.getStaves().size(); staffIndex++) {
+            for (int staffIndex = 0; staffIndex < refStaffCount; staffIndex++) {
                 final Staff dummyStaff;
 
                 if (isFirstMeasure) {
@@ -379,7 +382,9 @@ public class Part
                     dummyStaff.setSystem(system);
 
                     // Replicate Clef (from refPart first measure)
-                    ClefInter nextClef = refMeasure.getFirstMeasureClef(staffIndex);
+                    ClefInter nextClef = (refMeasure != null)
+                            ? refMeasure.getFirstMeasureClef(staffIndex)
+                            : null;
 
                     if (nextClef != null) {
                         ClefInter dummyClef = nextClef.replicate(dummyStaff);
