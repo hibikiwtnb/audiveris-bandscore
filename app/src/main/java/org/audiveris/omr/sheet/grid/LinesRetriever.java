@@ -45,8 +45,10 @@ import static org.audiveris.omr.run.Orientation.HORIZONTAL;
 import static org.audiveris.omr.run.Orientation.VERTICAL;
 import org.audiveris.omr.run.Run;
 import org.audiveris.omr.run.RunTable;
+import org.audiveris.omr.score.PartCollation;
 import org.audiveris.omr.sheet.OneLineStaff;
 import org.audiveris.omr.sheet.Picture;
+import org.audiveris.omr.sheet.ProcessingSwitch;
 import org.audiveris.omr.sheet.Scale;
 import org.audiveris.omr.sheet.Sheet;
 import org.audiveris.omr.sheet.Skew;
@@ -189,6 +191,119 @@ public class LinesRetriever
                 JunctionRatioPolicy.DEFAULT);
         sectionsFactory.createSections(shortHoriTable, null, true);
         sheet.getLagManager().setVipSections(HORIZONTAL);
+    }
+
+    //-------------------//
+    // addHintedOneLines //
+    //-------------------//
+    /**
+     * With a parts hint, a one-line staff is any long horizontal line left out of the
+     * clusters, alone in its vertical neighborhood.
+     * <p>
+     * Long: at least 0.8 of the median cluster width.
+     * Alone: no staff line and no other long line within 2.5 interlines (this keeps out the
+     * lines of a tablature that was not recognized).
+     * Near: a staff line within 1.5 times the median distance between consecutive staves (this
+     * keeps out the page borders).
+     * The one-line staves are searched for only this way, not by the oneLineStaves switch that
+     * looks for them everywhere.
+     */
+    private void addHintedOneLines ()
+    {
+        // The retriever of the standard (5-line) staves gives the interline
+        ClustersRetriever retriever = clustersRetriever;
+
+        if ((smallClustersRetriever != null) && (countFiveLines(smallClustersRetriever)
+                > countFiveLines(clustersRetriever))) {
+            retriever = smallClustersRetriever;
+        }
+
+        final List<LineCluster> clusters = new ArrayList<>(clustersRetriever.getClusters());
+
+        if (smallClustersRetriever != null) {
+            clusters.addAll(smallClustersRetriever.getClusters());
+        }
+
+        if (clusters.isEmpty()) {
+            return;
+        }
+
+        final List<Integer> widths = new ArrayList<>();
+        final List<StaffFilament> staffLines = new ArrayList<>();
+
+        for (LineCluster cluster : clusters) {
+            widths.add(cluster.getBounds().width);
+            staffLines.addAll(cluster.getLines());
+        }
+
+        Collections.sort(widths);
+
+        final List<Double> ys = new ArrayList<>();
+
+        for (LineCluster cluster : clusters) {
+            ys.add(cluster.getCenter().getY());
+        }
+
+        Collections.sort(ys);
+
+        final List<Double> spacings = new ArrayList<>();
+
+        for (int i = 1; i < ys.size(); i++) {
+            spacings.add(ys.get(i) - ys.get(i - 1));
+        }
+
+        Collections.sort(spacings);
+
+        final double maxDy = spacings.isEmpty() ? 0 : 1.5 * spacings.get(spacings.size() / 2);
+
+        final double minWidth = 0.8 * widths.get(widths.size() / 2);
+        final double minDy = 2.5 * retriever.getInterline();
+        final List<StaffFilament> longs = new ArrayList<>();
+
+        for (StaffFilament fil : discardedFilaments) {
+            if ((fil.getCluster() == null) && (fil.getBounds().width >= minWidth)) {
+                longs.add(fil);
+            }
+        }
+
+        final List<StaffFilament> singles = new ArrayList<>();
+
+        for (StaffFilament fil : longs) {
+            final Rectangle box = fil.getBounds();
+            final double x = box.x + (box.width / 2.0);
+            final double y = fil.yAt(x);
+            boolean alone = true;
+            boolean near = false;
+
+            for (List<StaffFilament> others : List.of(staffLines, longs)) {
+                for (StaffFilament other : others) {
+                    if ((other != fil) && (other.getStartPoint().getX() <= x) && (x <= other
+                            .getStopPoint().getX())) {
+                        final double dy = Math.abs(other.yAt(x) - y);
+                        alone &= (dy >= minDy);
+                        near |= (others == staffLines) && (dy <= maxDy);
+                    }
+                }
+            }
+
+            if (alone && near) {
+                logger.info("Parts hint: one-line staff at {}", box);
+                singles.add(fil);
+            }
+        }
+
+        if (!singles.isEmpty()) {
+            discardedFilaments.removeAll(singles);
+            retriever.addOneLineClusters(singles);
+        }
+    }
+
+    //----------------//
+    // countFiveLines //
+    //----------------//
+    private static int countFiveLines (ClustersRetriever retriever)
+    {
+        return (int) retriever.getClusters().stream().filter(cl -> cl.getSize() == 5).count();
     }
 
     //-------------//
@@ -1529,6 +1644,12 @@ public class LinesRetriever
 
             if (logger.isDebugEnabled()) {
                 logger.debug("Discarded filaments: {}", Entities.ids(discardedFilaments));
+            }
+
+            // Parts hint: one-line (percussion) staves
+            if ((PartCollation.getHintedStaffCount() != null) && !sheet.getStub()
+                    .getProcessingSwitches().getValue(ProcessingSwitch.oneLineStaves)) {
+                addHintedOneLines();
             }
 
             // Convert clusters into staves

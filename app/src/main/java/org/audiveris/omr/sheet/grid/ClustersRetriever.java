@@ -494,6 +494,20 @@ public class ClustersRetriever
         }
     }
 
+    //--------------------//
+    // addOneLineClusters //
+    //--------------------//
+    /**
+     * Add a one-line cluster for each of the provided filaments.
+     *
+     * @param filaments the filaments chosen as one-line staves
+     */
+    public void addOneLineClusters (List<StaffFilament> filaments)
+    {
+        allClusters.addAll(createClusters(new ArrayList<>(filaments), true));
+        Collections.sort(allClusters, byOrdinate);
+    }
+
     //----------------//
     // createClusters //
     //----------------//
