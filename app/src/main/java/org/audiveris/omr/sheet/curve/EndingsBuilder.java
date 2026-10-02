@@ -219,7 +219,9 @@ public class EndingsBuilder
         // Consider the staff just below the segment
         final Staff staff = system.getStaffAtOrBelow(leftEnd);
 
-        if (staff == null) {
+        // Endings are printed above the first staff of the system only: lines further down
+        // (an unrecognized TAB, ties, hairpins of lower parts) are not endings
+        if ((staff == null) || (staff != system.getFirstStaff())) {
             return null;
         }
 
@@ -228,6 +230,13 @@ public class EndingsBuilder
         final double yGap = staff.distanceTo(center);
 
         if (yGap < params.minGapFromStaff) {
+            return null;
+        }
+
+        // ... and closer to it than to the system above (an unrecognized 1-line staff there)
+        final SystemInfo above = system.getPrecedingInPage();
+
+        if ((above != null) && (above.getLastStaff().distanceTo(center) <= yGap)) {
             return null;
         }
 
