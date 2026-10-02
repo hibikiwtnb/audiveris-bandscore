@@ -59,7 +59,10 @@ import javax.imageio.ImageIO;
  * The template folder holds <code>cross.png</code> (ink dark, drawn at a staff interline of
  * {@link #INTERLINE} pixels) and <code>cross_mask.png</code> (white = pixels used for matching:
  * the X strokes and the white around them, not the stem going up or down, nor ledgers).
- * Both are made once per book by <code>tools/learn_template.py</code> (bandscore-omr-skill).
+ * It may also hold <code>cross_line.png</code> and <code>cross_line_mask.png</code>: a cross
+ * printed on a staff line or ledger, crossed by that line, which looks like another symbol.
+ * At every place both are tried, the better correlation counts.
+ * They are made once per book by <code>tools/learn_template.py</code> (bandscore-omr-skill).
  * <p>
  * The gray image is used, with the 3x3 median and the ink threshold of the learning tool, so
  * that template and page are seen alike (a binarization may thicken thin strokes).
@@ -88,21 +91,14 @@ public class CrossTemplate
 
     //~ Instance fields ----------------------------------------------------------------------------
 
-    /** Template ink (0..1) and mask, at INTERLINE. */
-    private final float[][] ink;
-
-    private final boolean[][] mask;
-
-    /** Scaled versions, per staff interline. */
-    private final Map<Integer, Scaled> scaled = new HashMap<>();
+    /** The template images: cross, then cross on a line if any. */
+    private final List<Image> images;
 
     //~ Constructors -------------------------------------------------------------------------------
 
-    private CrossTemplate (float[][] ink,
-                           boolean[][] mask)
+    private CrossTemplate (List<Image> images)
     {
-        this.ink = ink;
-        this.mask = mask;
+        this.images = images;
     }
 
     //~ Methods ------------------------------------------------------------------------------------
@@ -124,8 +120,13 @@ public class CrossTemplate
     {
         final List<HeadInter> heads = new ArrayList<>();
         final int il = staff.getSpecificInterline();
-        final Scaled t = scaledFor(il);
-        final int h = t.half;
+        final List<Scaled> ts = new ArrayList<>();
+
+        for (Image image0 : images) {
+            ts.add(image0.scaledFor(il));
+        }
+
+        final int h = ts.stream().mapToInt(t -> t.half).max().getAsInt();
         final Set<Integer> pitches = crossPitches(staff.getLineCount());
 
         if (pitches.isEmpty()) {
@@ -143,21 +144,25 @@ public class CrossTemplate
                 staff.pitchToOrdinate(x0, ((TreeSet<Integer>) pitches).last()) + il) + h;
         final Band band = new Band(image, staff, x0, x1, top, bot);
 
-        // Correlation around every cross pitch row
-        final List<double[]> found = new ArrayList<>(); // x, y, corr, pitch
+        // Correlation around every cross pitch row, with each template
+        final List<double[]> found = new ArrayList<>(); // x, y, corr, pitch, template
         for (int x = x0 + h; x < x1 - h; x++) {
             for (int p : pitches) {
                 final int yc = (int) Math.round(staff.pitchToOrdinate(x, p));
 
                 for (int y = yc - il / 3; y <= yc + il / 3; y++) {
-                    if (t.foreInk(band, x, y) < 0.5) {
-                        continue; // Not even the X strokes inked
-                    }
+                    for (int i = 0; i < ts.size(); i++) {
+                        final Scaled t = ts.get(i);
 
-                    final double c = t.correlation(band, x, y);
+                        if (t.foreInk(band, x, y) < 0.5) {
+                            continue; // Not even the X strokes inked
+                        }
 
-                    if (c >= minGrade && t.notchInk(band, x, y) <= MAX_NOTCH_INK) {
-                        found.add(new double[] { x, y, c, p });
+                        final double c = t.correlation(band, x, y);
+
+                        if (c >= minGrade && t.notchInk(band, x, y) <= MAX_NOTCH_INK) {
+                            found.add(new double[] { x, y, c, p, i });
+                        }
                     }
                 }
             }
@@ -186,7 +191,7 @@ public class CrossTemplate
         final Sheet sheet = staff.getSystem().getSheet();
 
         for (double[] f : peaks) {
-            final HeadInter head = t.createHead(
+            final HeadInter head = ts.get((int) f[4]).createHead(
                     band,
                     (int) f[0],
                     (int) f[1],
@@ -203,14 +208,6 @@ public class CrossTemplate
         logger.info("Staff#{} {} cross heads from template", staff.getId(), heads.size());
 
         return heads;
-    }
-
-    //-----------//
-    // scaledFor //
-    //-----------//
-    private synchronized Scaled scaledFor (int il)
-    {
-        return scaled.computeIfAbsent(il, k -> new Scaled(ink, mask, (double) k / INTERLINE));
     }
 
     //--------------//
@@ -266,35 +263,44 @@ public class CrossTemplate
     //------//
     private static CrossTemplate load (File dir)
     {
-        final File inkFile = new File(dir, "cross.png");
-        final File maskFile = new File(dir, "cross_mask.png");
+        final List<Image> images = new ArrayList<>();
 
-        if (!inkFile.isFile() || !maskFile.isFile()) {
+        for (String name : new String[] { "cross", "cross_line" }) {
+            final File inkFile = new File(dir, name + ".png");
+            final File maskFile = new File(dir, name + "_mask.png");
+
+            if (!inkFile.isFile() || !maskFile.isFile()) {
+                continue;
+            }
+
+            try {
+                final BufferedImage ii = ImageIO.read(inkFile);
+                final BufferedImage mi = ImageIO.read(maskFile);
+                final int n = ii.getWidth();
+                final float[][] ink = new float[n][n];
+                final boolean[][] mask = new boolean[n][n];
+
+                for (int y = 0; y < n; y++) {
+                    for (int x = 0; x < n; x++) {
+                        ink[y][x] = 1f - (ii.getRaster().getSample(x, y, 0) / 255f);
+                        mask[y][x] = mi.getRaster().getSample(x, y, 0) > 127;
+                    }
+                }
+
+                logger.info("Template {} {}x{} from {}", name, n, n, dir.getAbsolutePath());
+                images.add(new Image(ink, mask));
+            } catch (Exception ex) {
+                logger.warn("Cannot read {} template in {}", name, dir.getAbsolutePath(), ex);
+                return null;
+            }
+        }
+
+        if (images.isEmpty() || !new File(dir, "cross.png").isFile()) {
             logger.info("No cross template in {}", dir.getAbsolutePath());
             return null;
         }
 
-        try {
-            final BufferedImage ii = ImageIO.read(inkFile);
-            final BufferedImage mi = ImageIO.read(maskFile);
-            final int n = ii.getWidth();
-            final float[][] ink = new float[n][n];
-            final boolean[][] mask = new boolean[n][n];
-
-            for (int y = 0; y < n; y++) {
-                for (int x = 0; x < n; x++) {
-                    ink[y][x] = 1f - (ii.getRaster().getSample(x, y, 0) / 255f);
-                    mask[y][x] = mi.getRaster().getSample(x, y, 0) > 127;
-                }
-            }
-
-            logger.info("Cross template {}x{} from {}", n, n, dir.getAbsolutePath());
-
-            return new CrossTemplate(ink, mask);
-        } catch (Exception ex) {
-            logger.warn("Cannot read cross template in {}", dir.getAbsolutePath(), ex);
-            return null;
-        }
+        return new CrossTemplate(images);
     }
 
     //~ Inner Classes ------------------------------------------------------------------------------
@@ -383,6 +389,34 @@ public class CrossTemplate
             final int bx = x - x0;
             final int by = y - y0;
             return (bx >= 0) && (by >= 0) && (bx < w) && (by < hgt) && ink[by][bx];
+        }
+    }
+
+    //-------//
+    // Image //
+    //-------//
+    /**
+     * One template image: ink (0..1) and mask, at INTERLINE, with its scaled versions.
+     */
+    private static class Image
+    {
+        final float[][] ink;
+
+        final boolean[][] mask;
+
+        /** Scaled versions, per staff interline. */
+        final Map<Integer, Scaled> scaled = new HashMap<>();
+
+        Image (float[][] ink,
+               boolean[][] mask)
+        {
+            this.ink = ink;
+            this.mask = mask;
+        }
+
+        synchronized Scaled scaledFor (int il)
+        {
+            return scaled.computeIfAbsent(il, k -> new Scaled(ink, mask, (double) k / INTERLINE));
         }
     }
 
