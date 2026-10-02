@@ -43,6 +43,7 @@ import org.audiveris.omr.sig.inter.KeyInter;
 import org.audiveris.omr.sig.inter.LyricLineInter;
 import org.audiveris.omr.sig.inter.SentenceInter;
 import org.audiveris.omr.sig.inter.SlurInter;
+import org.audiveris.omr.sig.inter.StaffBarlineInter;
 import org.audiveris.omr.sig.inter.WordInter;
 import static org.audiveris.omr.util.HorizontalSide.LEFT;
 import static org.audiveris.omr.util.HorizontalSide.RIGHT;
@@ -821,7 +822,18 @@ public class Part
             for (Measure measure : measures) {
                 final PartBarline barline = measure.getRightPartBarline();
 
-                if ((barline == null) || (point.getX() <= barline.getRightX(this, staff))) {
+                if (barline == null) {
+                    return measure;
+                }
+
+                // A barline removed by a later step has no abscissa: the measure goes on to the next one
+                final StaffBarlineInter bar = barline.getStaffBarline(this, staff);
+
+                if ((bar != null) && bar.isRemoved()) {
+                    continue;
+                }
+
+                if (point.getX() <= barline.getRightX(this, staff)) {
                     return measure;
                 }
             }
