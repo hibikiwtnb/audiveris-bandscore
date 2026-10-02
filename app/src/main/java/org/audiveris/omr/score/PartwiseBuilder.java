@@ -650,7 +650,7 @@ public class PartwiseBuilder
                 midiInstrument.setMidiUnpitched(sound.getMidi() + 1);
                 midiInstrument.setVolume(new BigDecimal(score.getVolume()));
             }
-            current.instrumentMap = instrumentMap;
+            current.drumInstruments.put(logicalPart, instrumentMap);
         } else {
             // Score instrument
             Integer midiProgram = logicalPart.getMidiProgram();
@@ -1910,6 +1910,7 @@ public class PartwiseBuilder
 
         current.logicalPart = logicalPart;
         current.pmPart = pmPart;
+        current.instrumentMap = current.drumInstruments.get(logicalPart);
         current.keys.clear();
 
         // Delegate to children the filling of measures
@@ -4145,9 +4146,10 @@ public class PartwiseBuilder
 
         Boolean isDrumPart;
 
-        // Map midi instrument number to ScoreInstrument for lookup during note export
-        // TODO: The map should eventually have a second key, the part number
-        // But so far we only have one possible set of unpitched percussion instruments
+        // Per drum part: midi instrument number to ScoreInstrument, for note export
+        final Map<LogicalPart, Map<Integer, ScoreInstrument>> drumInstruments = new HashMap<>();
+
+        // The current part's map (null for a pitched part)
         Map<Integer, ScoreInstrument> instrumentMap;
 
         ScorePartwise.Part pmPart;
