@@ -1620,7 +1620,7 @@ public class NoteHeadsBuilder
     {
         private final Constant.String templateDir = new Constant.String(
                 "",
-                "Folder of the book's symbol templates (cross.png, cross_mask.png),"
+                "Folder of the book's symbol templates (cross.png, cross_line.png, slash.png),"
                         + " empty for none");
 
         private final Constant.Ratio crossMinGrade = new Constant.Ratio(

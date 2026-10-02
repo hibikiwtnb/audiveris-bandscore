@@ -56,24 +56,24 @@ import javax.imageio.ImageIO;
  * Class <code>CrossTemplate</code> finds the cross heads of a drum staff by matching a
  * template made from the book itself (all the songs of a printed book share the same font).
  * <p>
- * The template folder holds <code>cross.png</code> (ink dark, drawn at a staff interline of
- * {@link #INTERLINE} pixels) and <code>cross_mask.png</code> (white = pixels used for matching:
- * the X strokes and the white around them, not the stem going up or down, nor ledgers).
- * It may also hold <code>cross_line.png</code> and <code>cross_line_mask.png</code>: a cross
- * printed on a staff line or ledger, crossed by that line, which looks like another symbol.
+ * The template folder holds <code>cross.png</code>: a square just holding the X (ink dark,
+ * drawn at a staff interline of {@link #INTERLINE} pixels), the average of a few examples picked
+ * by eye on the book's pages. Every pixel of the square is matched.
+ * It may also hold <code>cross_line.png</code>: a cross printed on a staff line or ledger,
+ * crossed by that line, which looks like another symbol.
  * At every place both are tried, the better correlation counts.
  * They are made once per book by <code>tools/learn_template.py</code> (bandscore-omr-skill).
  * <p>
  * Templates and page are gray, never binarized: the page darkness (0 white .. 1 black) after a
  * 3x3 median, as when learning.
- * On a drum staff, staff lines and ledger rows are erased (made white) where white above and
- * below, then the template is matched (normalized correlation over the mask) around every
- * drum-set pitch where a cross motif is defined. A match is kept when its correlation reaches the
- * minimum grade and the notches of the X are white (a black head fills them).
+ * Horizontal lines (staff lines, ledgers) are erased (made white) where white above and
+ * below, then the template is matched (normalized correlation, which does not depend on how dark
+ * the print is) around every drum-set pitch where a cross motif is defined. A match is kept when
+ * its correlation reaches the minimum grade and the notches of the X are white (a black head
+ * fills them).
  * <p>
  * The same matching finds the slashes of a guitar staff (the previous chord again, with the
- * slash rhythm) with <code>slash.png</code> and <code>slash_mask.png</code>, around the
- * pitches given by the caller.
+ * slash rhythm) with <code>slash.png</code>, around the pitches given by the caller.
  */
 public class CrossTemplate
 {
@@ -86,6 +86,9 @@ public class CrossTemplate
 
     /** Gray level below which a pixel is ink: only to locate lines and to shape the glyph. */
     private static final int INK_GRAY = 160;
+
+    /** Gray level below which a pixel may belong to a (pale) staff line or ledger. */
+    private static final int LINE_GRAY = 200;
 
     /** Darkness of INK_GRAY. */
     private static final double INK_DARK = 1 - (INK_GRAY / 255.0);
@@ -159,6 +162,7 @@ public class CrossTemplate
 
         // Correlation around every cross pitch row, with each template
         final List<double[]> found = new ArrayList<>(); // x, y, corr, pitch, template
+        final double[] best = { 0, 0, 0, 0 }; // corr, notch ink, x, y: for the log line
         for (int x = x0 + h; x < x1 - h; x++) {
             for (int p : pitches) {
                 final int yc = (int) Math.round(staff.pitchToOrdinate(x, p));
@@ -167,11 +171,14 @@ public class CrossTemplate
                     for (int i = 0; i < ts.size(); i++) {
                         final Scaled t = ts.get(i);
 
-                        if (t.foreInk(band, x, y) < 0.5) {
-                            continue; // Not even the X strokes inked
-                        }
-
                         final double c = t.correlation(band, x, y);
+
+                        if (c > best[0]) {
+                            best[0] = c;
+                            best[1] = t.notchInk(band, x, y);
+                            best[2] = x;
+                            best[3] = y;
+                        }
 
                         if (c >= minGrade && t.notchInk(band, x, y) <= MAX_NOTCH_INK) {
                             found.add(new double[] { x, y, c, p, i });
@@ -219,7 +226,17 @@ public class CrossTemplate
             }
         }
 
-        logger.info("Staff#{} {} {} heads from template", staff.getId(), heads.size(), shape);
+        logger.info(
+                "Staff#{} {} {} heads from template (best correlation {} notch ink {} at {},{},"
+                        + " interline {})",
+                staff.getId(),
+                heads.size(),
+                shape,
+                String.format("%.2f", best[0]),
+                String.format("%.2f", best[1]),
+                (int) best[2],
+                (int) best[3],
+                il);
 
         return heads;
     }
@@ -291,28 +308,24 @@ public class CrossTemplate
 
         for (String name : names) {
             final File inkFile = new File(dir, name + ".png");
-            final File maskFile = new File(dir, name + "_mask.png");
 
-            if (!inkFile.isFile() || !maskFile.isFile()) {
+            if (!inkFile.isFile()) {
                 continue;
             }
 
             try {
                 final BufferedImage ii = ImageIO.read(inkFile);
-                final BufferedImage mi = ImageIO.read(maskFile);
                 final int n = ii.getWidth();
                 final float[][] ink = new float[n][n];
-                final boolean[][] mask = new boolean[n][n];
 
                 for (int y = 0; y < n; y++) {
                     for (int x = 0; x < n; x++) {
                         ink[y][x] = 1f - (ii.getRaster().getSample(x, y, 0) / 255f);
-                        mask[y][x] = mi.getRaster().getSample(x, y, 0) > 127;
                     }
                 }
 
                 logger.info("Template {} {}x{} from {}", name, n, n, dir.getAbsolutePath());
-                images.add(new Image(ink, mask, shape == Shape.NOTEHEAD_SLASH));
+                images.add(new Image(ink));
             } catch (Exception ex) {
                 logger.warn("Cannot read {} template in {}", name, dir.getAbsolutePath(), ex);
                 return null;
@@ -333,8 +346,9 @@ public class CrossTemplate
     // Band //
     //------//
     /**
-     * The darkness of a staff band, staff lines and ledger rows erased (made white) where white
-     * above and below.
+     * The darkness of a staff band, horizontal lines (staff lines, ledgers) erased (made white)
+     * where white above and below: the same rule as tools/learn_template.py, so that page and
+     * template look alike.
      */
     private static class Band
     {
@@ -354,31 +368,55 @@ public class CrossTemplate
             this.w = x1 - x0;
             this.hgt = Math.min(bot, image.getHeight()) - y0;
             dark = new float[hgt][w];
-            final boolean[][] orig = new boolean[hgt][w]; // ink, to locate the lines
+            final boolean[][] orig = new boolean[hgt][w]; // ink: is it white above and below?
+            final boolean[][] line = new boolean[hgt][w]; // dark enough for a line
 
             for (int y = 0; y < hgt; y++) {
                 for (int x = 0; x < w; x++) {
                     final int g = median3(image, x + x0, y + y0);
                     dark[y][x] = 1f - (g / 255f);
                     orig[y][x] = g < INK_GRAY;
+                    line[y][x] = g < LINE_GRAY;
                 }
             }
 
-            // Line rows: staff lines and three ledger rows on each side
-            final int lc = staff.getLineCount();
-            final int t = staff.getSystem().getSheet().getScale().getFore() / 2 + 1;
+            // Lines: runs of a row at least 1.2 interline long, erased where white above and
+            // below (the X strokes crossing a line stay), with the rows next to them
+            final int il = staff.getSpecificInterline();
+            final int len = (int) Math.round(1.2 * il);
+            final int d = Math.max(1, (int) Math.round(il / 5.0));
+            final boolean[][] erase = new boolean[hgt][w];
 
-            for (int x = 0; x < w; x++) {
-                for (int p = -(lc - 1) - 6; p <= (lc - 1) + 6; p += 2) {
-                    final int yl = (int) Math.round(staff.pitchToOrdinate(x + x0, p)) - y0;
+            for (int y = d; y < hgt - d; y++) {
+                int x = 0;
 
-                    if ((yl - t - 1 < 0) || (yl + t + 1 >= hgt)) {
+                while (x < w) {
+                    if (!line[y][x]) {
+                        x++;
                         continue;
                     }
 
-                    if (!orig[yl - t - 1][x] && !orig[yl + t + 1][x]) {
-                        for (int y = yl - t; y <= yl + t; y++) {
-                            dark[y][x] = 0;
+                    int e = x;
+
+                    while ((e < w) && line[y][e]) {
+                        e++;
+                    }
+
+                    if (e - x >= len) {
+                        for (int k = x; k < e; k++) {
+                            erase[y][k] = !orig[y - d][k] && !orig[y + d][k];
+                        }
+                    }
+
+                    x = e;
+                }
+            }
+
+            for (int y = 0; y < hgt; y++) {
+                for (int x = 0; x < w; x++) {
+                    if (erase[y][x]) {
+                        for (int yy = Math.max(0, y - 1); yy <= Math.min(hgt - 1, y + 1); yy++) {
+                            dark[yy][x] = 0;
                         }
                     }
                 }
@@ -420,34 +458,23 @@ public class CrossTemplate
     // Image //
     //-------//
     /**
-     * One template image: ink (0..1) and mask, at INTERLINE, with its scaled versions.
+     * One template image: ink (0..1) at INTERLINE, with its scaled versions.
      */
     private static class Image
     {
         final float[][] ink;
 
-        final boolean[][] mask;
-
-        /** Glyph from the whole template, not only the mask (see Scaled). */
-        final boolean whole;
-
         /** Scaled versions, per staff interline. */
         final Map<Integer, Scaled> scaled = new HashMap<>();
 
-        Image (float[][] ink,
-               boolean[][] mask,
-               boolean whole)
+        Image (float[][] ink)
         {
             this.ink = ink;
-            this.mask = mask;
-            this.whole = whole;
         }
 
         synchronized Scaled scaledFor (int il)
         {
-            return scaled.computeIfAbsent(
-                    il,
-                    k -> new Scaled(ink, mask, whole, (double) k / INTERLINE));
+            return scaled.computeIfAbsent(il, k -> new Scaled(ink, (double) k / INTERLINE));
         }
     }
 
@@ -463,26 +490,23 @@ public class CrossTemplate
 
         final int n;
 
-        /** Mask offsets (dx, dy) and centered template values there. */
+        /** Template offsets (dx, dy) and centered template values there. */
         final int[] dx, dy;
 
         final double[] tc;
 
         final double tNorm;
 
-        /** Notch offsets: mask pixels left white by the template near the center. */
+        /** Notch offsets: pixels left white by the template near the center. */
         final int[] ndx, ndy;
 
         /**
-         * Ink offsets: template pixels mostly ink, head body only (glyph and bounds).
-         * With 'whole' (a slash), the fainter template edges outside the mask count too, so that
-         * the glyph spans the whole slash: its stems are attached at its ends.
+         * Ink offsets: template pixels at least half as dark as its darkest one, head body only
+         * (glyph and bounds).
          */
         final int[] idx, idy;
 
         Scaled (float[][] ink,
-                boolean[][] mask,
-                boolean whole,
                 double s)
         {
             final int n0 = ink.length;
@@ -495,6 +519,13 @@ public class CrossTemplate
             final List<int[]> notch = new ArrayList<>();
             final List<int[]> fore = new ArrayList<>();
             final double r = 0.6 * INTERLINE * s;
+            float top = 0; // Darkest template pixel: the template is as pale as its page
+
+            for (float[] row : ink) {
+                for (float val : row) {
+                    top = Math.max(top, val);
+                }
+            }
 
             for (int y = 0; y < n; y++) {
                 for (int x = 0; x < n; x++) {
@@ -506,23 +537,15 @@ public class CrossTemplate
                         continue;
                     }
 
-                    if (whole && (ink[sy][sx] >= 0.25)) {
-                        fore.add(new int[] { x - half, y - half });
-                    }
-
-                    if (!mask[sy][sx]) {
-                        continue;
-                    }
-
                     final double val = ink[sy][sx];
                     m.add(new int[] { x - half, y - half });
                     v.add(val);
 
-                    if ((val < 0.15) && (Math.hypot(x - half, y - half) <= r)) {
+                    if ((val < (0.15 * top)) && (Math.hypot(x - half, y - half) <= r)) {
                         notch.add(new int[] { x - half, y - half });
                     }
 
-                    if (!whole && (val >= 0.5)) {
+                    if (val >= (0.5 * top)) {
                         fore.add(new int[] { x - half, y - half });
                     }
                 }
@@ -561,7 +584,7 @@ public class CrossTemplate
             idy = body.stream().mapToInt(a -> a[1]).toArray();
         }
 
-        /** Normalized correlation of template and band darkness at (x, y), over the mask. */
+        /** Normalized correlation of template and band darkness at (x, y). */
         double correlation (Band b,
                             int x,
                             int y)
@@ -584,20 +607,6 @@ public class CrossTemplate
             }
 
             return num / (Math.sqrt(var) * tNorm);
-        }
-
-        /** Mean darkness under the X strokes at (x, y). */
-        double foreInk (Band b,
-                        int x,
-                        int y)
-        {
-            double sum = 0;
-
-            for (int i = 0; i < idx.length; i++) {
-                sum += b.at(x + idx[i], y + idy[i]);
-            }
-
-            return (idx.length == 0) ? 0 : sum / idx.length;
         }
 
         /** Mean darkness in the notches of the X at (x, y). */
