@@ -140,8 +140,11 @@ public abstract class LeggedIntersBuilder
         for (Iterator<StraightFilament> it = filaments.iterator(); it.hasNext();) {
             final StraightFilament fil = it.next();
 
+            // A leg hangs down from the segment: a vertical that starts well above it
+            // (a barline crossing an unrecognized TAB line) is not a leg
             if ((fil.getLength(VERTICAL) < params.minLegLow) //
-                    || ((fil.getStartPoint().getY() - segPt.y) > params.maxLegYGap)) {
+                    || ((fil.getStartPoint().getY() - segPt.y) > params.maxLegYGap)
+                    || ((segPt.y - fil.getStartPoint().getY()) > params.maxLegYGap)) {
                 it.remove();
             }
         }
