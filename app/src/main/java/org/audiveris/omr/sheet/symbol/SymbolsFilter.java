@@ -42,6 +42,7 @@ import org.audiveris.omr.sheet.Scale;
 import org.audiveris.omr.sheet.Sheet;
 import org.audiveris.omr.sheet.SystemInfo;
 import org.audiveris.omr.sheet.SystemManager;
+import org.audiveris.omr.sheet.note.NoteHeadsBuilder;
 import org.audiveris.omr.sheet.ui.ImageView;
 import org.audiveris.omr.sheet.ui.PixelBoard;
 import org.audiveris.omr.sheet.ui.ScrollImageView;
@@ -473,6 +474,17 @@ public class SymbolsFilter
         @Override
         public void visit (HeadInter head)
         {
+            if (NoteHeadsBuilder.isBookHead(head)) {
+                // The font has not its shape: erase the ink of the whole symbol, its glyph
+                processGlyph(head.getGlyph());
+
+                if (systemWeaks != null) {
+                    systemWeaks.add(head.getGlyph());
+                }
+
+                return;
+            }
+
             final Template tpl = head.getTemplate();
             final Rectangle tplBox = tpl.getBounds(head.getBounds());
 

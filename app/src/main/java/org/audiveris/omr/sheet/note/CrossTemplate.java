@@ -40,6 +40,7 @@ import org.slf4j.LoggerFactory;
 
 import ij.process.ByteProcessor;
 
+import java.awt.Rectangle;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.util.ArrayList;
@@ -506,6 +507,9 @@ public class CrossTemplate
          */
         final int[] idx, idy;
 
+        /** Whole symbol offsets: template pixels at least a quarter as dark as its darkest one. */
+        final int[] wdx, wdy;
+
         Scaled (float[][] ink,
                 double s)
         {
@@ -518,6 +522,7 @@ public class CrossTemplate
             final List<Double> v = new ArrayList<>();
             final List<int[]> notch = new ArrayList<>();
             final List<int[]> fore = new ArrayList<>();
+            final List<int[]> whole = new ArrayList<>();
             final double r = 0.6 * INTERLINE * s;
             float top = 0; // Darkest template pixel: the template is as pale as its page
 
@@ -547,6 +552,10 @@ public class CrossTemplate
 
                     if (val >= (0.5 * top)) {
                         fore.add(new int[] { x - half, y - half });
+                    }
+
+                    if (val >= (0.25 * top)) {
+                        whole.add(new int[] { x - half, y - half });
                     }
                 }
             }
@@ -582,6 +591,8 @@ public class CrossTemplate
 
             idx = body.stream().mapToInt(a -> a[0]).toArray();
             idy = body.stream().mapToInt(a -> a[1]).toArray();
+            wdx = whole.stream().mapToInt(a -> a[0]).toArray();
+            wdy = whole.stream().mapToInt(a -> a[1]).toArray();
         }
 
         /** Normalized correlation of template and band darkness at (x, y). */
@@ -627,7 +638,10 @@ public class CrossTemplate
             return sum / ndx.length;
         }
 
-        /** Head at (x, y): glyph made of the band ink under the template strokes. */
+        /**
+         * Head at (x, y): bounds of the band ink under the head body, glyph made of the band ink
+         * under the whole symbol (so that no stroke end is left to be taken for another symbol).
+         */
         HeadInter createHead (Shape shape,
                               Band b,
                               int x,
@@ -658,6 +672,25 @@ public class CrossTemplate
                 return null;
             }
 
+            final Rectangle bounds = new Rectangle(
+                    xMin,
+                    yMin,
+                    xMax - xMin + 1,
+                    yMax - yMin + 1);
+
+            for (int i = 0; i < wdx.length; i++) {
+                final int px = x + wdx[i];
+                final int py = y + wdy[i];
+
+                if (b.at(px, py) >= INK_DARK) {
+                    pts.add(new int[] { px, py });
+                    xMin = Math.min(xMin, px);
+                    yMin = Math.min(yMin, py);
+                    xMax = Math.max(xMax, px);
+                    yMax = Math.max(yMax, py);
+                }
+            }
+
             final ByteProcessor buf = new ByteProcessor(xMax - xMin + 1, yMax - yMin + 1);
             ByteUtil.fill(buf, BACKGROUND);
 
@@ -669,7 +702,7 @@ public class CrossTemplate
             final Glyph glyph = sheet.getGlyphIndex().registerOriginal(
                     new Glyph(xMin, yMin, runTable));
             final HeadInter head = new HeadInter(
-                    glyph.getBounds(),
+                    bounds,
                     shape,
                     new HeadInter.Impacts(grade),
                     staff,

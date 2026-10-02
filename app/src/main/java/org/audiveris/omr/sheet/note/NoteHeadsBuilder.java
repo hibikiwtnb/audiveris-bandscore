@@ -1549,6 +1549,27 @@ public class NoteHeadsBuilder
         return shapes;
     }
 
+    //------------//
+    // isBookHead //
+    //------------//
+    /**
+     * Report whether the head was found by a book template (slash, or cross when the book
+     * has a cross template): its glyph is then the ink of the whole symbol.
+     *
+     * @param head the head to check
+     * @return true if found by a book template
+     */
+    public static boolean isBookHead (HeadInter head)
+    {
+        return switch (head.getShape()) {
+            case NOTEHEAD_SLASH -> true;
+            case NOTEHEAD_CROSS -> CrossTemplate.getLoaded(
+                    constants.templateDir.getValue(),
+                    Shape.NOTEHEAD_CROSS) != null;
+            default -> false;
+        };
+    }
+
     //------------------//
     // getStemLessBoost //
     //------------------//
