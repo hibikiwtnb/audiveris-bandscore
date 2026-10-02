@@ -1589,7 +1589,7 @@ public class NoteHeadsBuilder
                         + " empty for none");
 
         private final Constant.Ratio crossMinGrade = new Constant.Ratio(
-                0.7,
+                0.8,
                 "Minimum correlation for a cross head found by the book template");
 
         private final Constant.Boolean dumpTemplateNotes = new Constant.Boolean(
