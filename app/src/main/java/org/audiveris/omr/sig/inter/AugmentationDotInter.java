@@ -403,6 +403,14 @@ public class AugmentationDotInter
 
                 if ((headDot == null) || (headDot == this)) {
                     Point refPt = head.getCenterRight();
+
+                    // A dot is right of the whole head symbol: a book head's glyph (its whole
+                    // ink) is wider than its bounds (its body)
+                    if (head.getGlyph() != null) {
+                        final Rectangle gb = head.getGlyph().getBounds();
+                        refPt = new Point(Math.max(refPt.x, gb.x + gb.width), refPt.y);
+                    }
+
                     double xGap = dotCenter.x - refPt.x;
 
                     // Make sure dot is not too close to head

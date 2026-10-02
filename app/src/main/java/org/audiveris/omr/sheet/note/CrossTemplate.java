@@ -94,6 +94,9 @@ public class CrossTemplate
     /** Darkness of INK_GRAY. */
     private static final double INK_DARK = 1 - (INK_GRAY / 255.0);
 
+    /** Darkness of LINE_GRAY. */
+    private static final double LINE_DARK = 1 - (LINE_GRAY / 255.0);
+
     /** Maximum mean darkness in the notches of the X. */
     private static final double MAX_NOTCH_INK = 0.25;
 
@@ -507,7 +510,7 @@ public class CrossTemplate
          */
         final int[] idx, idy;
 
-        /** Whole symbol offsets: template pixels at least a quarter as dark as its darkest one. */
+        /** Whole symbol offsets: template pixels at least a tenth as dark as its darkest one. */
         final int[] wdx, wdy;
 
         Scaled (float[][] ink,
@@ -554,7 +557,7 @@ public class CrossTemplate
                         fore.add(new int[] { x - half, y - half });
                     }
 
-                    if (val >= (0.25 * top)) {
+                    if (val >= (0.1 * top)) {
                         whole.add(new int[] { x - half, y - half });
                     }
                 }
@@ -682,7 +685,7 @@ public class CrossTemplate
                 final int px = x + wdx[i];
                 final int py = y + wdy[i];
 
-                if (b.at(px, py) >= INK_DARK) {
+                if (b.at(px, py) >= LINE_DARK) { // Pale stroke ends too
                     pts.add(new int[] { px, py });
                     xMin = Math.min(xMin, px);
                     yMin = Math.min(yMin, py);
