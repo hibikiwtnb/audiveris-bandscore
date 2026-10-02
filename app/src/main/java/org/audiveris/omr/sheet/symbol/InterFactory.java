@@ -999,6 +999,8 @@ public class InterFactory
             case WHOLE_NOTE_CIRCLE_X:
             case NOTEHEAD_CIRCLE_X_VOID:
             case NOTEHEAD_CIRCLE_X:
+
+            case NOTEHEAD_SLASH:
                 return new HeadInter(null, shape, GRADE, null, null);
 
             case AUGMENTATION_DOT:

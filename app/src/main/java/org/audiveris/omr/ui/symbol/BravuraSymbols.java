@@ -168,6 +168,7 @@ public class BravuraSymbols
 
             case NOTEHEAD_BLACK -> ints(0xE0A4);
             case NOTEHEAD_CROSS -> ints(0xE0A9);
+            case NOTEHEAD_SLASH -> ints(0xE101);
             case NOTEHEAD_DIAMOND_FILLED -> ints(0xE0DB);
             case NOTEHEAD_TRIANGLE_DOWN_FILLED -> ints(0xE0C7);
             case NOTEHEAD_CIRCLE_X -> ints(0xE0B3);

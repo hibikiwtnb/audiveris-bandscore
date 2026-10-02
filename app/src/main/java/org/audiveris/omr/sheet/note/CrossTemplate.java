@@ -70,6 +70,10 @@ import javax.imageio.ImageIO;
  * below, then the template is matched (normalized correlation over the mask) around every
  * drum-set pitch where a cross motif is defined. A match is kept when its correlation reaches the
  * minimum grade and the notches of the X are white (a black head fills them).
+ * <p>
+ * The same matching finds the slashes of a guitar staff (the previous chord again, with the
+ * slash rhythm) with <code>slash.png</code> and <code>slash_mask.png</code>, around the
+ * pitches given by the caller.
  */
 public class CrossTemplate
 {
@@ -89,19 +93,24 @@ public class CrossTemplate
     /** Maximum mean darkness in the notches of the X. */
     private static final double MAX_NOTCH_INK = 0.25;
 
-    /** Loaded templates, per folder (null when the folder has no cross template). */
+    /** Loaded templates, per folder and shape (null when the folder has no such template). */
     private static final Map<String, CrossTemplate> loaded = new HashMap<>();
 
     //~ Instance fields ----------------------------------------------------------------------------
 
-    /** The template images: cross, then cross on a line if any. */
+    /** The template images: cross, then cross on a line if any (or slash). */
     private final List<Image> images;
+
+    /** Shape of the heads found. */
+    private final Shape shape;
 
     //~ Constructors -------------------------------------------------------------------------------
 
-    private CrossTemplate (List<Image> images)
+    private CrossTemplate (List<Image> images,
+                           Shape shape)
     {
         this.images = images;
+        this.shape = shape;
     }
 
     //~ Methods ------------------------------------------------------------------------------------
@@ -110,16 +119,18 @@ public class CrossTemplate
     // lookup //
     //--------//
     /**
-     * Find the cross heads of the provided drum staff.
+     * Find the heads (crosses or slashes) of the provided staff.
      *
-     * @param staff    the drum staff
-     * @param image    the gray sheet image (thresholded here as when learning the template)
-     * @param minGrade minimum correlation for a cross
-     * @return the cross heads found (not yet in sig)
+     * @param staff    the staff
+     * @param image    the gray sheet image
+     * @param minGrade minimum correlation for a head
+     * @param pitches  the pitch positions to look around, ascending
+     * @return the heads found (not yet in sig)
      */
     public List<HeadInter> lookup (Staff staff,
                                    ByteProcessor image,
-                                   double minGrade)
+                                   double minGrade,
+                                   Set<Integer> pitches)
     {
         final List<HeadInter> heads = new ArrayList<>();
         final int il = staff.getSpecificInterline();
@@ -130,7 +141,6 @@ public class CrossTemplate
         }
 
         final int h = ts.stream().mapToInt(t -> t.half).max().getAsInt();
-        final Set<Integer> pitches = crossPitches(staff.getLineCount());
 
         if (pitches.isEmpty()) {
             return heads;
@@ -195,12 +205,13 @@ public class CrossTemplate
 
         for (double[] f : peaks) {
             final HeadInter head = ts.get((int) f[4]).createHead(
+                    shape,
                     band,
                     (int) f[0],
                     (int) f[1],
                     f[2],
                     staff,
-                    (int) f[3],
+                    (shape == Shape.NOTEHEAD_SLASH) ? 0 : (int) f[3], // A slash has no pitch
                     sheet);
 
             if (head != null) {
@@ -208,7 +219,7 @@ public class CrossTemplate
             }
         }
 
-        logger.info("Staff#{} {} cross heads from template", staff.getId(), heads.size());
+        logger.info("Staff#{} {} {} heads from template", staff.getId(), heads.size(), shape);
 
         return heads;
     }
@@ -218,8 +229,11 @@ public class CrossTemplate
     //--------------//
     /**
      * Pitch positions where the drum set defines a cross motif, ascending.
+     *
+     * @param lineCount staff line count
+     * @return the pitch positions
      */
-    private static Set<Integer> crossPitches (int lineCount)
+    public static Set<Integer> crossPitches (int lineCount)
     {
         final Set<Integer> set = new TreeSet<>();
         final Map<Integer, Map<DrumSet.MotifSign, DrumSet.DrumInstrument>> staffSet = DrumSet
@@ -243,32 +257,39 @@ public class CrossTemplate
     // getLoaded //
     //-----------//
     /**
-     * Report the cross template of the provided folder.
+     * Report the cross or slash template of the provided folder.
      *
-     * @param dir the template folder (empty for none)
+     * @param dir   the template folder (empty for none)
+     * @param shape NOTEHEAD_CROSS or NOTEHEAD_SLASH
      * @return the template, or null if none
      */
-    public static synchronized CrossTemplate getLoaded (String dir)
+    public static synchronized CrossTemplate getLoaded (String dir,
+                                                        Shape shape)
     {
         if ((dir == null) || dir.isBlank()) {
             return null;
         }
 
-        if (!loaded.containsKey(dir)) {
-            loaded.put(dir, load(new File(dir)));
+        final String key = dir + "|" + shape;
+
+        if (!loaded.containsKey(key)) {
+            loaded.put(key, load(new File(dir), shape));
         }
 
-        return loaded.get(dir);
+        return loaded.get(key);
     }
 
     //------//
     // load //
     //------//
-    private static CrossTemplate load (File dir)
+    private static CrossTemplate load (File dir,
+                                       Shape shape)
     {
         final List<Image> images = new ArrayList<>();
+        final String[] names = (shape == Shape.NOTEHEAD_SLASH) ? new String[] { "slash" }
+                : new String[] { "cross", "cross_line" };
 
-        for (String name : new String[] { "cross", "cross_line" }) {
+        for (String name : names) {
             final File inkFile = new File(dir, name + ".png");
             final File maskFile = new File(dir, name + "_mask.png");
 
@@ -291,19 +312,19 @@ public class CrossTemplate
                 }
 
                 logger.info("Template {} {}x{} from {}", name, n, n, dir.getAbsolutePath());
-                images.add(new Image(ink, mask));
+                images.add(new Image(ink, mask, shape == Shape.NOTEHEAD_SLASH));
             } catch (Exception ex) {
                 logger.warn("Cannot read {} template in {}", name, dir.getAbsolutePath(), ex);
                 return null;
             }
         }
 
-        if (images.isEmpty() || !new File(dir, "cross.png").isFile()) {
-            logger.info("No cross template in {}", dir.getAbsolutePath());
+        if (images.isEmpty() || !new File(dir, names[0] + ".png").isFile()) {
+            logger.info("No {} template in {}", names[0], dir.getAbsolutePath());
             return null;
         }
 
-        return new CrossTemplate(images);
+        return new CrossTemplate(images, shape);
     }
 
     //~ Inner Classes ------------------------------------------------------------------------------
@@ -407,19 +428,26 @@ public class CrossTemplate
 
         final boolean[][] mask;
 
+        /** Glyph from the whole template, not only the mask (see Scaled). */
+        final boolean whole;
+
         /** Scaled versions, per staff interline. */
         final Map<Integer, Scaled> scaled = new HashMap<>();
 
         Image (float[][] ink,
-               boolean[][] mask)
+               boolean[][] mask,
+               boolean whole)
         {
             this.ink = ink;
             this.mask = mask;
+            this.whole = whole;
         }
 
         synchronized Scaled scaledFor (int il)
         {
-            return scaled.computeIfAbsent(il, k -> new Scaled(ink, mask, (double) k / INTERLINE));
+            return scaled.computeIfAbsent(
+                    il,
+                    k -> new Scaled(ink, mask, whole, (double) k / INTERLINE));
         }
     }
 
@@ -445,11 +473,16 @@ public class CrossTemplate
         /** Notch offsets: mask pixels left white by the template near the center. */
         final int[] ndx, ndy;
 
-        /** Ink offsets: template pixels mostly ink, head body only (glyph and bounds). */
+        /**
+         * Ink offsets: template pixels mostly ink, head body only (glyph and bounds).
+         * With 'whole' (a slash), the fainter template edges outside the mask count too, so that
+         * the glyph spans the whole slash: its stems are attached at its ends.
+         */
         final int[] idx, idy;
 
         Scaled (float[][] ink,
                 boolean[][] mask,
+                boolean whole,
                 double s)
         {
             final int n0 = ink.length;
@@ -469,7 +502,15 @@ public class CrossTemplate
                     final int sx = Math.min(n0 - 1, (int) Math.round((x - half) / s) + h0);
                     final int sy = Math.min(n0 - 1, (int) Math.round((y - half) / s) + h0);
 
-                    if ((sx < 0) || (sy < 0) || !mask[sy][sx]) {
+                    if ((sx < 0) || (sy < 0)) {
+                        continue;
+                    }
+
+                    if (whole && (ink[sy][sx] >= 0.25)) {
+                        fore.add(new int[] { x - half, y - half });
+                    }
+
+                    if (!mask[sy][sx]) {
                         continue;
                     }
 
@@ -481,7 +522,7 @@ public class CrossTemplate
                         notch.add(new int[] { x - half, y - half });
                     }
 
-                    if (val >= 0.5) {
+                    if (!whole && (val >= 0.5)) {
                         fore.add(new int[] { x - half, y - half });
                     }
                 }
@@ -577,8 +618,9 @@ public class CrossTemplate
             return sum / ndx.length;
         }
 
-        /** Cross head at (x, y): glyph made of the band ink under the template strokes. */
-        HeadInter createHead (Band b,
+        /** Head at (x, y): glyph made of the band ink under the template strokes. */
+        HeadInter createHead (Shape shape,
+                              Band b,
                               int x,
                               int y,
                               double grade,
@@ -619,7 +661,7 @@ public class CrossTemplate
                     new Glyph(xMin, yMin, runTable));
             final HeadInter head = new HeadInter(
                     glyph.getBounds(),
-                    Shape.NOTEHEAD_CROSS,
+                    shape,
                     new HeadInter.Impacts(grade),
                     staff,
                     (double) pitch);

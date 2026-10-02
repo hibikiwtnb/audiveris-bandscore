@@ -102,6 +102,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.TreeMap;
 
 /**
@@ -149,6 +150,9 @@ public class NoteHeadsBuilder
             Shape.TREMOLO_2,
             Shape.TREMOLO_3,
             Shape.VERTICAL_SERIF);
+
+    /** Pitch positions around which slashes are looked for (line 2 to line 4). */
+    private static final Set<Integer> SLASH_PITCHES = new TreeSet<>(Arrays.asList(-2, -1, 0, 1, 2));
 
     /** Shapes handled by template matching. */
     private static final Set<Shape> MATCHED_SHAPES = EnumSet.noneOf(Shape.class);
@@ -219,7 +223,13 @@ public class NoteHeadsBuilder
 
     /** Book-made cross template, if any: it then finds the cross heads of drum staves. */
     private final CrossTemplate crossTemplate = CrossTemplate.getLoaded(
-            constants.templateDir.getValue());
+            constants.templateDir.getValue(),
+            Shape.NOTEHEAD_CROSS);
+
+    /** Book-made slash template, if any: it then finds the slashes of 5-line staves. */
+    private final CrossTemplate slashTemplate = CrossTemplate.getLoaded(
+            constants.templateDir.getValue(),
+            Shape.NOTEHEAD_SLASH);
 
     /** Head templates for these staves: the sheet ones plus cross heads. */
     private final EnumSet<Shape> drumTemplateNotesAll;
@@ -407,10 +417,34 @@ public class NoteHeadsBuilder
                 for (HeadInter head : crossTemplate.lookup(
                         staff,
                         gray,
-                        constants.crossMinGrade.getValue())) {
+                        constants.crossMinGrade.getValue(),
+                        CrossTemplate.crossPitches(staff.getLineCount()))) {
                     sig.addVertex(head);
                     ch.add(head);
                     tallyStem(head);
+                }
+            }
+
+            // Slashes of a 5-line staff, by the book template if any (on the gray image)
+            if ((slashTemplate != null) && !isDrumStaff(staff) && (staff.getLineCount() == 5)
+                    && !staff.isTablature()) {
+                final ByteProcessor g = sheet.getPicture().getSource(Picture.SourceKey.GRAY);
+
+                if (g == null) {
+                    logger.warn("No gray image for staff#{}, slash template not used",
+                            staff.getId());
+                } else {
+                    watch.start("Staff #" + staff.getId() + " slashes");
+
+                    for (HeadInter head : slashTemplate.lookup(
+                            staff,
+                            g,
+                            constants.slashMinGrade.getValue(),
+                            SLASH_PITCHES)) {
+                        sig.addVertex(head);
+                        ch.add(head);
+                        tallyStem(head);
+                    }
                 }
             }
 
@@ -1272,6 +1306,7 @@ public class NoteHeadsBuilder
     public static EnumSet<Shape> getStemHeadShapes (Sheet sheet)
     {
         final EnumSet<Shape> shapes = ShapeSet.getTemplateNotesStem(sheet);
+        shapes.add(Shape.NOTEHEAD_SLASH); // Found by a book template only
 
         if (PartCollation.getHintedDrumStaves() == null) {
             return shapes;
@@ -1591,6 +1626,10 @@ public class NoteHeadsBuilder
         private final Constant.Ratio crossMinGrade = new Constant.Ratio(
                 0.8,
                 "Minimum correlation for a cross head found by the book template");
+
+        private final Constant.Ratio slashMinGrade = new Constant.Ratio(
+                0.8,
+                "Minimum correlation for a slash found by the book template");
 
         private final Constant.Boolean dumpTemplateNotes = new Constant.Boolean(
                 false,

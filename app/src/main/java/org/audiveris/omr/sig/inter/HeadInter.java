@@ -713,6 +713,17 @@ public class HeadInter
      */
     public Point2D getStemReferencePoint (Anchor anchor)
     {
+        if (shape == Shape.NOTEHEAD_SLASH) {
+            // A slash comes from the book, not from the font: its stem touches it just outside
+            // its box, up from the top-right end or down from the bottom-left end
+            final Rectangle box = getBounds();
+
+            return switch (anchor.hSide()) {
+                case RIGHT -> new Point2D.Double(box.x + box.width + 1, box.y);
+                case null, default -> new Point2D.Double(box.x - 2, box.y + box.height - 1);
+            };
+        }
+
         getTemplate(); // Make sure we have the template
 
         Rectangle headBox = getBounds();

@@ -523,6 +523,7 @@ public enum Shape
     BRACKET_UPPER_SERIF("Top serif of a bracket"),
     BRACKET_LOWER_SERIF("Bottom serif of a bracket"),
     STAFF_LINES("5-line staff"),
+    NOTEHEAD_SLASH("Slash: the previous chord again, with this rhythm"),
 
     //
     // Obsolete, kept for backward compatibility ---
@@ -775,6 +776,10 @@ public enum Shape
             return HeadMotif.circle;
         }
 
+        if (ShapeSet.HeadsSlash.contains(this)) {
+            return HeadMotif.slash;
+        }
+
         return null;
     }
 
@@ -802,7 +807,7 @@ public enum Shape
                     NOTEHEAD_DIAMOND_VOID, NOTEHEAD_TRIANGLE_DOWN_VOID, NOTEHEAD_CIRCLE_X_VOID //
                     -> Rational.HALF;
             case QUARTER_REST, NOTEHEAD_BLACK, NOTEHEAD_BLACK_SMALL, NOTEHEAD_CROSS, //
-                    NOTEHEAD_DIAMOND_FILLED, NOTEHEAD_TRIANGLE_DOWN_FILLED, NOTEHEAD_CIRCLE_X //
+                    NOTEHEAD_DIAMOND_FILLED, NOTEHEAD_TRIANGLE_DOWN_FILLED, NOTEHEAD_CIRCLE_X, NOTEHEAD_SLASH //
                     -> Rational.QUARTER;
             case EIGHTH_REST -> new Rational(1, 8);
             case ONE_16TH_REST -> new Rational(1, 16);

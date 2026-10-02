@@ -2568,6 +2568,7 @@ public class PartwiseBuilder
                         case diamond -> notehead.setValue(NoteheadValue.DIAMOND);
                         case triangle -> notehead.setValue(NoteheadValue.INVERTED_TRIANGLE);
                         case circle -> notehead.setValue(NoteheadValue.CIRCLE_X);
+                        case slash -> notehead.setValue(NoteheadValue.SLASH);
                     }
                     current.pmNote.setNotehead(notehead);
                 }

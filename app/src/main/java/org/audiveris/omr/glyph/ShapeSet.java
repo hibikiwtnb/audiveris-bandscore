@@ -247,6 +247,9 @@ public class ShapeSet
             WHOLE_NOTE_CIRCLE_X,
             BREVE_CIRCLE_X);
 
+    /** Slash heads (found by a book template only, see CrossTemplate). */
+    public static final List<Shape> HeadsSlash = Arrays.asList(NOTEHEAD_SLASH);
+
     /** All compound notes. */
     public static final List<Shape> CompoundNotes = Arrays.asList(
             QUARTER_NOTE_UP,
@@ -285,7 +288,8 @@ public class ShapeSet
             NOTEHEAD_TRIANGLE_DOWN_FILLED,
             NOTEHEAD_TRIANGLE_DOWN_VOID,
             NOTEHEAD_CIRCLE_X,
-            NOTEHEAD_CIRCLE_X_VOID);
+            NOTEHEAD_CIRCLE_X_VOID,
+            NOTEHEAD_SLASH);
 
     /** All heads without a stem. */
     public static final EnumSet<Shape> StemLessHeads = EnumSet.of(
@@ -312,6 +316,7 @@ public class ShapeSet
         Heads.addAll(HeadsDiamond);
         Heads.addAll(HeadsTriangle);
         Heads.addAll(HeadsCircle);
+        Heads.addAll(HeadsSlash);
     }
 
     /** Hollow heads. */
@@ -940,6 +945,7 @@ public class ShapeSet
             case diamond -> HeadsDiamond;
             case triangle -> HeadsTriangle;
             case circle -> HeadsCircle;
+            case slash -> HeadsSlash;
         };
     }
 
@@ -1001,6 +1007,7 @@ public class ShapeSet
                                                   Collection<Shape> collection)
     {
         final List<Shape> list = new ArrayList<>(collection);
+        list.removeAll(HeadsSlash); // Not by the font templates
 
         if (sheet != null) {
             final ProcessingSwitches switches = sheet.getStub().getProcessingSwitches();
@@ -1240,7 +1247,8 @@ public class ShapeSet
         cross,
         diamond,
         triangle,
-        circle;
+        circle,
+        slash;
     }
 
     //------//

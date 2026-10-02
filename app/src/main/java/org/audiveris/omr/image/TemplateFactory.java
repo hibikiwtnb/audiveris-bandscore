@@ -361,7 +361,7 @@ public class TemplateFactory
                         case LEFT -> slimBox.y + slimBox.height * (1 + constants.stemDy.getValue());
                         case RIGHT -> slimBox.y + 0.5 * slimBox.height;
                     };
-            case NOTEHEAD_CROSS -> //
+            case NOTEHEAD_CROSS, NOTEHEAD_SLASH -> //
                     switch (hSide) {
                         case LEFT -> slimBox.y + slimBox.height;
                         case RIGHT -> slimBox.y + (1 - 0.2) * slimBox.height;
@@ -496,7 +496,7 @@ public class TemplateFactory
                         case LEFT -> slimBox.y + 0.5 * slimBox.height;
                         case RIGHT -> slimBox.y - constants.stemDy.getValue() * slimBox.height;
                     };
-            case NOTEHEAD_CROSS -> //
+            case NOTEHEAD_CROSS, NOTEHEAD_SLASH -> //
                     switch (hSide) {
                         case LEFT -> slimBox.y + 0.2 * slimBox.height;
                         case RIGHT -> slimBox.y;

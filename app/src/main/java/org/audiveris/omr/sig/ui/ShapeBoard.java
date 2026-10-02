@@ -1323,6 +1323,10 @@ public class ShapeBoard
             final EnumSet<HeadMotif> motifs = EnumSet.noneOf(HeadMotif.class);
 
             for (Shape shape : filtered) {
+                if (shape.getHeadMotif() == HeadMotif.slash) {
+                    continue; // Slashes come from a book template only
+                }
+
                 final ShapeSymbol symbol = getTinyDecoratedSymbol(shape);
                 if (symbol == null) {
                     logger.warn("Panel. No button symbol for {}", shape);
