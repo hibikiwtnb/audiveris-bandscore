@@ -60,9 +60,9 @@ import javax.imageio.ImageIO;
  * The template folder holds <code>cross.png</code>: a square just holding the X (ink dark,
  * drawn at a staff interline of {@link #INTERLINE} pixels), the average of a few examples picked
  * by eye on the book's pages. Every pixel of the square is matched.
- * It may also hold <code>cross_line.png</code>: a cross printed on a staff line or ledger,
- * crossed by that line, which looks like another symbol.
- * At every place both are tried, the better correlation counts.
+ * It may also hold <code>cross_line.png</code> (a cross crossed by a staff line or ledger) and
+ * <code>cross_ledger.png</code> (a cross standing on a short thick ledger): the same symbol
+ * looks different there. At every place all are tried, the best correlation counts.
  * They are made once per book by <code>tools/learn_template.py</code> (bandscore-omr-skill).
  * <p>
  * Templates and page are gray, never binarized: the page darkness (0 white .. 1 black) after a
@@ -308,7 +308,7 @@ public class CrossTemplate
     {
         final List<Image> images = new ArrayList<>();
         final String[] names = (shape == Shape.NOTEHEAD_SLASH) ? new String[] { "slash" }
-                : new String[] { "cross", "cross_line" };
+                : new String[] { "cross", "cross_line", "cross_ledger" };
 
         for (String name : names) {
             final File inkFile = new File(dir, name + ".png");
