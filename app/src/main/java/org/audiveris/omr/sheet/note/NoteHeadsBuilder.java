@@ -1390,7 +1390,7 @@ public class NoteHeadsBuilder
      * @param expected the staff count of the hinted complete system
      * @return the ranks, or null if no consistent placement
      */
-    private static int[] staffSlots (SystemInfo system,
+    public static int[] staffSlots (SystemInfo system,
                                      int expected)
     {
         final List<Staff> staves = system.getStaves();

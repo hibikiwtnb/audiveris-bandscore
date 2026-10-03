@@ -34,6 +34,7 @@ import org.audiveris.omr.lag.Section;
 import org.audiveris.omr.lag.SectionFactory;
 import org.audiveris.omr.math.GeoUtil;
 import static org.audiveris.omr.run.Orientation.VERTICAL;
+import org.audiveris.omr.score.PartCollation;
 import org.audiveris.omr.sheet.Part;
 import org.audiveris.omr.sheet.ProcessingSwitch;
 import org.audiveris.omr.sheet.ProcessingSwitches;
@@ -44,6 +45,7 @@ import org.audiveris.omr.sheet.Staff;
 import org.audiveris.omr.sheet.SystemInfo;
 import org.audiveris.omr.sheet.SystemManager;
 import org.audiveris.omr.sheet.grid.LineInfo;
+import org.audiveris.omr.sheet.note.NoteHeadsBuilder;
 import org.audiveris.omr.sig.SIGraph;
 import org.audiveris.omr.sig.inter.ChordNameInter;
 import org.audiveris.omr.sig.inter.LyricItemInter;
@@ -54,10 +56,13 @@ import org.audiveris.omr.sig.inter.WordInter;
 import static org.audiveris.omr.text.TextRole.ChordName;
 import static org.audiveris.omr.text.TextRole.Lyrics;
 import static org.audiveris.omr.text.TextRole.Metronome;
+import org.audiveris.omr.text.paddle.PaddleOCR;
 import org.audiveris.omr.util.Navigable;
 import org.audiveris.omr.util.Pair;
 import org.audiveris.omr.util.StopWatch;
 import org.audiveris.omr.util.VerticalSide;
+import static org.audiveris.omr.util.HorizontalSide.LEFT;
+import static org.audiveris.omr.util.HorizontalSide.RIGHT;
 import static org.audiveris.omr.util.VerticalSide.BOTTOM;
 import static org.audiveris.omr.util.VerticalSide.TOP;
 
@@ -70,6 +75,7 @@ import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.geom.Area;
 import java.awt.geom.Point2D;
+import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -1001,6 +1007,9 @@ public class TextBuilder
         // Assign each lyric line to proper staff
         mapLyricLines(longLines);
 
+        // Read lyrics below the staves flagged in partsHint, with the lyrics model and scripts
+        readHintedLyrics(buffer, longLines);
+
         // Separate additional work on lyric lines and on standard lines
         watch.start("recomposeLines");
 
@@ -1126,6 +1135,94 @@ public class TextBuilder
                 }
 
                 it.remove();
+            }
+        }
+    }
+
+    //------------------//
+    // readHintedLyrics //
+    //------------------//
+    /**
+     * Read the lyrics below the staves flagged ":lyrics" in partsHint with the lyrics model of
+     * the PaddleOCR server, keeping only the chars of the lyricsScripts constant.
+     * <p>
+     * Each staff found gets its rank in partsHint as for the parts collation (missed staves put
+     * back where the room is); a system where this fails gets no lyrics.
+     * The band read goes from the bottom line of a flagged staff down to the next staff (to the
+     * room of one staff when staves were missed in between), over the staff width, in the
+     * buffer where good inters are erased.
+     * The lines found there by the sheet OCR are replaced by the lines read.
+     * Nothing is done when lyricsScripts is blank.
+     *
+     * @param buffer    the (sheet) pixel buffer
+     * @param longLines the long lines, modified in place
+     */
+    private void readHintedLyrics (ByteProcessor buffer,
+                                   List<TextLine> longLines)
+    {
+        final String scripts = constants.lyricsScripts.getValue().trim();
+
+        if (scripts.isEmpty()) {
+            return;
+        }
+
+        if (!(OcrUtil.getOcr() instanceof PaddleOCR paddle)) {
+            throw new IllegalStateException("lyricsScripts needs ocrEngine=paddle");
+        }
+
+        final List<Boolean> flags = PartCollation.getHintedLyricsStaves();
+
+        if (flags == null) {
+            throw new IllegalStateException("lyricsScripts needs \":lyrics\" parts in partsHint");
+        }
+
+        final List<Staff> staves = system.getStaves();
+        final int[] slots = NoteHeadsBuilder.staffSlots(system, flags.size());
+
+        if (slots == null) {
+            logger.warn("S#{}: {} staves vs {} in parts hint, no lyrics", system.getId(),
+                    staves.size(), flags.size());
+
+            return;
+        }
+
+        final BufferedImage image = buffer.getBufferedImage();
+
+        for (int i = 0; i < staves.size(); i++) {
+            if (!flags.get(slots[i])) {
+                continue;
+            }
+
+            final Staff staff = staves.get(i);
+            final int left = staff.getAbscissa(LEFT);
+            final int right = staff.getAbscissa(RIGHT);
+            final Rectangle bottomLine = staff.getLastLine().getBounds();
+            final int top = bottomLine.y + bottomLine.height;
+            final int bottom = (i + 1 < staves.size())
+                    ? top + ((staves.get(i + 1).getFirstLine().getBounds().y - top)
+                            / (slots[i + 1] - slots[i]))
+                    : top + (6 * scale.getInterline());
+            final Rectangle band = new Rectangle(left, top, right - left, bottom - top)
+                    .intersection(new Rectangle(0, 0, image.getWidth(), image.getHeight()));
+
+            if (band.isEmpty()) {
+                continue;
+            }
+
+            longLines.removeIf(line -> band.contains(line.getCenter2D()));
+
+            for (TextLine line : paddle.recognizeLyrics(
+                    sheet,
+                    image.getSubimage(band.x, band.y, band.width, band.height),
+                    band.getLocation(),
+                    scripts,
+                    "S#" + system.getId())) {
+                line.getWords().forEach(word -> word.adjustFont());
+                line.setRole(TextRole.Lyrics);
+                line.setStaff(staff);
+                longLines.add(line);
+                logger.debug("S#{} staff#{} lyrics {}", system.getId(), staff.getId(),
+                        line.getValue());
             }
         }
     }
@@ -1422,5 +1519,12 @@ public class TextBuilder
         private final Scale.Fraction maxLineDy = new Scale.Fraction(
                 1.0,
                 "Max vertical gap between two line chunks");
+
+        private final Constant.String lyricsScripts = new Constant.String(
+                "",
+                "Scripts of the lyrics, comma-separated (hiragana, katakana, kanji, latin, digits,"
+                        + " punct, hyphen): the lyrics below the staves flagged \":lyrics\" in"
+                        + " partsHint are read by the lyrics model of the PaddleOCR server,"
+                        + " keeping only these chars. Blank: lyrics come from the sheet OCR");
     }
 }

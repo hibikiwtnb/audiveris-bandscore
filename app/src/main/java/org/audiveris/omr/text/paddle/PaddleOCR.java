@@ -39,6 +39,7 @@ import java.awt.geom.Line2D;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -58,6 +59,8 @@ import javax.imageio.ImageIO;
  * The server is expected to be already running, its base URL is defined by the
  * <code>serverUrl</code> constant.
  * Recognition language is defined by the server models, the language specification is ignored.
+ * Lyric lines can be read again by the lyrics model of the server, see
+ * {@link #recognizeLyrics}.
  *
  */
 public class PaddleOCR
@@ -163,16 +166,7 @@ public class PaddleOCR
         }
 
         try {
-            final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-            ImageIO.write(image, "png", bytes);
-
-            final HttpRequest request = HttpRequest.newBuilder(uri("/ocr"))
-                    .timeout(Duration.ofSeconds(constants.timeout.getValue()))
-                    .header("Content-Type", "image/png")
-                    .POST(HttpRequest.BodyPublishers.ofByteArray(bytes.toByteArray())).build();
-            final HttpResponse<String> response = client.send(
-                    request,
-                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            final HttpResponse<String> response = post("/ocr", image);
 
             if (response.statusCode() != 200) {
                 logger.warn("{} PaddleOCR server error {} {}", label, response.statusCode(),
@@ -180,15 +174,7 @@ public class PaddleOCR
                 return null;
             }
 
-            final List<TextLine> lines = parse(sheet, response.body());
-
-            if (topLeft != null) {
-                // Translate topLeft-relative coordinates to origin-relative ones
-                for (TextLine line : lines) {
-                    line.translate(topLeft.x, topLeft.y);
-                }
-            }
-
+            final List<TextLine> lines = parse(sheet, response.body(), topLeft);
             logger.debug("{} PaddleOCR lines: {}", label, lines.size());
 
             return lines;
@@ -196,6 +182,63 @@ public class PaddleOCR
             logger.warn("{} PaddleOCR recognition failed {}", label, ex.toString(), ex);
             return null;
         }
+    }
+
+    //-----------------//
+    // recognizeLyrics //
+    //-----------------//
+    /**
+     * Read an image of the lyrics below a staff with the lyrics reader of the server, keeping
+     * only the chars of the given scripts: one word per syllable, with its own score.
+     *
+     * @param sheet   the related sheet
+     * @param image   the image to read
+     * @param topLeft image top left corner in sheet
+     * @param scripts comma-separated script names (hiragana, katakana, kanji, latin, digits,
+     *                punct, hyphen)
+     * @param label   label for messages
+     * @return the lines read, in sheet coordinates
+     * @throws IllegalStateException if the server cannot read it (no fallback to other models)
+     */
+    public List<TextLine> recognizeLyrics (Sheet sheet,
+                                           BufferedImage image,
+                                           Point topLeft,
+                                           String scripts,
+                                           String label)
+    {
+        final String path = "/ocr?model=lyrics&scripts="
+                + URLEncoder.encode(scripts, StandardCharsets.UTF_8);
+        final HttpResponse<String> response;
+
+        try {
+            response = post(path, image);
+        } catch (Exception ex) {
+            throw new IllegalStateException(label + " PaddleOCR lyrics request failed: " + ex, ex);
+        }
+
+        if (response.statusCode() != 200) {
+            throw new IllegalStateException(label + " PaddleOCR lyrics: " + response.body().trim());
+        }
+
+        return parse(sheet, response.body(), topLeft);
+    }
+
+    //------//
+    // post //
+    //------//
+    private HttpResponse<String> post (String path,
+                                       BufferedImage image)
+        throws Exception
+    {
+        final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        ImageIO.write(image, "png", bytes);
+
+        final HttpRequest request = HttpRequest.newBuilder(uri(path))
+                .timeout(Duration.ofSeconds(constants.timeout.getValue()))
+                .header("Content-Type", "image/png")
+                .POST(HttpRequest.BodyPublishers.ofByteArray(bytes.toByteArray())).build();
+
+        return client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
     }
 
     //----------//
@@ -213,12 +256,14 @@ public class PaddleOCR
     /**
      * Build TextLine / TextWord / TextChar instances out of server response.
      *
-     * @param sheet the related sheet
-     * @param body  the server response, one tab-separated record per line
+     * @param sheet   the related sheet
+     * @param body    the server response, one tab-separated record per line
+     * @param topLeft image top left corner, coordinates are translated by it (null: none)
      * @return the lines built
      */
     private List<TextLine> parse (Sheet sheet,
-                                  String body)
+                                  String body,
+                                  Point topLeft)
     {
         final List<TextLine> lines = new ArrayList<>();
         TextLine line = null;
@@ -252,7 +297,7 @@ public class PaddleOCR
                         box,
                         f[5],
                         baseline,
-                        score,
+                        (f.length > 6) ? Double.parseDouble(f[6]) : score, // Own score, if any
                         FontInfo.createDefault(box.height),
                         line);
                 line.appendWord(word);
@@ -270,6 +315,13 @@ public class PaddleOCR
         }
 
         lines.removeIf(l -> l.getWords().isEmpty() || l.getValue().isBlank());
+
+        if (topLeft != null) {
+            // Translate topLeft-relative coordinates to origin-relative ones
+            for (TextLine l : lines) {
+                l.translate(topLeft.x, topLeft.y);
+            }
+        }
 
         return lines;
     }

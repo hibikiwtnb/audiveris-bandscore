@@ -83,7 +83,7 @@ public abstract class OcrUtil
     //-----------//
     /**
      * Select the OCR engine according to the ocrEngine constant.
-     * If PaddleOCR is requested but its server is not reachable, we fall back to Tesseract.
+     * If PaddleOCR is requested but its server is not reachable, we stop with an error.
      *
      * @return the selected OCR engine
      */
@@ -204,8 +204,8 @@ public abstract class OcrUtil
                 "Margin of white pixels added around image to OCR");
 
         private final Constant.String ocrEngine = new Constant.String(
-                "tesseract",
-                "OCR engine: tesseract or paddle (local PaddleOCR server)");
+                "paddle",
+                "OCR engine: paddle (local PaddleOCR server) or tesseract");
 
         private final Constant.Boolean dumpWords = new Constant.Boolean(
                 false,

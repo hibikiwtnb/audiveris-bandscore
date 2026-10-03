@@ -32,6 +32,7 @@ import org.audiveris.omr.sheet.Scale;
 import org.audiveris.omr.sheet.Sheet;
 import org.audiveris.omr.sheet.Staff;
 import org.audiveris.omr.sheet.SystemInfo;
+import org.audiveris.omr.sheet.note.NoteHeadsBuilder;
 import org.audiveris.omr.sig.inter.MetronomeInter;
 import static org.audiveris.omr.util.HorizontalSide.LEFT;
 import static org.audiveris.omr.util.HorizontalSide.RIGHT;
@@ -339,8 +340,9 @@ public enum TextRole
         }
 
         final List<Staff> staves = system.getStaves();
+        final int[] slots = NoteHeadsBuilder.staffSlots(system, flags.size());
 
-        if (staves.size() != flags.size()) {
+        if (slots == null) {
             logger.debug(
                     "System#{}: {} staves vs {} in parts hint, no lyrics",
                     system.getId(),
@@ -354,7 +356,7 @@ public enum TextRole
                 : part.getLastStaff();
         final int index = staves.indexOf(ref);
 
-        return (index >= 0) && flags.get(index);
+        return (index >= 0) && flags.get(slots[index]);
     }
 
     //~ Inner Classes ------------------------------------------------------------------------------
