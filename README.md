@@ -67,7 +67,7 @@ Audiveris 是成熟的開源 OMR 引擎，對古典譜（IMSLP 類）效果很�
 | Patch | 啟用方式 | 能力／效果 |
 |---|---|---|
 | **partsHint：聲部拓撲提示**<br>`6a28ce4` `0b598ed` | `org.audiveris.omr.score.PartCollation.partsHint=`<br>`A.Piano\|A.pf:2; Strings I\|Str. I:1; ...` | 由上到下給出完整系統的全部聲部（`名稱[\|縮寫]:譜表數[:lyrics][:drums][:tab\|:tab4]`），譜表數是這個聲部印了幾行譜表（五線譜、TAB、一線譜都是一行）。每行系統的譜表依數量與上下位置排出是完整系統的第幾行，再對到提示中涵蓋那幾行的聲部；排不出位置時改用譜表數加 OCR 名稱比對（容忍 `I/l/\|/1` 等誤讀）。缺席聲部匯出為空聲部，對不上的不丟內容。 |
-| **partsHint `:lyrics` 標記**<br>`8192fd8` | 在人聲聲部後加 `:lyrics`，<br>例 `Vocal\|Vo.:1:lyrics` | 只有被標記聲部下方的文字可判成歌詞；其他譜面文字（`pizz.`、`Woodwind`、`Bell (15ma)`）一律成為 words。譜表數對不上提示的系統不判歌詞（保守）；標記打錯會讓提示失效並寫 WARN，不會悄悄忽略。 |
+| **partsHint `:lyrics` 標記**<br>`8192fd8` | 在人聲聲部後加 `:lyrics`，<br>例 `Vocal\|Vo.:1:lyrics` | 只有被標記聲部下方的文字可判成歌詞；其他譜面文字（`pizz.`、`Woodwind`、`Bell (15ma)`）一律成為 words。每行譜表照 HEADS 步驟排出的提示行號判斷（漏掉的譜表放回空位）；排不出行號的系統不判歌詞；標記打錯會讓提示失效並寫 WARN，不會悄悄忽略。 |
 | **partsHint `:drums` 標記**<br>`a0a9f6d` `8561b79` `22a7032` | 在鼓聲部後加 `:drums`，<br>例 `Drums\|Dr.:1:drums` | 被標記的譜表照鼓組（`app/res/drum-set.xml`）找符頭，hi-hat／crash 的叉頭也找；匯出時一律當鼓組，不管譜面印的是什麼譜號（樂團譜的鼓常用低音譜號）：輸出打擊樂譜號、`<unpitched>` 音符與 GM 鼓音色，每個鼓聲部的音符用自己聲部的音色定義（一頁可以有多個鼓聲部）。需要寫聲部名稱。 |
 | **鼓譜叉頭模板**<br>`a023953` `2d10c7b` `ee7db9c` `8d35a84` `3155532` `3e38288d6` `036490c49` `e62314335` `df0d52369` `8265b32d1` | `org.audiveris.omr.sheet.note.NoteHeadsBuilder.templateDir=<資料夾>` | `:drums` 譜表上的叉頭改用模板比對找：同一本樂譜集字型相同，模板做一次整本共用。資料夾放 `cross.png`：剛好包住一個 X 的正方形（墨色深，行距 20 像素的比例），由人在譜面上挑幾個例子平均而成，方塊裡每個像素都參與比對；可以再放被譜線或加線從中間穿過的叉頭 `cross_line.png`、踩在粗短加線上的叉頭 `cross_ledger.png`（同一個符號在這些地方樣子不同），每個位置取吻合度最高的。模板和比對都用灰度（3×3 中值後的深淺，不二值化），比對用正規化相關係數，所以印刷深淺不影響；比對前把長橫線（譜線、加線）上下都白的部分擦掉，規則和學模板時相同。模板找到的符頭，外框是符頭中心部分（符桿接點照舊），glyph 是整個符號的墨跡；找其他符號前照這個 glyph 擦掉（字型裡的叉頭和書上的不一樣，照字型擦會留下 X 的腳，被當成附點）。附點只連到在符頭整個墨跡右邊的那一個符頭。判斷符頭連在符桿哪一端時，符桿末端落在整個符號的範圍內就算（書上的符桿常穿過 X 到它底部）。`templateDir` 指定的資料夾不存在時直接報錯停止（路徑錯會整本沒用模板，不可默默跑下去）。輸入圖檔要還在；讀不到時寫 WARN、不用模板。log 會印出每行譜表最好的相關係數與位置。 |
 | **一線譜（打擊樂）**<br>`9f5f78c` `caaa1e4` | 有 `partsHint` 時預設生效（`oneLineStaves` 開關關閉時） | 系統裡一條單獨的長橫線（附近沒有其他譜線、離譜表不遠）認成一線譜表，在 `partsHint` 裡算一行。加 `:drums` 時線上的叉頭照 `drum-set.xml` 一線譜的兩個位置（線上、線上方一個行距）找，音色是暫定的。 |
@@ -82,7 +82,8 @@ Audiveris 是成熟的開源 OMR 引擎，對古典譜（IMSLP 類）效果很�
 
 | Patch | 啟用方式 | 能力／效果 |
 |---|---|---|
-| **PaddleOCR 引擎**<br>`89895eb` `83cab4a` `0bb1f3a` `247887e` | `org.audiveris.omr.text.OcrUtil.ocrEngine=paddle`<br>＋ 啟動 [`dev/paddleocr/paddle_ocr_server.py`](dev/paddleocr/paddle_ocr_server.py) | 改用本機 PP-OCRv5 服務（HTTP，預設 `127.0.0.1:8868`），回傳行／字／字元框，字元框貼齊實際墨跡。和弦名辨識率約 **59% → 90%+**，排練記號不再被讀成漢字。CPU 上關閉 mkldnn，避開 PaddlePaddle 3.x 的 oneDNN 崩潰。服務連不上時直接報錯，不會退回 Tesseract。 |
+| **PaddleOCR 引擎**<br>`89895eb` `83cab4a` `0bb1f3a` `247887e` `d78f7aff0` | 預設生效（`ocrEngine=tesseract` 改回 Tesseract）<br>＋ 啟動 [`dev/paddleocr/paddle_ocr_server.py`](dev/paddleocr/paddle_ocr_server.py) | 改用本機 PP-OCRv5 服務（HTTP，預設 `127.0.0.1:8868`），回傳行／字／字元框，字元框貼齊實際墨跡。和弦名辨識率約 **59% → 90%+**，排練記號不再被讀成漢字。CPU 上關閉 mkldnn，避開 PaddlePaddle 3.x 的 oneDNN 崩潰。服務連不上時直接報錯，不會退回 Tesseract。 |
+| **歌詞用歌詞模型讀**<br>`d78f7aff0` | `org.audiveris.omr.text.TextBuilder.lyricsScripts=`<br>`hiragana,katakana,punct`<br>＋ partsHint `:lyrics` | 標記 `:lyrics` 的譜表下方（到下一行譜表）由服務的歌詞讀取器重讀，取代整頁 OCR 在這一帶的結果（整頁 OCR 用英文模型，日文歌詞會變成雜訊）。值是歌詞用到的字種，逗號分隔、可組合：`hiragana`、`katakana`（兩者都含長音 `ー`）、`kanji`、`latin`（含 `'`）、`digits`、`punct`（`!?,.()~"`、`！？、。（）「」『』～・…‥`）、`hyphen`（`-`）。只輸出這些字：模型認為是其他字時，改成這些字中分數最高的。讀法：不做文字偵測（會漏掉單獨的短音節和橫線）；先擦掉連結線，依空白切成行、依字間空隙切成音節（同一個音的字貼在一起）；音節並排成一行一起辨識，每個字依解碼位置分回音節。扁平的音節是橫線：前一個音節是英文時為 `-`，否則為 `ー`。有大小寫的假名照字高判斷（比整行中位數低 0.76 以下為小寫，高 0.9 以上為大寫，中間照模型）。沒有 `:lyrics` 標記或引擎不是 paddle 時報錯停止。空白（預設）時歌詞照整頁 OCR。 |
 | **和弦名 add 音**<br>`5720d71` | 預設生效 | 支援 `add2 / add4 / add9 / add11 / add13`（如 `Bbadd9`、`F#madd11`、`Cadd9/E`），以 `degree-type add` 匯出。 |
 | **和弦根音與後綴合併**<br>`af3e7d9` | 預設生效 | 印刷時中間有空隙的和弦（`E sus4`）在判定文字角色前合併為 `Esus4`；只在根音合法、合併後也合法且間距小於字高時才合併。 |
 | **排練記號框內文字清除**<br>`4194106` | 預設生效 | 能穿透方框讀字的 OCR（PaddleOCR）會在排練記號上生出一般文字，進而殺掉排練記號；現在先移除這些重疊文字。 |
@@ -126,12 +127,12 @@ Audiveris 是成熟的開源 OMR 引擎，對古典譜（IMSLP 類）效果很�
 
 > 原始碼檔為 CRLF 換行，手動修改時請保持。
 
-### 啟動 PaddleOCR 服務（使用 `ocrEngine=paddle` 時）
+### 啟動 PaddleOCR 服務（預設的 OCR 引擎）
 
 ```bash
 pip install paddleocr pillow numpy     # 建議放在獨立 venv
 python dev/paddleocr/paddle_ocr_server.py --port 8868
-curl http://127.0.0.1:8868/health      # 回應 "ok <det> <rec>"
+curl http://127.0.0.1:8868/health      # 回應 "ok <det> <rec> lyrics=<lyrics-rec>"
 ```
 
 ### 批次執行範例
@@ -140,7 +141,7 @@ curl http://127.0.0.1:8868/health      # 回應 "ok <det> <rec>"
 Audiveris -batch -export -output out/ \
   -constant org.audiveris.omr.sheet.rhythm.PageRhythm.defaultTimeSignature=4/4 \
   -constant "org.audiveris.omr.score.PartCollation.partsHint=Vocal|Vo.:1:lyrics; A.Piano|A.pf:2; Strings I|Str. I:1" \
-  -constant org.audiveris.omr.text.OcrUtil.ocrEngine=paddle \
+  -constant org.audiveris.omr.text.TextBuilder.lyricsScripts=hiragana,katakana,punct \
   -constant org.audiveris.omr.sheet.ProcessingSwitches.endings=false \
   -- page01.png
 ```
