@@ -2316,6 +2316,43 @@ public class PartwiseBuilder
                 current.endVoice();
             }
 
+            // A staff with no voice at all still lasts the measure: a measure rest
+            if (!current.repeatCopying) {
+                final Set<Staff> filled = new HashSet<>();
+
+                for (Voice voice : voicesToExport) {
+                    if (voice.isMeasureRest()) {
+                        filled.addAll(voice.getWholeChord().getStaves());
+                    }
+
+                    for (AbstractChordInter chord : voice.getChords()) {
+                        filled.addAll(chord.getStaves());
+                    }
+                }
+
+                final Rational restDur = measureRestDuration(stack);
+
+                for (Staff staff : measure.getPart().getStaves()) {
+                    if (filled.contains(staff) || (restDur == null)) {
+                        continue;
+                    }
+
+                    if (!timeCounter.equals(Rational.ZERO)) {
+                        insertBackup(timeCounter);
+                    }
+
+                    final Note note = factory.createNote();
+                    final Rest rest = factory.createRest();
+                    rest.setMeasure(YesNo.YES);
+                    note.setRest(rest);
+                    note.setDuration(new BigDecimal(current.page.simpleDurationOf(restDur)));
+                    note.setVoice("" + (1 + (4 * staff.getIndexInPart())));
+                    insertStaffId(note, staff);
+                    current.pmMeasure.getNoteOrBackupOrForward().add(note);
+                    timeCounter = restDur;
+                }
+            }
+
             current.measureEndCounter = timeCounter;
 
             // Clefs that occur after time slots, if any
