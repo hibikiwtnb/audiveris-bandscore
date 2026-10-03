@@ -73,6 +73,7 @@ Audiveris 是成熟的開源 OMR 引擎，對古典譜（IMSLP 類）效果很�
 | **一線譜（打擊樂）**<br>`9f5f78c` `caaa1e4` | 有 `partsHint` 時預設生效（`oneLineStaves` 開關關閉時） | 系統裡一條單獨的長橫線（附近沒有其他譜線、離譜表不遠）認成一線譜表，在 `partsHint` 裡算一行。加 `:drums` 時線上的叉頭照 `drum-set.xml` 一線譜的兩個位置（線上、線上方一個行距）找，音色是暫定的。 |
 | **吉他斜線模板**<br>`bb2f5d4` `3e38288d6` | 同上 `templateDir` | 資料夾裡有 `slash.png`（剛好包住一條斜線的正方形）時，在所有非鼓的五線譜上找斜線（「前一個和弦照這個節奏再彈」），當成新的符頭 `NOTEHEAD_SLASH`：符桿、符槓、附點、連結線照一般音符算節奏，匯出為 `<notehead>slash</notehead>`，音高先放第三線。符桿朝上的斜線在第 4 線附近、朝下的在第 2 線附近，兩種都找。比對方式和叉頭相同（灰度）。 |
 | **partsHint `:tab`／`:tab4` 標記**<br>`77f293e` | 在聲部後加 `:tab`（6 線）或 `:tab4`（4 線），<br>例 `E.Guitar\|E.G.:2:tab` | 這個聲部的最後一行是 TAB。TAB 沒被認出來、或被拆成獨立聲部時，仍匯出成同一個聲部，譜表數照提示（含 TAB 這一行）。 |
+| **partsHint `:gmN` 標記** | 在聲部後加 `:gm` 和 General MIDI 音色編號（1–128），<br>例 `E.Guitar\|E.G.:2:tab:gm30` | 匯出時這個聲部的 `midi-program` 和 `instrument-name` 用這個音色（開頭的音色）。沒寫時照譜表數用預設音色（1 行譜表 54 Voice Oohs，其他 1 Acoustic Grand Piano）。`:drums` 的聲部一律用 GM 鼓組，不看這個標記。編號超出 1–128 時整個提示失效並寫 WARN。 |
 | **預設拍號**<br>`06a58f6` | `org.audiveris.omr.sheet.rhythm.PageRhythm.defaultTimeSignature=4/4` | 頁面開頭沒有拍號、前面頁面也找不到時，退回使用者給的拍號。逐頁 OMR 不再整頁失去時值檢查。 |
 | **不合小節長度的連音**<br>`897f54814` | 預設生效（拍號已知、不是弱起小節時） | 流行音樂很少用三連音。某個聲部長度不對、裡面又有連音記號時，先全部拿掉，再從左到右一個個加回，加到聲部會比小節短之前就停；沒加回的連音記號刪掉、小節節奏重算。連音記號常是符頭被誤認成「3」。 |
 | **endings 開關（房子偵測）**<br>`eda9db9` | `org.audiveris.omr.sheet.ProcessingSwitches.endings=false` | 已知全曲沒有 1、2 房子時關閉偵測，避免 `— pizz. —↓` 之類的延續線被誤判成 Volta。預設 `true`（行為不變）。 |

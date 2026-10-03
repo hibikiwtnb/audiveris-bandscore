@@ -590,10 +590,11 @@ public class PartCollation
      * Build the logical parts defined by the user parts hint, if any.
      * <p>
      * Syntax: parts separated by ';', each part as
-     * <code>name[|abbreviation]:staffCount[:lyrics]</code>, top down.
+     * <code>name[|abbreviation]:staffCount[:lyrics][:drums][:tab|:tab4][:gmN]</code>, top down.
      * Names are optional, e.g. "A.Piano|A.pf:2; Strings I|Str. I:1" or "2;1;1".
      * The optional ":lyrics" flag is used by {@link #getHintedLyricsStaves()},
      * the optional ":drums" flag by {@link #getHintedDrumNames()}.
+     * The optional ":gmN" flag sets the MIDI program (General MIDI, 1..128) of the part.
      *
      * @return the hinted logicals, or null if no (valid) hint
      */
@@ -637,6 +638,10 @@ public class PartCollation
                     if (aliases.length > 1) {
                         logical.setAbbreviation(aliases[1].trim());
                     }
+                }
+
+                if (entry.program != null) {
+                    logical.setMidiProgram(entry.program);
                 }
 
                 logicals.add(logical);
@@ -1015,19 +1020,20 @@ public class PartCollation
         private final Constant.String partsHint = new Constant.String(
                 "",
                 "Parts of the score, top down, as"
-                        + " \"name[|abbrev]:staffCount[:lyrics][:drums][:tab|:tab4]\""
+                        + " \"name[|abbrev]:staffCount[:lyrics][:drums][:tab|:tab4][:gmN]\""
                         + " separated by ';' (e.g. \"Vocal:1:lyrics; Guitar:2:tab; Drums|Dr.:1:drums\")."
                         + " ':lyrics' restricts lyrics to the flagged parts,"
                         + " ':drums' exports the flagged part as drum set,"
                         + " ':tab' (':tab4') tells that the last staff of the part is a 6-line"
-                        + " (4-line) tablature. Empty means no hint.");
+                        + " (4-line) tablature, ':gmN' sets the MIDI program (General MIDI, 1..128)"
+                        + " of the part. Empty means no hint.");
     }
 
     //-----------//
     // HintEntry //
     //-----------//
     /**
-     * One part of the parts hint: "name[|abbrev]:staffCount[:lyrics][:drums][:tab|:tab4]".
+     * One part of the parts hint: "name[|abbrev]:staffCount[:lyrics][:drums][:tab|:tab4][:gmN]".
      */
     private static class HintEntry
     {
@@ -1042,17 +1048,22 @@ public class PartCollation
         /** Line count of the tablature, the last staff of the part, or 0 if none. */
         final int tabLines;
 
+        /** MIDI program (General MIDI, 1..128), or null if not given. */
+        final Integer program;
+
         HintEntry (String names,
                    int staffCount,
                    boolean lyrics,
                    boolean drums,
-                   int tabLines)
+                   int tabLines,
+                   Integer program)
         {
             this.names = names;
             this.staffCount = staffCount;
             this.lyrics = lyrics;
             this.drums = drums;
             this.tabLines = tabLines;
+            this.program = program;
         }
 
         static HintEntry parse (String token)
@@ -1061,6 +1072,7 @@ public class PartCollation
             boolean lyrics = false;
             boolean drums = false;
             int tabLines = 0;
+            Integer program = null;
             int last = fields.length - 1;
 
             // Trailing flags, after the staff count
@@ -1075,6 +1087,12 @@ public class PartCollation
                     tabLines = 6;
                 } else if (flag.equalsIgnoreCase("tab4")) {
                     tabLines = 4;
+                } else if (flag.matches("(?i)gm\\d+")) {
+                    program = Integer.parseInt(flag.substring(2));
+
+                    if ((program < 1) || (program > 128)) {
+                        throw new IllegalArgumentException("partsHint ':gm' needs 1..128: " + flag);
+                    }
                 } else {
                     throw new IllegalArgumentException("Unknown partsHint flag: " + flag);
                 }
@@ -1094,7 +1112,7 @@ public class PartCollation
                 throw new IllegalArgumentException("partsHint ':tab' needs 2 staves or more");
             }
 
-            return new HintEntry(names, staffCount, lyrics, drums, tabLines);
+            return new HintEntry(names, staffCount, lyrics, drums, tabLines, program);
         }
     }
 
