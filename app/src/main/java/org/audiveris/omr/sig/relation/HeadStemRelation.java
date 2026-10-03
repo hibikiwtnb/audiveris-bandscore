@@ -24,9 +24,11 @@ package org.audiveris.omr.sig.relation;
 import org.audiveris.omr.constant.Constant;
 import org.audiveris.omr.constant.ConstantSet;
 import org.audiveris.omr.glyph.Glyph;
+import org.audiveris.omr.glyph.Shape;
 import org.audiveris.omr.image.Anchored.Anchor;
 import org.audiveris.omr.math.LineUtil;
 import org.audiveris.omr.sheet.Scale;
+import org.audiveris.omr.sheet.note.NoteHeadsBuilder;
 import org.audiveris.omr.sig.SIGraph;
 import org.audiveris.omr.sig.inter.HeadChordInter;
 import org.audiveris.omr.sig.inter.HeadInter;
@@ -601,6 +603,23 @@ public class HeadStemRelation
                                               Line2D stemLine,
                                               double yExtension)
     {
+        if ((head.getShape() == Shape.NOTEHEAD_CROSS) && NoteHeadsBuilder.isBookHead(head)
+                && (head.getGlyph() != null)) {
+            // A book cross: the stem may run through the X, so its end only has to lie
+            // within the whole symbol
+            final Rectangle gb = head.getGlyph().getBounds();
+
+            if ((stemLine.getY2() <= (gb.y + gb.height)) && (stemLine.getY1() < gb.y)) {
+                return STEM_BOTTOM;
+            }
+
+            if ((stemLine.getY1() >= gb.y) && (stemLine.getY2() > (gb.y + gb.height))) {
+                return STEM_TOP;
+            }
+
+            return STEM_MIDDLE;
+        }
+
         final double margin = head.getBounds().height * constants.anchorHeightRatio.getValue();
         final double yMidStem = (stemLine.getY1() + stemLine.getY2()) / 2;
 
