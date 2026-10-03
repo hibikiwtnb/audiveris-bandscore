@@ -87,6 +87,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
+import java.util.regex.Pattern;
 
 /**
  * Class <code>TextBuilder</code> works at system level, providing features to check, build
@@ -118,6 +119,9 @@ public class TextBuilder
     private static final Constants constants = new Constants();
 
     private static final Logger logger = LoggerFactory.getLogger(TextBuilder.class);
+
+    /** Hi-hat open / closed marks, as OCR reads them: + o O 0 and three circles. */
+    private static final Pattern DRUM_MARKS = Pattern.compile("[+oO0\\u25cb\\u25e6\\u00b0]+");
 
     //~ Instance fields ----------------------------------------------------------------------------
 
@@ -998,6 +1002,9 @@ public class TextBuilder
         // Discard lines that pertain to a system above or to a system below
         purgeExternalLines(longLines);
 
+        // Discard hi-hat open / closed marks read as text above drum staves
+        purgeDrumMarks(longLines);
+
         // Partition lines between parts of the system
         partitionPartLines(longLines);
 
@@ -1039,6 +1046,73 @@ public class TextBuilder
 
         if (logger.isDebugEnabled()) {
             dump("Retrieved lines", lines, true);
+        }
+    }
+
+    //----------------//
+    // purgeDrumMarks //
+    //----------------//
+    /**
+     * Discard the words made only of hi-hat open / closed marks ("+", "o" and alike) above the
+     * staves flagged ":drums" in partsHint (from the staff above, or the system top, down to
+     * the drum staff top line).
+     * <p>
+     * The staff ranks are those of the parts collation; a system where they fail is left as is.
+     *
+     * @param lines the lines to purge, a line left without words is removed
+     */
+    private void purgeDrumMarks (List<TextLine> lines)
+    {
+        final List<Boolean> flags = PartCollation.getHintedDrumStaves();
+
+        if (flags == null) {
+            return;
+        }
+
+        final List<Staff> staves = system.getStaves();
+        final int[] slots = NoteHeadsBuilder.staffSlots(system, flags.size());
+
+        if (slots == null) {
+            return;
+        }
+
+        for (int i = 0; i < staves.size(); i++) {
+            if (!flags.get(slots[i])) {
+                continue;
+            }
+
+            final int bottom = staves.get(i).getFirstLine().getBounds().y;
+            final int top;
+
+            if (i > 0) {
+                final Rectangle above = staves.get(i - 1).getLastLine().getBounds();
+                top = above.y + above.height;
+            } else {
+                top = system.getBounds().y - (4 * scale.getInterline());
+            }
+
+            for (Iterator<TextLine> it = lines.iterator(); it.hasNext();) {
+                final TextLine line = it.next();
+                final List<TextWord> marks = new ArrayList<>();
+
+                for (TextWord word : line.getWords()) {
+                    final double y = word.getBounds().getCenterY();
+
+                    if ((y >= top) && (y <= bottom) && DRUM_MARKS.matcher(word.getValue())
+                            .matches()) {
+                        marks.add(word);
+                    }
+                }
+
+                if (!marks.isEmpty()) {
+                    logger.debug("S#{} drum marks {}", system.getId(), marks);
+                    line.removeWords(marks);
+
+                    if (line.getWords().isEmpty()) {
+                        it.remove();
+                    }
+                }
+            }
         }
     }
 
