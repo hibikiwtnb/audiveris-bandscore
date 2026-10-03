@@ -3674,8 +3674,10 @@ public class PartwiseBuilder
     private void setFontInfo (FormattedTextId formattedTextId,
                               SentenceInter sentence)
     {
+        // Direction texts (words, tempo text, rehearsal) have no font size: all of them get
+        // the size of the score style. The size measured on the OCR box would make a text
+        // in the middle of the staves huge whenever the box is wrong.
         FontInfo fontInfo = sentence.getMeanFont();
-        formattedTextId.setFontSize("" + sentence.getExportedFontSize());
 
         // Family
         if (fontInfo.isSerif) {
