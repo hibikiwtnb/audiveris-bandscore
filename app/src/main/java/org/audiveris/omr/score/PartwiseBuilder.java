@@ -1465,7 +1465,7 @@ public class PartwiseBuilder
             harmony.setDefaultY(yOf(location, staff));
 
             // font-size
-            harmony.setFontSize("" + (chordName.getFontInfo().pointSize * TextFont.TO_POINT));
+            harmony.setFontSize(fontSizeOf(chordName.getFontInfo().pointSize * TextFont.TO_POINT));
 
             // relative-x
             harmony.setRelativeX(toTenths(location.getX() - current.note.getCenterLeft().x));
@@ -3639,6 +3639,21 @@ public class PartwiseBuilder
         }
     }
 
+    //------------//
+    // fontSizeOf //
+    //------------//
+    /**
+     * Report the font size to export, or null (no size, the score style applies) when the
+     * size measured on the OCR box is obviously wrong.
+     *
+     * @param points measured size, in points
+     * @return the exported size or null
+     */
+    private static String fontSizeOf (double points)
+    {
+        return (points <= constants.maxFontSize.getValue()) ? ("" + points) : null;
+    }
+
     //-------------//
     // setFontInfo //
     //-------------//
@@ -3646,7 +3661,7 @@ public class PartwiseBuilder
                               SentenceInter sentence)
     {
         FontInfo fontInfo = sentence.getMeanFont();
-        formattedText.setFontSize("" + sentence.getExportedFontSize());
+        formattedText.setFontSize(fontSizeOf(sentence.getExportedFontSize()));
 
         // Family
         if (fontInfo.isSerif) {
@@ -4147,6 +4162,11 @@ public class PartwiseBuilder
     private static class Constants
             extends ConstantSet
     {
+        private final Constant.Integer maxFontSize = new Constant.Integer(
+                "points",
+                24,
+                "Largest font size exported for a text (larger ones are not exported)");
+
         private final Constant.Integer pageHorizontalMargin = new Constant.Integer(
                 "tenths",
                 80,
