@@ -533,6 +533,20 @@ public class MeasureRhythm
      */
     public boolean process ()
     {
+        final boolean ok = doProcess();
+
+        if (removeMisfitTuplets()) {
+            return doProcess();
+        }
+
+        return ok;
+    }
+
+    //-----------//
+    // doProcess //
+    //-----------//
+    private boolean doProcess ()
+    {
         removeTuplets(getImplicitTuplets());
 
         clearInterleavedRests();
@@ -714,6 +728,97 @@ public class MeasureRhythm
         measure.removeInter(tuplet);
         stack.removeInter(tuplet);
         tuplet.remove();
+    }
+
+    //---------------------//
+    // removeMisfitTuplets //
+    //---------------------//
+    /**
+     * Tuplets are rare in this music: in a voice which does not fill the measure, tuplets
+     * that make the length wrong are not used.
+     * <p>
+     * All tuplets of such voice are removed first, then they are given back from left to right
+     * as long as the voice does not get shorter than the measure (it stops at the last one that
+     * fits).
+     *
+     * @return true if some tuplets were removed (rhythm to be processed again)
+     */
+    private boolean removeMisfitTuplets ()
+    {
+        final MeasureStack stack = measure.getStack();
+        final Rational expected = stack.getExpectedDuration();
+
+        if ((expected == null) || stack.isImplicit()) {
+            return false;
+        }
+
+        final Set<TupletInter> misfits = new LinkedHashSet<>();
+
+        for (Voice voice : measure.getVoices()) {
+            if (voice.isMeasureRest()) {
+                continue;
+            }
+
+            final List<TupletInter> tuplets = voice.getTuplets();
+
+            if (tuplets.isEmpty()) {
+                continue;
+            }
+
+            Rational end = ZERO;
+
+            for (AbstractChordInter ch : voice.getChords()) {
+                if ((ch.getTimeOffset() == null) || (ch.getDuration() == null)) {
+                    end = null;
+                    break;
+                }
+
+                final Rational chEnd = ch.getTimeOffset().plus(ch.getDuration());
+
+                if (chEnd.compareTo(end) > 0) {
+                    end = chEnd;
+                }
+            }
+
+            if ((end == null) || end.equals(expected)) {
+                continue;
+            }
+
+            // Length each tuplet takes away
+            final List<Rational> cuts = new ArrayList<>();
+            Rational over = end.minus(expected);
+
+            for (TupletInter tuplet : tuplets) {
+                Rational cut = ZERO;
+
+                for (AbstractChordInter ch : voice.getChords()) {
+                    if (ch.getTuplet() == tuplet) {
+                        cut = cut.plus(ch.getDurationSansTuplet().minus(ch.getDuration()));
+                    }
+                }
+
+                cuts.add(cut);
+                over = over.plus(cut); // With no tuplet at all
+            }
+
+            int keep = 0;
+
+            while ((keep < tuplets.size()) && (over.minus(cuts.get(keep)).compareTo(ZERO) >= 0)) {
+                over = over.minus(cuts.get(keep));
+                keep++;
+            }
+
+            misfits.addAll(tuplets.subList(keep, tuplets.size()));
+        }
+
+        if (misfits.isEmpty()) {
+            return false;
+        }
+
+        logger.info("{} tuplets not fitting the measure, removed: {}", measure, misfits);
+        removeTuplets(misfits);
+
+        return true;
     }
 
     //---------------//
