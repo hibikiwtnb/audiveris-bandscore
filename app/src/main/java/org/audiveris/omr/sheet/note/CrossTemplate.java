@@ -291,6 +291,10 @@ public class CrossTemplate
             return null;
         }
 
+        if (!new File(dir).isDirectory()) {
+            throw new IllegalStateException("templateDir not found: " + dir);
+        }
+
         final String key = dir + "|" + shape;
 
         if (!loaded.containsKey(key)) {
