@@ -666,10 +666,22 @@ public class PartwiseBuilder
                 midiProgram = logicalPart.getDefaultProgram();
             }
 
+            // Prevent synth parts from inadvertently using transposing pitched percussion (e.g. Glockenspiel = 10, Celesta = 9, Xylophone = 14)
+            String partNameStr = logicalPart.getName();
+            String partAbbrStr = logicalPart.getAbbreviation();
+            boolean isSynth = (partNameStr != null && partNameStr.toLowerCase().contains("synth"))
+                    || (partAbbrStr != null && partAbbrStr.toLowerCase().contains("synth"));
+            if (isSynth) {
+                if (midiProgram == 9 || midiProgram == 10 || midiProgram == 14) {
+                    midiProgram = 81; // Square Synthesizer / Lead 1
+                }
+            }
+
             ScoreInstrument scoreInstrument = new ScoreInstrument();
             pmScorePart.getScoreInstrument().add(scoreInstrument);
             scoreInstrument.setId(pmScorePart.getId() + "-I1");
-            scoreInstrument.setInstrumentName(MidiAbstractions.getProgramName(midiProgram));
+            String instName = (midiProgram == 81) ? "Square Synthesizer" : MidiAbstractions.getProgramName(midiProgram);
+            scoreInstrument.setInstrumentName(instName);
 
             // Midi instrument
             MidiInstrument midiInstrument = factory.createMidiInstrument();

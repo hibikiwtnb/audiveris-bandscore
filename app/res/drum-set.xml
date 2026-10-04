@@ -85,10 +85,12 @@
     <entry pitch-position="-5" motif="cross"                          sound="Closed_Hi_Hat"/>
 
     <!-- -4 -->
-    <entry pitch-position="-4" motif="oval"     sound="High_Tom"/>
-    <entry pitch-position="-4" motif="cross"    sound="Ride_Cymbal_1"/>
-    <entry pitch-position="-4" motif="circle"   sound="Ride_Cymbal_1"/>
-    <entry pitch-position="-4" motif="diamond"  sound="Ride_Bell"/> <!-- Or Ride_Cymbal_1 or 2 -->
+    <entry pitch-position="-4" motif="oval"                           sound="High_Tom"/>
+    <entry pitch-position="-4" motif="cross"    sign="PLAYING_OPEN"   sound="Open_Hi_Hat"/>
+    <entry pitch-position="-4" motif="cross"    sign="PLAYING_CLOSED" sound="Closed_Hi_Hat"/>
+    <entry pitch-position="-4" motif="cross"                          sound="Closed_Hi_Hat"/>
+    <entry pitch-position="-4" motif="circle"                         sound="Ride_Cymbal_1"/>
+    <entry pitch-position="-4" motif="diamond"                        sound="Ride_Bell"/> <!-- Or Ride_Cymbal_1 or 2 -->
     
     <!-- -3 -->
     <entry pitch-position="-3" motif="oval"     sound="Hi_Mid_Tom"/>

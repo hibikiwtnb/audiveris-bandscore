@@ -215,6 +215,19 @@ public class CrossTemplate
         final Sheet sheet = staff.getSystem().getSheet();
 
         for (double[] f : peaks) {
+            int pitch = (int) f[3];
+            if (shape != Shape.NOTEHEAD_SLASH && !pitches.isEmpty()) {
+                double minDiff = Double.MAX_VALUE;
+                for (int p : pitches) {
+                    double ord = staff.pitchToOrdinate(f[0], p);
+                    double diff = Math.abs(f[1] - ord);
+                    if (diff < minDiff) {
+                        minDiff = diff;
+                        pitch = p;
+                    }
+                }
+            }
+
             final HeadInter head = ts.get((int) f[4]).createHead(
                     shape,
                     band,
@@ -222,7 +235,7 @@ public class CrossTemplate
                     (int) f[1],
                     f[2],
                     staff,
-                    (shape == Shape.NOTEHEAD_SLASH) ? 0 : (int) f[3], // A slash has no pitch
+                    (shape == Shape.NOTEHEAD_SLASH) ? 0 : pitch, // A slash has no pitch
                     sheet);
 
             if (head != null) {
