@@ -1838,6 +1838,19 @@ public class PartwiseBuilder
      */
     private void processKeys ()
     {
+        if (!current.isDrumPart) {
+            // Pitched part: the key agreed for the measure stack, whatever this part shows
+            final Integer concert = current.keyAgreement.getConcertKey(
+                    current.measure.getStack());
+
+            if (concert != null) {
+                processAgreedKey(concert + KeyAgreement.transpositionOf(current.measure
+                        .getPart()));
+
+                return;
+            }
+        }
+
         // Something to process?
         if (current.measure.hasKeys()) {
             // Check if all keys are the same across all staves in measure
@@ -1856,6 +1869,41 @@ public class PartwiseBuilder
             // No key signature in measure: this is meaningful only at beginning of staff
             if (isFirst.measure) {
                 processKeyVoid();
+            }
+        }
+    }
+
+    //------------------//
+    // processAgreedKey //
+    //------------------//
+    /**
+     * Write the key of the part when it changes (all staves alike).
+     *
+     * @param fifths the key of this part (concert key shifted for a transposing instrument)
+     */
+    private void processAgreedKey (int fifths)
+    {
+        final Key key = factory.createKey();
+        key.setFifths(new BigInteger("" + fifths));
+
+        final int staffCount = current.measure.getPart().getStaves().size();
+        boolean isNew = false;
+
+        for (int index = 0; index < staffCount; index++) {
+            final Key currentKey = current.keys.get(index);
+
+            if ((currentKey == null) || !areEqual(currentKey, key)) {
+                isNew = true;
+
+                break;
+            }
+        }
+
+        if (isNew) {
+            getAttributes().getKey().add(key);
+
+            for (int index = 0; index < staffCount; index++) {
+                current.keys.put(index, key);
             }
         }
     }
@@ -3400,6 +3448,7 @@ public class PartwiseBuilder
         source.encodePage(page, scorePartwise);
 
         current.page = page;
+        current.keyAgreement = new KeyAgreement(page);
         current.pageMeasureIdOffset = score.getMeasureIdOffset(page);
         current.scale = page.getSheet().getScale();
         page.resetDurationDivisor();
@@ -4215,6 +4264,8 @@ public class PartwiseBuilder
 
         // Page dependent
         Page page;
+
+        KeyAgreement keyAgreement; // Concert key of each measure stack
 
         int pageMeasureIdOffset;
 
