@@ -263,6 +263,14 @@ class LyricsReader:
 
     def read_line(self, gray, ink, y0, allowed, mask):
         h = ink.shape[0]
+        # an extender line (flat, on the baseline, often broken in pieces) would widen the
+        # syllable before it; a hyphen or a long vowel mark is flat too, but at mid height
+        ink = ink.copy()
+        n, labels, stats, _ = cv2.connectedComponentsWithStats(ink.astype(np.uint8), 8)
+        for i in range(1, n):
+            _, cy, w, ch, _ = stats[i]
+            if ch * 4 <= h and w >= 3 * ch and (cy + ch / 2) * 4 >= 3 * h:
+                ink[labels == i] = False
         syllables = []
         for x0, x1 in runs(ink.any(axis=0), int(self.GAP * h)):
             rows = np.flatnonzero(ink[:, x0:x1].any(axis=1))
