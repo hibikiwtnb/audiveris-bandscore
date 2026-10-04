@@ -120,8 +120,8 @@ public class TextBuilder
 
     private static final Logger logger = LoggerFactory.getLogger(TextBuilder.class);
 
-    /** Hi-hat open / closed marks, as OCR reads them: + o O 0 and three circles. */
-    private static final Pattern DRUM_MARKS = Pattern.compile("[+oO0\\u25cb\\u25e6\\u00b0]+");
+    /** Hi-hat open / closed marks, as OCR reads them: + o O 0 i ( ) and three circles. */
+    private static final Pattern DRUM_MARKS = Pattern.compile("[+oO0i()\\u25cb\\u25e6\\u00b0]+");
 
     //~ Instance fields ----------------------------------------------------------------------------
 
@@ -1053,7 +1053,7 @@ public class TextBuilder
     // purgeDrumMarks //
     //----------------//
     /**
-     * Discard the words made only of hi-hat open / closed marks ("+", "o" and alike) above the
+     * Discard the words made only of hi-hat open / closed marks ("+", "o", "i" and alike) above the
      * staves flagged ":drums" in partsHint (from the staff above, or the system top, down to
      * the drum staff top line).
      * <p>
