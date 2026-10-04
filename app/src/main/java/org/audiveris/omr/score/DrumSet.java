@@ -26,6 +26,7 @@ import org.audiveris.omr.constant.Constant;
 import org.audiveris.omr.constant.ConstantSet;
 import org.audiveris.omr.glyph.Shape;
 import org.audiveris.omr.glyph.ShapeSet.HeadMotif;
+import org.audiveris.omr.sheet.note.NoteHeadsBuilder;
 import org.audiveris.omr.util.UriUtil;
 
 import org.slf4j.Logger;
@@ -35,6 +36,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.URL;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -155,19 +157,26 @@ public class DrumSet
     // loadAllConfigurations //
     //-----------------------//
     /**
-     * Load all drum-set files as found in system (and user?) configuration files.
+     * Load all drum-set files as found in system, user and book configuration files.
      */
     private void loadAllConfigurations ()
     {
         // First load system drum-set which must exist
         // Second load user drum-set if any
+        // Third load book drum-set if any (in the folder of the book's templates)
+        final String templateDir = NoteHeadsBuilder.getTemplateDir();
         final URI[] uris = new URI[]
         {
                 UriUtil.toURI(WellKnowns.RES_URI, fileName),
-                WellKnowns.CONFIG_FOLDER.resolve(fileName).toUri().normalize() };
+                WellKnowns.CONFIG_FOLDER.resolve(fileName).toUri().normalize(),
+                templateDir.isBlank() ? null : Paths.get(templateDir, fileName).toUri().normalize() };
 
         for (int i = 0; i < uris.length; i++) {
             final URI uri = uris[i];
+
+            if (uri == null) {
+                continue;
+            }
 
             try {
                 final URL url = uri.toURL();

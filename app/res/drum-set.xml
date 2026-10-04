@@ -8,7 +8,8 @@
 <!--
     This file, located in the Audiveris 'res' folder, defines the default drum mapping.
     The end-user can override part or all of this mapping by writing a specific drum-set.xml file
-    located in the Audiveris user 'config' folder.
+    located in the Audiveris user 'config' folder,
+    and a book can override it again by a drum-set.xml file in its templateDir folder.
 
     Such a file defines Audiveris entries for general midi percussion keys.
     Definitions are grouped by staff line count with one attribute:
@@ -85,12 +86,10 @@
     <entry pitch-position="-5" motif="cross"                          sound="Closed_Hi_Hat"/>
 
     <!-- -4 -->
-    <entry pitch-position="-4" motif="oval"                           sound="High_Tom"/>
-    <entry pitch-position="-4" motif="cross"    sign="PLAYING_OPEN"   sound="Open_Hi_Hat"/>
-    <entry pitch-position="-4" motif="cross"    sign="PLAYING_CLOSED" sound="Closed_Hi_Hat"/>
-    <entry pitch-position="-4" motif="cross"                          sound="Closed_Hi_Hat"/>
-    <entry pitch-position="-4" motif="circle"                         sound="Ride_Cymbal_1"/>
-    <entry pitch-position="-4" motif="diamond"                        sound="Ride_Bell"/> <!-- Or Ride_Cymbal_1 or 2 -->
+    <entry pitch-position="-4" motif="oval"     sound="High_Tom"/>
+    <entry pitch-position="-4" motif="cross"    sound="Ride_Cymbal_1"/>
+    <entry pitch-position="-4" motif="circle"   sound="Ride_Cymbal_1"/>
+    <entry pitch-position="-4" motif="diamond"  sound="Ride_Bell"/> <!-- Or Ride_Cymbal_1 or 2 -->
     
     <!-- -3 -->
     <entry pitch-position="-3" motif="oval"     sound="Hi_Mid_Tom"/>

@@ -1633,6 +1633,19 @@ public class NoteHeadsBuilder
         }
     }
 
+    //----------------//
+    // getTemplateDir //
+    //----------------//
+    /**
+     * Report the folder of the book's templates.
+     *
+     * @return the folder, empty for none
+     */
+    public static String getTemplateDir ()
+    {
+        return constants.templateDir.getValue();
+    }
+
     //-----------//
     // Constants //
     //-----------//
@@ -1641,7 +1654,8 @@ public class NoteHeadsBuilder
     {
         private final Constant.String templateDir = new Constant.String(
                 "",
-                "Folder of the book's symbol templates (cross.png, cross_line.png, slash.png),"
+                "Folder of the book's symbol templates (cross.png, cross_line.png, slash.png)"
+                        + " and drum-set.xml overrides,"
                         + " empty for none");
 
         private final Constant.Ratio crossMinGrade = new Constant.Ratio(
