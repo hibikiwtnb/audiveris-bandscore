@@ -75,6 +75,7 @@ Audiveris 是成熟的開源 OMR 引擎，對古典譜（IMSLP 類）效果很�
 | **partsHint `:tab`／`:tab4` 標記**<br>`77f293e` | 在聲部後加 `:tab`（6 線）或 `:tab4`（4 線），<br>例 `E.Guitar\|E.G.:2:tab` | 這個聲部的最後一行是 TAB。TAB 沒被認出來、或被拆成獨立聲部時，仍匯出成同一個聲部，譜表數照提示（含 TAB 這一行）。 |
 | **partsHint `:gmN` 標記**<br>`78602681c` | 在聲部後加 `:gm` 和 General MIDI 音色編號（1–128），<br>例 `E.Guitar\|E.G.:2:tab:gm30` | 匯出時這個聲部的 `midi-program` 和 `instrument-name` 用這個音色（開頭的音色）。沒寫時照譜表數用預設音色（1 行譜表 54 Voice Oohs，其他 1 Acoustic Grand Piano）。`:drums` 的聲部一律用 GM 鼓組，不看這個標記。編號超出 1–128 時整個提示失效並寫 WARN。 |
 | **預設拍號**<br>`06a58f6` | `org.audiveris.omr.sheet.rhythm.PageRhythm.defaultTimeSignature=4/4` | 頁面開頭沒有拍號、前面頁面也找不到時，退回使用者給的拍號。逐頁 OMR 不再整頁失去時值檢查。 |
+| **每小節統一調號**<br>`8b4ecc55a` | 預設生效 | 同一小節所有有音高的譜表（鼓、TAB、一線譜除外）只有一個實際音高的調號：每行譜表投它認出的調號，移調樂器先換回實際音高；系統開頭沒認出調號的譜表不投票（開頭的調號常漏認，甚至大多數譜表都漏），系統中間沒認出的投「沿用」（少數譜表讀到的轉調會被否決）。多數決；平手時取目前的調號，否則取最上面的譜表；沒有任何票時沿用（還沒有調號時為 C）。被否決的譜表寫 WARN。匯出時每個聲部用這個調號寫 `<key>` 並換算音高，漏認調號的譜表不再照 C 大調輸出。移調樂器照聲部名稱判斷，不用 hints：名稱裡有 `in X` 時照它；否則 B♭（Trumpet、Cornet、Flugelhorn、Clarinet、Soprano／Tenor Sax，及 Tp.、Cl.、T.Sax 等縮寫）、E♭（Alto／Baritone Sax，A.Sax、B.Sax）、F（Horn、English Horn，Hr.、E.H.）；其他聲部當實際音高，只差八度的（吉他、貝斯）調號相同。 |
 | **不合小節長度的連音**<br>`897f54814` | 預設生效（拍號已知、不是弱起小節時） | 流行音樂很少用三連音。某個聲部長度不對、裡面又有連音記號時，先全部拿掉，再從左到右一個個加回，加到聲部會比小節短之前就停；沒加回的連音記號刪掉、小節節奏重算。連音記號常是符頭被誤認成「3」。 |
 | **endings 開關（房子偵測）**<br>`eda9db9` | `org.audiveris.omr.sheet.ProcessingSwitches.endings=false` | 已知全曲沒有 1、2 房子時關閉偵測，避免 `— pizz. —↓` 之類的延續線被誤判成 Volta。預設 `true`（行為不變）。 |
 
