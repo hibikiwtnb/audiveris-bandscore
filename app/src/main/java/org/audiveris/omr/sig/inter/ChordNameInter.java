@@ -489,7 +489,7 @@ public class ChordNameInter
             kind = cs.kind;
             bass = cs.bass;
             degrees = cs.degrees;
-            super.setValue(value.replaceAll("b", FLAT).replaceAll("#", SHARP));
+            super.setValue(value.replaceAll("[b']", FLAT).replaceAll("#", SHARP));
         } else {
             logger.info("Failed parsing ChordName text: {}", value);
             super.setValue(value);
@@ -577,7 +577,13 @@ public class ChordNameInter
     {
         final Point wordCenter = getCenter();
         final MeasureStack stack = system.getStackAt(wordCenter);
-        final AbstractChordInter chordBelow = stack.getStandardChordBelow(wordCenter, getBounds());
+        AbstractChordInter chordBelow = stack.getStandardChordBelow(wordCenter, getBounds());
+
+        // Nothing right below (a long note or rest started earlier): closest chord in staff below,
+        // the export then shifts the harmony to the time of the chord name abscissa
+        if (chordBelow == null) {
+            chordBelow = stack.getStandardChordBelow(wordCenter, null);
+        }
 
         if (chordBelow == null) {
             return null;
@@ -706,8 +712,8 @@ public class ChordNameInter
     //-------//
     public static class Alter
     {
-        /** Alter class. */
-        private static final String CLASS = "[" + FLAT + "b" + SHARP + "#" + "]";
+        /** Alter class. The OCR often reads a flat as an apostrophe. */
+        private static final String CLASS = "[" + FLAT + "b'" + SHARP + "#" + "]";
 
         // For JAXB
         private Alter ()
@@ -724,7 +730,7 @@ public class ChordNameInter
         {
             return switch (str) {
                 case SHARP, "#" -> 1;
-                case FLAT, "b" -> -1;
+                case FLAT, "b", "'" -> -1;
                 case "" -> 0;
                 case null, default -> null;
             };

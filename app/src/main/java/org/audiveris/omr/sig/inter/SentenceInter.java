@@ -452,10 +452,15 @@ public class SentenceInter
                             final Rectangle box = new Rectangle(bounds);
                             box.grow(xGapMax, 0);
 
-                            AbstractChordInter chord = stack.getEventChord(location, box, true);
+                            // Chord in the staff of the direction, within its abscissa range
+                            AbstractChordInter chord = getStaffChord(stack, box, location);
+
+                            if (chord == null) {
+                                chord = stack.getEventChord(location, box, true);
+                            }
 
                             // Above chord is only a rest: a real chord just below is a better host
-                            if (chord instanceof RestChordInter) {
+                            if ((chord instanceof RestChordInter) && (chord.getTopStaff() != staff)) {
                                 final AbstractChordInter below = stack.getStandardChordBelow(
                                         location,
                                         box);
@@ -591,6 +596,44 @@ public class SentenceInter
         }
 
         EnsembleHelper.removeMember(this, member);
+    }
+
+    //---------------//
+    // getStaffChord //
+    //---------------//
+    /**
+     * Report the chord of the sentence staff closest to the sentence, among the chords
+     * within the provided abscissa range, or else among all the staff chords in the stack.
+     *
+     * @param stack    the measure stack
+     * @param box      the abscissa range
+     * @param location the sentence location
+     * @return the chord found, or null if staff is not set or has no chord in the stack
+     */
+    private AbstractChordInter getStaffChord (MeasureStack stack,
+                                              Rectangle box,
+                                              Point2D location)
+    {
+        if (staff == null) {
+            return null;
+        }
+
+        final List<AbstractChordInter> staffChords = new ArrayList<>();
+        final List<AbstractChordInter> inRange = new ArrayList<>();
+
+        for (AbstractChordInter chord : stack.getStandardChords()) {
+            if ((chord.getTopStaff() == staff) || (chord.getBottomStaff() == staff)) {
+                staffChords.add(chord);
+
+                final Rectangle cb = chord.getBounds();
+
+                if ((cb.x <= (box.x + box.width)) && ((cb.x + cb.width) >= box.x)) {
+                    inRange.add(chord);
+                }
+            }
+        }
+
+        return stack.getClosestChord(inRange.isEmpty() ? staffChords : inRange, location);
     }
 
     //-------------//

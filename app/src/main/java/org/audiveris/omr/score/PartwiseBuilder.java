@@ -1445,6 +1445,47 @@ public class PartwiseBuilder
         checkOctaveShift(chord, RIGHT); // Check for octave shift stop
     }
 
+    //-------------//
+    // timeDeltaOf //
+    //-------------//
+    /**
+     * Report the time from the host chord of a chord name to the chord, in any staff of the
+     * stack, whose left side is the closest to the chord name left side.
+     * <p>
+     * Several chord names may stand over the same long note or rest: each one gets the time of
+     * the music written below it.
+     *
+     * @param chordName the chord name
+     * @param host      the chord the chord name is linked to
+     * @return the time delta, or null if none
+     */
+    private static Rational timeDeltaOf (ChordNameInter chordName,
+                                         AbstractChordInter host)
+    {
+        final Rational hostTime = host.getTimeOffset();
+
+        if ((hostTime == null) || (host.getMeasure() == null)) {
+            return null;
+        }
+
+        final double x = chordName.getBounds().x;
+        AbstractChordInter best = host;
+        double bestDx = Math.abs(host.getBounds().x - x);
+
+        for (AbstractChordInter chord : host.getMeasure().getStack().getStandardChords()) {
+            final double dx = Math.abs(chord.getBounds().x - x);
+
+            if ((chord.getTimeOffset() != null) && (dx < bestDx)) {
+                best = chord;
+                bestDx = dx;
+            }
+        }
+
+        final Rational delta = best.getTimeOffset().minus(hostTime);
+
+        return delta.equals(Rational.ZERO) ? null : delta;
+    }
+
     //------------------//
     // processChordName //
     //------------------//
@@ -1477,6 +1518,15 @@ public class PartwiseBuilder
 
             // Staff
             insertStaffId(harmony, staff);
+
+            // Offset, when the chord name stands over the time of another chord in the stack
+            final Rational delta = timeDeltaOf(chordName, current.note.getChord());
+
+            if (delta != null) {
+                final org.audiveris.proxymusic.Offset offset = factory.createOffset();
+                offset.setValue(new BigDecimal(current.page.simpleDurationOf(delta)));
+                harmony.setOffset(offset);
+            }
 
             // Root
             Root root = factory.createRoot();

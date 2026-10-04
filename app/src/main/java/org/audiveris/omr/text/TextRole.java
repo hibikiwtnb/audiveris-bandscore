@@ -216,12 +216,14 @@ public enum TextRole
                 if (tinySentence) {
                     if (isAllChords) {
                         return ChordName;
-                    } else {
+                    } else if (firstSystem && !closeToStaff) {
                         return UnknownRole;
+                    } else {
+                        return Direction;
                     }
                 }
 
-                if (firstSystem) {
+                if (firstSystem && !closeToStaff) {
                     if (leftOfStaves) {
                         if (metronomeAllowed && MetronomeInter.isLikely(line)) {
                             return Metronome;
@@ -232,12 +234,6 @@ public enum TextRole
                         return CreatorComposer;
                     } else if (metronomeAllowed && MetronomeInter.isLikely(line)) {
                         return Metronome;
-                    } else if (closeToStaff) {
-                        if (isAllChords) {
-                            return ChordName;
-                        } else {
-                            return Direction;
-                        }
                     } else if (pageCentered) { // Title, Number
                         if (highText) {
                             return Title;
@@ -245,6 +241,8 @@ public enum TextRole
                             return Number;
                         }
                     }
+                } else if (firstSystem && metronomeAllowed && MetronomeInter.isLikely(line)) {
+                    return Metronome;
                 } else if (isAllChords) {
                     return ChordName;
                 } else {
@@ -270,6 +268,8 @@ public enum TextRole
                             logger.debug("Abnormal part name: {}", line);
                         }
                     }
+
+                    return UnknownRole;
                 } else if (metronomeAllowed && MetronomeInter.isLikely(line)) {
                     return Metronome;
                 } else if (isAllChords) {
@@ -282,21 +282,22 @@ public enum TextRole
                                 || ((partPosition == StaffPosition.ABOVE_STAVES) //
                                         && switches.getValue(ProcessingSwitch.lyricsAboveStaff)))) {
                     return Lyrics;
-                } else if (!tinySentence) {
+                } else {
+                    // Text inside the system belongs to the music, never to the page
                     return Direction;
                 }
 
             case BELOW_STAVES: // Copyright, Lyrics for single-staff part, Direction
-                if (tinySentence) {
+                if (lastSystem && farFromStaff) {
+                    if (pageCentered && shortSentence && !tinySentence) {
+                        return Rights;
+                    }
+
                     return UnknownRole;
                 }
 
                 if (isMainlyItalic) {
                     return Direction;
-                }
-
-                if (pageCentered && shortSentence && lastSystem && farFromStaff) {
-                    return Rights;
                 }
 
                 if (part.getStaves().size() == 1) {
@@ -308,6 +309,8 @@ public enum TextRole
                         return Lyrics;
                     }
                 }
+
+                return Direction;
         }
 
         // Default

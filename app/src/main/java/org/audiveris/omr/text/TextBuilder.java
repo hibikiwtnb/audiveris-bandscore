@@ -236,6 +236,12 @@ public class TextBuilder
 
             if (staff != null) {
                 sentence.setStaff(staff);
+            } else if (role == TextRole.Direction) {
+                // A direction belongs to the staff it is closest to, above or below it
+                final Rectangle box = line.getBounds();
+                staff = system.getClosestStaff(
+                        new Point2D.Double(box.getCenterX(), box.getCenterY()));
+                sentence.setStaff(staff);
             } else {
                 staff = sentence.assignStaff(system, line.getLocation());
             }
@@ -1005,6 +1011,12 @@ public class TextBuilder
         // Discard hi-hat open / closed marks read as text above drum staves
         purgeDrumMarks(longLines);
 
+        // Discard tablature fret numbers read as text
+        purgeTabNumbers(longLines);
+
+        // Discard lines made only of symbols (no letter, no digit)
+        purgeSymbolLines(longLines);
+
         // Partition lines between parts of the system
         partitionPartLines(longLines);
 
@@ -1107,6 +1119,71 @@ public class TextBuilder
                 if (!marks.isEmpty()) {
                     logger.debug("S#{} drum marks {}", system.getId(), marks);
                     line.removeWords(marks);
+
+                    if (line.getWords().isEmpty()) {
+                        it.remove();
+                    }
+                }
+            }
+        }
+    }
+
+    //------------------//
+    // purgeSymbolLines //
+    //------------------//
+    /**
+     * Discard the lines that contain no letter and no digit (dashes, brackets, arrows, dots):
+     * such lines carry no text, they come from lines, slurs or symbols read by the OCR.
+     *
+     * @param lines the lines to purge
+     */
+    private void purgeSymbolLines (List<TextLine> lines)
+    {
+        for (Iterator<TextLine> it = lines.iterator(); it.hasNext();) {
+            final TextLine line = it.next();
+
+            if (line.getValue().codePoints().noneMatch(Character::isLetterOrDigit)) {
+                logger.debug("S#{} symbol line {}", system.getId(), line);
+                it.remove();
+            }
+        }
+    }
+
+    //-----------------//
+    // purgeTabNumbers //
+    //-----------------//
+    /**
+     * Discard the words located within the lines of a tablature staff: there, the OCR can only
+     * read fret numbers.
+     *
+     * @param lines the lines to purge, a line left without words is removed
+     */
+    private void purgeTabNumbers (List<TextLine> lines)
+    {
+        for (Staff staff : system.getStaves()) {
+            if (!staff.isTablature()) {
+                continue;
+            }
+
+            final int top = staff.getFirstLine().getBounds().y;
+            final Rectangle last = staff.getLastLine().getBounds();
+            final int bottom = last.y + last.height;
+
+            for (Iterator<TextLine> it = lines.iterator(); it.hasNext();) {
+                final TextLine line = it.next();
+                final List<TextWord> numbers = new ArrayList<>();
+
+                for (TextWord word : line.getWords()) {
+                    final double y = word.getBounds().getCenterY();
+
+                    if ((y >= top) && (y <= bottom)) {
+                        numbers.add(word);
+                    }
+                }
+
+                if (!numbers.isEmpty()) {
+                    logger.debug("S#{} tablature numbers {}", system.getId(), numbers);
+                    line.removeWords(numbers);
 
                     if (line.getWords().isEmpty()) {
                         it.remove();
