@@ -191,7 +191,7 @@ public class RestInter
         final int left = measure.getAbscissa(HorizontalSide.LEFT, restStaff);
         final int right = measure.getAbscissa(HorizontalSide.RIGHT, restStaff);
         final List<Inter> measureChords = Inters.inters(systemHeadChords, (Inter inter) -> {
-            if (inter.getStaff() != restStaff) {
+            if (inter.isRemoved() || (inter.getStaff() != restStaff)) {
                 return false;
             }
 
@@ -200,11 +200,19 @@ public class RestInter
             return (center.x > left) && (center.x <= right); // Away from left, include right
         });
 
+        final List<Inter> fakeChords = new ArrayList<>();
+
         for (Inter chord : measureChords) {
             if (fatBox.intersects(chord.getBounds())) {
                 double dx = chord.getCenter2D().getX() - restCenter.getX();
 
                 if (Math.abs(dx) < minDx) {
+                    // Void heads weaker than the rest: the head template matched the rest curl
+                    if (isWeakVoidChord(chord, grade)) {
+                        fakeChords.add(chord);
+                        continue;
+                    }
+
                     if (glyph.isVip() || logger.isDebugEnabled()) {
                         logger.info("Discarded stuck rest candidate glyph#{}", glyph.getId());
                     }
@@ -214,6 +222,16 @@ public class RestInter
             }
         }
 
+        for (Inter chord : fakeChords) {
+            logger.debug("Rest glyph#{} replaces weak void chord {}", glyph.getId(), chord);
+
+            for (Inter head : ((HeadChordInter) chord).getMembers()) {
+                head.remove();
+            }
+
+            chord.remove();
+        }
+
         // Pitch value WRT staff
         final double restPitch = restStaff.pitchPositionOf(centroid);
 
@@ -221,6 +239,33 @@ public class RestInter
         restStaff.addNote(restInter);
 
         return restInter;
+    }
+
+    //-----------------//
+    // isWeakVoidChord //
+    //-----------------//
+    /**
+     * Tell whether the provided head chord is made only of void heads, all weaker than a rest
+     * candidate (a quarter rest curl can match the void head template).
+     *
+     * @param chord the head chord stuck to the rest candidate
+     * @param grade the rest candidate grade
+     * @return true if so
+     */
+    private static boolean isWeakVoidChord (Inter chord,
+                                            double grade)
+    {
+        if (!(chord instanceof HeadChordInter headChord) || headChord.getMembers().isEmpty()) {
+            return false;
+        }
+
+        for (Inter head : headChord.getMembers()) {
+            if ((head.getShape() != Shape.NOTEHEAD_VOID) || (head.getGrade() >= grade)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     //~ Inner Classes ------------------------------------------------------------------------------
