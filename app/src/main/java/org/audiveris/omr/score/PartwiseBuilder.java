@@ -257,6 +257,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.regex.Pattern;
 
 /**
  * Class <code>PartwiseBuilder</code> builds a ProxyMusic MusicXML {@link ScorePartwise}
@@ -271,6 +272,12 @@ public class PartwiseBuilder
     private static final Constants constants = new Constants();
 
     private static final Logger logger = LoggerFactory.getLogger(PartwiseBuilder.class);
+
+    /** Glissando text. */
+    private static final Pattern GLISSANDO_MARK = Pattern.compile("(?i)gliss\\.?");
+
+    /** Slide text of guitar scores. */
+    private static final Pattern SLIDE_MARK = Pattern.compile("[Ss]");
 
     /** A future which reflects whether JAXB has been initialized. */
     private static final Future<Void> loading = OmrExecutors.getCachedLowExecutor().submit( () -> {
@@ -1486,6 +1493,105 @@ public class PartwiseBuilder
         return delta.equals(Rational.ZERO) ? null : delta;
     }
 
+    //-----------//
+    // mapSlides //
+    //-----------//
+    /**
+     * Map the "gliss." and "S" (slide) texts of the measure to the two notes they join.
+     * <p>
+     * In each voice, notes and rests go in time order, grace notes just before their chord.
+     * A mark joins the two consecutive chords whose left sides surround its center abscissa;
+     * when one of them is a rest, or none surrounds it (the mark is over the last chord of the
+     * voice), the mark stays a text.
+     *
+     * @param measure the measure being exported
+     */
+    private void mapSlides (Measure measure)
+    {
+        current.slideStarts.clear();
+        current.slideStops.clear();
+        current.slideMarks.clear();
+
+        final SIGraph sig = measure.getStack().getSystem().getSig();
+
+        for (Voice voice : measure.getVoices()) {
+            final List<AbstractChordInter> seq = new ArrayList<>();
+
+            for (AbstractChordInter chord : voice.getChords()) {
+                if (chord instanceof HeadChordInter headChord) {
+                    final SmallChordInter small = headChord.getGraceChord();
+
+                    if (small != null) {
+                        final BeamGroupInter group = small.getBeamGroup();
+
+                        if (group != null) {
+                            seq.addAll(group.getChords());
+                        } else {
+                            seq.add(small);
+                        }
+                    }
+                }
+
+                seq.add(chord);
+            }
+
+            for (AbstractChordInter chord : voice.getChords()) {
+                for (Relation rel : sig.getRelations(chord, ChordSentenceRelation.class)) {
+                    final SentenceInter mark = (SentenceInter) sig.getOppositeInter(chord, rel);
+                    final String value = mark.getValue().trim();
+                    final boolean gliss = GLISSANDO_MARK.matcher(value).matches();
+
+                    if (!gliss && !SLIDE_MARK.matcher(value).matches()) {
+                        continue;
+                    }
+
+                    final double x = mark.getBounds().getCenterX();
+
+                    for (int i = 0; i < (seq.size() - 1); i++) {
+                        final AbstractChordInter from = seq.get(i);
+                        final AbstractChordInter to = seq.get(i + 1);
+
+                        if ((from.getBounds().x <= x) && (x < to.getBounds().x)) {
+                            if (!(from instanceof RestChordInter)
+                                    && !(to instanceof RestChordInter)) {
+                                current.slideStarts.put(from, gliss);
+                                current.slideStops.put(to, gliss);
+                                current.slideMarks.add(mark);
+                            }
+
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    //--------------//
+    // processSlide //
+    //--------------//
+    /**
+     * Add a glissando or slide start / stop to the current note.
+     *
+     * @param gliss true for a glissando (wavy line), false for a slide (straight line)
+     * @param type  start or stop
+     */
+    private void processSlide (boolean gliss,
+                               StartStop type)
+    {
+        if (gliss) {
+            final org.audiveris.proxymusic.Glissando glissando = factory.createGlissando();
+            glissando.setType(type);
+            glissando.setNumber(1);
+            getNotations().getTiedOrSlurOrTuplet().add(glissando);
+        } else {
+            final org.audiveris.proxymusic.Slide slide = factory.createSlide();
+            slide.setType(type);
+            slide.setNumber(1);
+            getNotations().getTiedOrSlurOrTuplet().add(slide);
+        }
+    }
+
     //------------------//
     // processChordName //
     //------------------//
@@ -1627,6 +1733,10 @@ public class PartwiseBuilder
     {
         try {
             logger.debug("Visiting {}", sentence);
+
+            if (current.slideMarks.contains(sentence)) {
+                return; // Exported as a glissando or slide
+            }
 
             final String content = sentence.getValue();
             final Direction direction = factory.createDirection();
@@ -2168,6 +2278,7 @@ public class PartwiseBuilder
 
             current.measure = measure;
             tupletNumbers.clear();
+            mapSlides(measure);
 
             // Measure repeat signs in measure staves?
             final Set<MeasureRepeatInter> repeats = measure.getMeasureRepeats();
@@ -2614,6 +2725,15 @@ public class PartwiseBuilder
                         } else if (rel instanceof ChordNameRelation) {
                             processChordName((ChordNameInter) other);
                         }
+                    }
+
+                    // Glissando or slide from this chord, to this chord
+                    if (current.slideStarts.containsKey(chord)) {
+                        processSlide(current.slideStarts.get(chord), StartStop.START);
+                    }
+
+                    if (current.slideStops.containsKey(chord)) {
+                        processSlide(current.slideStops.get(chord), StartStop.STOP);
                     }
                 }
             } else {
@@ -4355,6 +4475,14 @@ public class PartwiseBuilder
         Notations pmNotations;
 
         final Map<Voice, Integer> voiceIdMap = new HashMap<>();
+
+        // Glissando (true) or slide (false) marks of the measure, by start chord and stop chord
+        final Map<AbstractChordInter, Boolean> slideStarts = new HashMap<>();
+
+        final Map<AbstractChordInter, Boolean> slideStops = new HashMap<>();
+
+        // The mark texts exported as glissando or slide, not as words
+        final Set<SentenceInter> slideMarks = new HashSet<>();
 
         // Cleanup at end of measure
         void endMeasure ()
