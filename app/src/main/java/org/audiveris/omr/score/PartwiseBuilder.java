@@ -2591,6 +2591,7 @@ public class PartwiseBuilder
 
                     repeat.setSlashes(new BigInteger("" + slashes));
                     repeat.setType(StartStop.START);
+                    repeat.setValue(Integer.toString(slashes)); // Measures in pattern (required)
                     measureStyle.setMeasureRepeat(repeat);
 
                     // Sign on a single staff of a multi-staff part?
