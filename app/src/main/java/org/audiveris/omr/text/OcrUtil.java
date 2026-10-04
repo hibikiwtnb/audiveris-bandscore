@@ -100,8 +100,8 @@ public abstract class OcrUtil
             }
 
             throw new IllegalStateException(
-                    "PaddleOCR engine requested (ocrEngine=paddle) but the server at "
-                    + "http://127.0.0.1:8868 is not reachable. "
+                    "PaddleOCR engine requested (ocrEngine=paddle) but " + paddle.identify()
+                    + " is not reachable. "
                     + "Silent fallback to Tesseract is strictly forbidden.");
         } else if (engine.equalsIgnoreCase("tesseract")) {
             return TesseractOCR.getInstance();

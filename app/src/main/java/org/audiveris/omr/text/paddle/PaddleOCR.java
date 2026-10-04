@@ -381,7 +381,7 @@ public class PaddleOCR
     {
         private final Constant.String serverUrl = new Constant.String(
                 "http://127.0.0.1:8868",
-                "Base URL of the local PaddleOCR server");
+                "Base URL of the PaddleOCR server (local or on the LAN)");
 
         private final Constant.Double minConfidence = new Constant.Double(
                 "0..1",
