@@ -137,13 +137,16 @@ public abstract class RehearsalScanner
             final RehearsalInter rehearsal = new RehearsalInter(line.getConfidence(), box);
             rehearsal.setStaff(staff);
 
+            // The frame makes the rehearsal certain, whatever the OCR confidence of its text
             final SIGraph sig = system.getSig();
             sig.addVertex(rehearsal);
+            rehearsal.freeze();
 
             for (TextWord textWord : line.getWords()) {
                 final WordInter word = new WordInter(textWord);
                 word.setStaff(staff);
                 sig.addVertex(word);
+                word.freeze();
                 sig.addEdge(rehearsal, word, new Containment());
             }
 

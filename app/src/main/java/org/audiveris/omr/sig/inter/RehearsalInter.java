@@ -24,7 +24,6 @@ package org.audiveris.omr.sig.inter;
 import org.audiveris.omr.constant.Constant;
 import org.audiveris.omr.constant.ConstantSet;
 import org.audiveris.omr.glyph.Shape;
-import org.audiveris.omr.math.GeoUtil;
 import org.audiveris.omr.sheet.rhythm.Measure;
 import org.audiveris.omr.text.TextRole;
 import org.audiveris.omr.util.Jaxb;
@@ -117,8 +116,7 @@ public class RehearsalInter
     {
         super.added();
 
-        final Point center = GeoUtil.center(enclosure);
-        final Measure measure = staff.getPart().getMeasureAt(center);
+        final Measure measure = staff.getPart().getMeasureAt(getMeasurePoint());
 
         if (measure != null) {
             measure.addInter(this);
@@ -196,13 +194,30 @@ public class RehearsalInter
             return;
         }
 
-        final Measure measure = staff.getPart().getMeasureAt(getCenter());
+        final Measure measure = staff.getPart().getMeasureAt(getMeasurePoint());
 
         if (measure != null) {
             measure.removeInter(this);
         }
 
         super.remove(extensive);
+    }
+
+    //-----------------//
+    // getMeasurePoint //
+    //-----------------//
+    /**
+     * Report the point that decides the containing measure: the middle of the enclosure right
+     * side. A frame stands over the barline that starts its section, its center may be left of
+     * that barline, its right side is past it.
+     *
+     * @return the point to look up the measure
+     */
+    public Point getMeasurePoint ()
+    {
+        final Rectangle box = (enclosure != null) ? enclosure : getBounds();
+
+        return new Point(box.x + box.width - 1, box.y + box.height / 2);
     }
 
     //--------------//

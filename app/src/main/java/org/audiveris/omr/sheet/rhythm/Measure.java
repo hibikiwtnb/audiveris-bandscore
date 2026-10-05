@@ -587,7 +587,8 @@ public class Measure
         final List<Inter> kept = new ArrayList<>();
 
         for (Inter inter : inters) {
-            Point center = inter.getCenter();
+            Point center = (inter instanceof RehearsalInter rehearsal) ? rehearsal
+                    .getMeasurePoint() : inter.getCenter();
 
             // Rough abscissa limits
             if ((center.x < left) || (center.x > right)) {

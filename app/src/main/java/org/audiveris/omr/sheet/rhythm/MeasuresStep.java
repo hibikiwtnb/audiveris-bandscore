@@ -143,7 +143,8 @@ public class MeasuresStep
 
         // Rehearsals, created by TEXTS before measures existed
         for (Inter inter : system.getSig().inters(RehearsalInter.class)) {
-            final Measure measure = inter.getStaff().getPart().getMeasureAt(inter.getCenter());
+            final Measure measure = inter.getStaff().getPart().getMeasureAt(
+                    ((RehearsalInter) inter).getMeasurePoint());
 
             if (measure != null) {
                 measure.addInter(inter);

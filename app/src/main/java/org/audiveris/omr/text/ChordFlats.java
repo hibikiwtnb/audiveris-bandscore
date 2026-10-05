@@ -68,6 +68,9 @@ public abstract class ChordFlats
     /** Root letter height in the template images. */
     public static final int CAP_HEIGHT = 20;
 
+    /** Gray level below which a pixel is ink (to find the root letter). */
+    private static final int INK_GRAY = 160;
+
     /** Loaded templates per folder, per root letter (empty map when none). */
     private static final Map<String, Map<Character, Template>> loaded = new HashMap<>();
 
@@ -187,9 +190,17 @@ public abstract class ChordFlats
             }
 
             final Template template = templates.get(v.charAt(0));
-            final Rectangle root = chars.get(i).getBounds();
+            final Rectangle box = chars.get(i).getBounds();
 
-            if ((template == null) || (root == null) || (root.height < 4)) {
+            if ((template == null) || (box == null)) {
+                continue;
+            }
+
+            // The OCR box of a lone letter may be far off (narrow and high): the letter is the
+            // largest ink piece it touches
+            final Rectangle root = letterInk(gray, box);
+
+            if ((root == null) || (root.height < 4)) {
                 continue;
             }
 
@@ -212,12 +223,89 @@ public abstract class ChordFlats
         if (modified) {
             final StringBuilder sb = new StringBuilder();
             chars.forEach(c -> sb.append(c.getValue()));
-            logger.info("Chord flat: {} -> {}", word.getValue(), sb);
+
+            if (!sb.toString().equals(word.getValue())) {
+                logger.info("Chord flat: {} -> {}", word.getValue(), sb);
+            }
+
             word.setValue(sb.toString());
             word.setBounds(TextItem.boundsOf(chars));
         }
 
         return modified;
+    }
+
+    //-----------//
+    // letterInk //
+    //-----------//
+    /**
+     * Report the bounds of the largest ink piece (gray below INK_GRAY) touching the OCR box,
+     * searched within one box height around it.
+     */
+    private static Rectangle letterInk (ByteProcessor gray,
+                                        Rectangle box)
+    {
+        final int h = box.height;
+        final int ax = Math.max(0, box.x - h);
+        final int ay = Math.max(0, box.y - h);
+        final int aw = Math.min(gray.getWidth(), box.x + box.width + h) - ax;
+        final int ah = Math.min(gray.getHeight(), box.y + box.height + h) - ay;
+
+        if ((aw <= 0) || (ah <= 0)) {
+            return null;
+        }
+
+        final boolean[][] seen = new boolean[ah][aw];
+        final java.util.ArrayDeque<int[]> queue = new java.util.ArrayDeque<>();
+        Rectangle best = null;
+        int bestCount = 0;
+
+        for (int y = box.y; y < box.y + box.height; y++) {
+            for (int x = box.x; x < box.x + box.width; x++) {
+                final int sx = x - ax;
+                final int sy = y - ay;
+
+                if ((sx < 0) || (sy < 0) || (sx >= aw) || (sy >= ah) || seen[sy][sx]
+                        || (gray.get(x, y) >= INK_GRAY)) {
+                    continue;
+                }
+
+                // One ink piece, 8-connected, within the area
+                seen[sy][sx] = true;
+                queue.add(new int[] { sx, sy });
+                int count = 0;
+                int x0 = sx, y0 = sy, x1 = sx, y1 = sy;
+
+                while (!queue.isEmpty()) {
+                    final int[] p = queue.poll();
+                    count++;
+                    x0 = Math.min(x0, p[0]);
+                    y0 = Math.min(y0, p[1]);
+                    x1 = Math.max(x1, p[0]);
+                    y1 = Math.max(y1, p[1]);
+
+                    for (int dy = -1; dy <= 1; dy++) {
+                        for (int dx = -1; dx <= 1; dx++) {
+                            final int nx = p[0] + dx;
+                            final int ny = p[1] + dy;
+
+                            if ((nx >= 0) && (ny >= 0) && (nx < aw) && (ny < ah) && !seen[ny][nx]
+                                    && (gray.get(nx + ax, ny + ay) < INK_GRAY)) {
+                                seen[ny][nx] = true;
+                                queue.add(new int[] { nx, ny });
+                            }
+                        }
+                    }
+                }
+
+                if (count > bestCount) {
+                    bestCount = count;
+                    best = new Rectangle(ax + x0, ay + y0, x1 - x0 + 1, y1 - y0 + 1);
+                }
+            }
+        }
+
+        return best;
     }
 
     //~ Inner Classes ------------------------------------------------------------------------------
