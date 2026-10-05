@@ -1017,6 +1017,9 @@ public class TextBuilder
         // Discard lines made only of symbols (no letter, no digit)
         purgeSymbolLines(longLines);
 
+        // Chord flats missed by the OCR, by the book chord templates (flat key songs)
+        ChordFlats.apply(system.getSheet(), longLines);
+
         // Partition lines between parts of the system
         partitionPartLines(longLines);
 
