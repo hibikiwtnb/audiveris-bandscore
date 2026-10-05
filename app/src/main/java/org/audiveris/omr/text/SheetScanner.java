@@ -54,6 +54,7 @@ import org.slf4j.LoggerFactory;
 import ij.process.ByteProcessor;
 
 import java.awt.BasicStroke;
+import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.Rectangle;
@@ -90,6 +91,9 @@ public class SheetScanner
     /** Buffer used by OCR. */
     private ByteProcessor buffer;
 
+    /** Rehearsal frames found, erased from OCR buffer. */
+    private List<RehearsalScanner.Frame> rehearsalFrames = new ArrayList<>();
+
     //~ Constructors -------------------------------------------------------------------------------
 
     /**
@@ -115,6 +119,17 @@ public class SheetScanner
         return buffer;
     }
 
+    //--------------------//
+    // getRehearsalFrames //
+    //--------------------//
+    /**
+     * @return the rehearsal frames found (erased from the OCR buffer)
+     */
+    public List<RehearsalScanner.Frame> getRehearsalFrames ()
+    {
+        return rehearsalFrames;
+    }
+
     //---------------//
     // getCleanImage //
     //---------------//
@@ -126,8 +141,14 @@ public class SheetScanner
         BufferedImage img = buf.getBufferedImage();
         buffer = new ByteProcessor(img);
 
-        TextsCleaner cleaner = new TextsCleaner(buffer, img.createGraphics(), sheet);
+        final Graphics2D g = img.createGraphics();
+        TextsCleaner cleaner = new TextsCleaner(buffer, g, sheet);
         cleaner.eraseInters();
+
+        // Rehearsal frames, with the text inside, are read apart
+        rehearsalFrames = RehearsalScanner.findFrames(sheet, buffer);
+        g.setColor(Color.WHITE);
+        rehearsalFrames.forEach(f -> g.fill(f.glyph().getBounds()));
 
         // Display for visual check?
         if (constants.displayTexts.isSet() && (OMR.gui != null)) {

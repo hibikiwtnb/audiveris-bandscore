@@ -98,7 +98,7 @@ public class TextsStep
         }
 
         // Make all this available for system-level processing
-        return new Context(scanner.getBuffer(), lines);
+        return new Context(scanner.getBuffer(), lines, scanner.getRehearsalFrames());
     }
 
     //----------//
@@ -111,6 +111,9 @@ public class TextsStep
     {
         // Process texts at system level
         new TextBuilder(system, null).processSystem(context.buffer, context.textLines);
+
+        // Rehearsal marks, from the frames erased before OCR
+        RehearsalScanner.buildRehearsals(system, context.rehearsalFrames);
     }
 
     //--------//
@@ -163,17 +166,23 @@ public class TextsStep
         /** The raw text lines OCR'd. */
         public final List<TextLine> textLines;
 
+        /** The rehearsal frames found. */
+        public final List<RehearsalScanner.Frame> rehearsalFrames;
+
         /**
          * Create a Context object.
          *
          * @param buffer
          * @param textLines
+         * @param rehearsalFrames
          */
         Context (ByteProcessor buffer,
-                 List<TextLine> textLines)
+                 List<TextLine> textLines,
+                 List<RehearsalScanner.Frame> rehearsalFrames)
         {
             this.buffer = buffer;
             this.textLines = textLines;
+            this.rehearsalFrames = rehearsalFrames;
         }
     }
 }

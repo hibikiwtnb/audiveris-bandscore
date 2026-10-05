@@ -29,6 +29,7 @@ import org.audiveris.omr.sheet.Sheet;
 import org.audiveris.omr.sheet.SystemInfo;
 import org.audiveris.omr.sig.inter.Inter;
 import org.audiveris.omr.sig.inter.Inters;
+import org.audiveris.omr.sig.inter.RehearsalInter;
 import org.audiveris.omr.sig.inter.StaffBarlineInter;
 import org.audiveris.omr.sig.ui.AdditionTask;
 import org.audiveris.omr.sig.ui.InterTask;
@@ -139,6 +140,17 @@ public class MeasuresStep
         throws StepException
     {
         new MeasuresBuilder(system).buildMeasures();
+
+        // Rehearsals, created by TEXTS before measures existed
+        for (Inter inter : system.getSig().inters(RehearsalInter.class)) {
+            final Measure measure = inter.getStaff().getPart().getMeasureAt(inter.getCenter());
+
+            if (measure != null) {
+                measure.addInter(inter);
+            } else {
+                logger.info("No containing measure for {}", inter);
+            }
+        }
     }
 
     //--------//

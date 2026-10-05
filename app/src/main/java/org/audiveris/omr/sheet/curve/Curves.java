@@ -159,11 +159,6 @@ public class Curves
             endingsBuilder.buildEndings();
         }
 
-        // Build rehearsals out of segments
-        RehearsalsBuilder rehearsalsBuilder = new RehearsalsBuilder(this);
-        watch.start("buildRehearsals");
-        rehearsalsBuilder.buildRehearsals();
-
         if (constants.printWatch.isSet()) {
             watch.print();
         }
