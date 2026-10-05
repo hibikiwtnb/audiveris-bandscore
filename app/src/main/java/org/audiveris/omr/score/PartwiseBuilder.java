@@ -2541,8 +2541,23 @@ public class PartwiseBuilder
 
                 final Rational restDur = measureRestDuration(stack);
 
+                // Staves with measure-repeat that will copy notes from previous measure
+                final Set<Staff> repeatStaves = new HashSet<>();
+                if (!repeats.isEmpty() && (measure.getPrecedingInScore() != null)) {
+                    boolean hasSpecificStaff = false;
+                    for (MeasureRepeatInter sign : repeats) {
+                        if (sign.getStaff() != null) {
+                            repeatStaves.add(sign.getStaff());
+                            hasSpecificStaff = true;
+                        }
+                    }
+                    if (!hasSpecificStaff) {
+                        repeatStaves.addAll(measure.getPart().getStaves());
+                    }
+                }
+
                 for (Staff staff : measure.getPart().getStaves()) {
-                    if (filled.contains(staff) || (restDur == null)) {
+                    if (filled.contains(staff) || repeatStaves.contains(staff) || (restDur == null)) {
                         continue;
                     }
 

@@ -44,6 +44,7 @@ import org.audiveris.omr.sig.inter.Inter;
 import org.audiveris.omr.sig.inter.KeyAlterInter;
 import org.audiveris.omr.sig.inter.KeyInter;
 import org.audiveris.omr.sig.inter.LedgerInter;
+import org.audiveris.omr.sig.inter.LyricLineInter;
 import org.audiveris.omr.sig.inter.MultipleRestInter;
 import org.audiveris.omr.sig.inter.OctaveShiftInter;
 import org.audiveris.omr.sig.inter.SentenceInter;
@@ -72,6 +73,7 @@ import static java.awt.BasicStroke.CAP_SQUARE;
 import static java.awt.BasicStroke.JOIN_MITER;
 import java.awt.Color;
 import java.awt.Graphics2D;
+import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.Stroke;
 import java.awt.geom.Area;
@@ -301,6 +303,25 @@ public abstract class PageCleaner
                 final int dy = InterlineScale.toPixels(staff.getSpecificInterline(), yMargin);
                 final Area core = StaffManager.getCoreArea(staff, 0, dy);
                 g.fill(core);
+            }
+        }
+    }
+
+    //-------------//
+    // eraseLyrics //
+    //-------------//
+    /**
+     * Erase lyrics areas for the system.
+     *
+     * @param system the system to process
+     */
+    protected void eraseLyrics (SystemInfo system)
+    {
+        for (LyricLineInter line : system.getLyricLines()) {
+            final Rectangle box = line.getBounds();
+            if ((box != null) && !box.isEmpty()) {
+                final int margin = 4;
+                g.fill(new Rectangle(box.x, box.y - margin, box.width, box.height + (2 * margin)));
             }
         }
     }

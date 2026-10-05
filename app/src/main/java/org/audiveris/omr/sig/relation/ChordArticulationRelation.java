@@ -181,11 +181,11 @@ public class ChordArticulationRelation
         private final Scale.Fraction xGapMax_p1 = new Scale.Fraction(1.0, "Idem for profile 1");
 
         private final Scale.Fraction yGapMax = new Scale.Fraction(
-                3.0,
+                1.8,
                 "Maximum vertical gap between articulation center & chord");
 
         @SuppressWarnings("unused")
-        private final Scale.Fraction yGapMax_p1 = new Scale.Fraction(5.0, "Idem for profile 1");
+        private final Scale.Fraction yGapMax_p1 = new Scale.Fraction(2.2, "Idem for profile 1");
 
         private final Scale.Fraction yGapMin = new Scale.Fraction(
                 0.1,

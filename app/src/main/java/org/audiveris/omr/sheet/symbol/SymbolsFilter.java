@@ -330,6 +330,9 @@ public class SymbolsFilter
                 // Erase tablature areas
                 eraseTablatures(system, constants.staffVerticalMargin);
 
+                // Erase lyrics areas
+                eraseLyrics(system);
+
                 // Erase header area on each staff of the system
                 eraseStavesHeader(system, constants.staffVerticalMargin);
 

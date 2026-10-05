@@ -169,6 +169,15 @@ public class ArticulationInter
 
         final Rectangle articBox = getBounds();
         final Point pt = getCenter();
+
+        // Reject immediately if the point falls inside a lyric line
+        for (LyricLineInter line : system.getLyricLines()) {
+            final Rectangle box = line.getBounds();
+            if ((box != null) && box.contains(pt)) {
+                return null;
+            }
+        }
+
         final List<Staff> stavesAround = system.getStavesAround(pt);
 
         // Adjustment for MARCATO/STACCATISSIMO (above): look for chord only *below* the sign
@@ -178,8 +187,10 @@ public class ArticulationInter
 
         if (stavesAround.size() == 2) {
             // The sign is located between 2 staves of the system
-            minY = shape.isAbove() ? pt.y : stavesAround.get(0).getLine(TOP).yAt(pt.x);
-            maxY = shape.isBelow() ? pt.y : stavesAround.get(1).getLine(BOTTOM).yAt(pt.x);
+            final Staff staff0 = stavesAround.get(0);
+            final Staff staff1 = stavesAround.get(1);
+            minY = shape.isAbove() ? pt.y : Math.max(pt.y - maxDy, staff0.getLine(TOP).yAt(pt.x));
+            maxY = shape.isBelow() ? pt.y : Math.min(pt.y + maxDy, staff1.getLine(BOTTOM).yAt(pt.x));
         } else {
             // The sign is related to a single staff
             final Staff theStaff = stavesAround.get(0);
@@ -189,15 +200,15 @@ public class ArticulationInter
                 if (shape.isBelow()) {
                     return null;
                 }
-                minY = shape.isAbove() ? pt.y : pt.y - maxDy;
+                minY = shape.isAbove() ? pt.y : Math.max(pt.y - maxDy, theStaff.getLine(TOP).yAt(pt.x));
                 maxY = theStaff.getLine(BOTTOM).yAt(pt.x);
             } else if (theStaff.isPointBelow(pt)) {
                 // The sign is located below staff
                 if (shape.isAbove()) {
                     return null;
                 }
-                minY = theStaff.getLine(TOP).yAt(pt.x);
-                maxY = shape.isBelow() ? pt.y : pt.y + maxDy;
+                minY = Math.max(pt.y - maxDy, theStaff.getLine(TOP).yAt(pt.x));
+                maxY = shape.isBelow() ? pt.y : Math.min(pt.y + maxDy, theStaff.getLine(BOTTOM).yAt(pt.x));
             } else {
                 // The sign is located within staff height
                 minY = shape.isAbove() ? pt.y : theStaff.getLine(TOP).yAt(pt.x);
