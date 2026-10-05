@@ -123,7 +123,7 @@ public class KeyAgreement
                         final KeyInter key = measure.getKey(staff);
                         final int concert;
 
-                        if (key != null) {
+                        if (key != null && key.getFifths() != null) {
                             concert = key.getFifths() - shift;
                         } else if (systemStart || (inForce == null)) {
                             continue;
