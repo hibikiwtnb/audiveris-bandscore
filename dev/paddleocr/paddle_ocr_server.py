@@ -30,11 +30,13 @@ import numpy as np
 from PIL import Image
 import paddle.inference
 
-# Workaround: PaddlePaddle 3.x on Windows CPU fails in oneDNN instruction when handling
-# pir::ArrayAttribute<pir::DoubleAttribute>. Disabling mkldnn ensures stable native CPU inference.
+# Workaround: PaddlePaddle 3.x CPU fails in oneDNN instruction when handling
+# pir::ArrayAttribute<pir::DoubleAttribute>, an op of the text detection model (seen on Windows
+# and Linux with paddlepaddle 3.3.1): mkldnn is disabled for the detection model only, on Windows
+# for all models. The recognition models keep it, reading twice as fast with the same texts.
 _orig_create_predictor = paddle.inference.create_predictor
 def _safe_create_predictor(config):
-    if hasattr(config, 'disable_mkldnn'):
+    if hasattr(config, 'disable_mkldnn') and (os.name == 'nt' or '_det' in config.prog_file()):
         config.disable_mkldnn()
     return _orig_create_predictor(config)
 paddle.inference.create_predictor = _safe_create_predictor
