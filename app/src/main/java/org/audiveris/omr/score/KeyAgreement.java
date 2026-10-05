@@ -55,6 +55,16 @@ import java.util.regex.Pattern;
  * key of the topmost staff among them. With no vote, the key in force goes on (none yet: C).
  * The staves voting otherwise are reported (WARN): a key signature missed on some staves no
  * longer exports their notes in C.
+ * <p>
+ * A key change inside a system is often read on a few staves only (naturals that cancel the
+ * former key are poorly recognized), and would be overruled by the silent staves until the next
+ * system. Hence, when the key in force wins inside a system while some staff reads there the
+ * very key that the next system clearly starts with, this key is taken from that measure on.
+ * This does not apply to a courtesy key signature printed at the end of the system (last
+ * measure, key in its right half): the change is for the next system.
+ * <p>
+ * A guitar with a capo (parts hint ":capoN") is written N semitones below concert pitch: it
+ * votes and is exported like a transposing instrument.
  */
 public class KeyAgreement
 {
@@ -79,6 +89,12 @@ public class KeyAgreement
     private static final Pattern IN_F = Pattern.compile(
             "^(french |english )?horns?\\b|cor anglais|^(hr|hn|e\\. ?h)\\b");
 
+    /**
+     * Diatonic steps of the interval of N semitones (index N, 1..11) between what a guitar with
+     * a capo on fret N writes and what it sounds: minor second, major second, minor third...
+     */
+    private static final int[] CAPO_STEPS = {0, 1, 1, 2, 2, 3, 3, 4, 5, 5, 6, 6};
+
     //~ Instance fields ----------------------------------------------------------------------------
 
     /** Concert key (fifths) of each measure stack. */
@@ -94,13 +110,23 @@ public class KeyAgreement
     public KeyAgreement (Page page)
     {
         Integer inForce = null;
+        final List<SystemInfo> systems = page.getSystems();
 
-        for (SystemInfo system : page.getSystems()) {
+        for (int index = 0; index < systems.size(); index++) {
+            final SystemInfo system = systems.get(index);
+            final List<MeasureStack> stacks = system.getStacks();
+
+            // The key the next system clearly starts with, if any
+            final Integer nextStart = (index + 1 < systems.size()) ? startKeyOf(
+                    systems.get(index + 1)) : null;
             boolean systemStart = true;
 
-            for (MeasureStack stack : system.getStacks()) {
+            for (MeasureStack stack : stacks) {
                 // Votes in top-down order of the staves: key -> staff ids
                 final Map<Integer, List<Integer>> votes = new LinkedHashMap<>();
+
+                // Keys actually read in this stack: key -> key signatures
+                final Map<Integer, List<KeyInter>> read = new LinkedHashMap<>();
 
                 for (Part part : system.getParts()) {
                     if (isDrums(part)) {
@@ -125,6 +151,7 @@ public class KeyAgreement
 
                         if (key != null && key.getFifths() != null) {
                             concert = key.getFifths() - shift;
+                            read.computeIfAbsent(concert, k -> new ArrayList<>()).add(key);
                         } else if (systemStart || (inForce == null)) {
                             continue;
                         } else {
@@ -150,6 +177,24 @@ public class KeyAgreement
                             if (winner == null) {
                                 winner = entry.getKey();
                             }
+                        }
+                    }
+
+                    // A change read by a few staves only, that the next system confirms
+                    if (!systemStart && (nextStart != null) && (inForce != null) && winner.equals(
+                            inForce) && !nextStart.equals(inForce) && read.containsKey(nextStart)) {
+                        final boolean last = stack == stacks.get(stacks.size() - 1);
+
+                        if (last && isCourtesy(stack, read.get(nextStart))) {
+                            logger.info("{} m{}: key {} at system end is for the next system",
+                                    page.getSheet().getId(), stack.getIdValue(), nextStart);
+                        } else {
+                            logger.info(
+                                    "{} m{}: key {} read on {} of {} staves, as next system starts",
+                                    page.getSheet().getId(), stack.getIdValue(), nextStart,
+                                    votes.get(nextStart).size(),
+                                    votes.values().stream().mapToInt(List::size).sum());
+                            winner = nextStart;
                         }
                     }
 
@@ -187,6 +232,112 @@ public class KeyAgreement
 
     //~ Static Methods -----------------------------------------------------------------------------
 
+    //--------//
+    // capoOf //
+    //--------//
+    /**
+     * Report the capo fret of a part, as given by the parts hint (":capoN").
+     *
+     * @param part the part at hand
+     * @return the capo fret (1..11), or null if none
+     */
+    public static Integer capoOf (Part part)
+    {
+        final Map<String, Integer> capos = PartCollation.getHintedCapos();
+
+        if (capos.isEmpty()) {
+            return null;
+        }
+
+        final LogicalPart logical = part.getLogicalPart();
+        final String name = (logical != null) ? logical.getName() : part.getName();
+
+        return (name != null) ? capos.get(name) : null;
+    }
+
+    //------------//
+    // isCourtesy //
+    //------------//
+    /**
+     * Report whether all these key signatures stand in the right half of the stack: at the
+     * end of a system, such a key announces the key of the next system.
+     */
+    private static boolean isCourtesy (MeasureStack stack,
+                                       List<KeyInter> keys)
+    {
+        final double middle = (stack.getLeft() + stack.getRight()) / 2.0;
+
+        for (KeyInter key : keys) {
+            if (key.getCenter().x <= middle) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    //------------//
+    // startKeyOf //
+    //------------//
+    /**
+     * Report the concert key most read in the first measure stack of a system.
+     *
+     * @return the key (fifths), null if no key is read there or no single key is read most
+     */
+    private static Integer startKeyOf (SystemInfo system)
+    {
+        final List<MeasureStack> stacks = system.getStacks();
+
+        if (stacks.isEmpty()) {
+            return null;
+        }
+
+        final MeasureStack stack = stacks.get(0);
+        final Map<Integer, Integer> counts = new LinkedHashMap<>();
+
+        for (Part part : system.getParts()) {
+            if (isDrums(part)) {
+                continue;
+            }
+
+            final Measure measure = stack.getMeasureAt(part);
+
+            if (measure == null) {
+                continue;
+            }
+
+            final int shift = transpositionOf(part);
+
+            for (Staff staff : part.getStaves()) {
+                if (staff.isTablature() || staff.isOneLineStaff() || staff.isDrum()) {
+                    continue;
+                }
+
+                final KeyInter key = measure.getKey(staff);
+
+                if ((key != null) && (key.getFifths() != null)) {
+                    counts.merge(key.getFifths() - shift, 1, Integer::sum);
+                }
+            }
+        }
+
+        Integer best = null;
+        int bestCount = 0;
+        boolean tie = false;
+
+        for (Map.Entry<Integer, Integer> entry : counts.entrySet()) {
+            if (entry.getValue() > bestCount) {
+                best = entry.getKey();
+                bestCount = entry.getValue();
+                tie = false;
+            } else if (entry.getValue() == bestCount) {
+                tie = true;
+            }
+        }
+
+        return tie ? null : best;
+    }
+
     //---------//
     // isDrums //
     //---------//
@@ -213,12 +364,21 @@ public class KeyAgreement
      * (alto and baritone saxophones) and in F (horn, english horn, named first) are known by name or usual
      * abbreviation. Any other part is at concert pitch. Octave transpositions (guitar, bass,
      * piccolo...) do not change the key.
+     * <p>
+     * A part hinted with a capo (":capoN") comes first: written N semitones below concert
+     * pitch, e.g. capo 1 writes G (1 sharp) for A flat (4 flats), 5 fifths above.
      *
      * @param part the part at hand
      * @return the key shift in fifths (e.g. 2 for an instrument in B flat)
      */
     public static int transpositionOf (Part part)
     {
+        final Integer capo = capoOf(part);
+
+        if (capo != null) {
+            return (12 * CAPO_STEPS[capo]) - (7 * capo);
+        }
+
         final LogicalPart logical = part.getLogicalPart();
         final List<String> names = new ArrayList<>();
 

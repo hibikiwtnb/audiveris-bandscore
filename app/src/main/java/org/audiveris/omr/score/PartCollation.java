@@ -29,9 +29,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -590,11 +592,14 @@ public class PartCollation
      * Build the logical parts defined by the user parts hint, if any.
      * <p>
      * Syntax: parts separated by ';', each part as
-     * <code>name[|abbreviation]:staffCount[:lyrics][:drums][:tab|:tab4][:gmN]</code>, top down.
+     * <code>name[|abbreviation]:staffCount[:lyrics][:drums][:oneline][:tab|:tab4][:gmN][:capoN]</code>,
+     * top down.
      * Names are optional, e.g. "A.Piano|A.pf:2; Strings I|Str. I:1" or "2;1;1".
      * The optional ":lyrics" flag is used by {@link #getHintedLyricsStaves()},
      * the optional ":drums" flag by {@link #getHintedDrumNames()}.
      * The optional ":gmN" flag sets the MIDI program (General MIDI, 1..128) of the part.
+     * The optional ":oneline" flag is used by {@link #hasHintedOneLine()},
+     * the optional ":capoN" flag by {@link #getHintedCapos()}.
      *
      * @return the hinted logicals, or null if no (valid) hint
      */
@@ -651,6 +656,84 @@ public class PartCollation
         } catch (Exception ex) {
             logger.warn("Invalid partsHint constant: \"{}\"", str);
             return null;
+        }
+    }
+
+    //----------------//
+    // getHintedCapos //
+    //----------------//
+    /**
+     * Report the hinted parts flagged ":capoN": a guitar played with a capo on fret N, written
+     * N semitones below what it sounds (e.g. "A.Guitar|A.G.:2:tab:capo1", written in G in a
+     * score in A flat).
+     * <p>
+     * Such a part keeps its own written key, while the other parts share the concert key.
+     *
+     * @return the capo fret (1..11) per (main) name of the flagged parts, perhaps empty
+     */
+    public static Map<String, Integer> getHintedCapos ()
+    {
+        final Map<String, Integer> capos = new HashMap<>();
+        final String str = constants.partsHint.getValue();
+
+        if ((str == null) || str.isBlank()) {
+            return capos;
+        }
+
+        try {
+            for (String token : str.split(";")) {
+                token = token.trim();
+
+                if (token.isEmpty()) {
+                    continue;
+                }
+
+                final HintEntry entry = HintEntry.parse(token);
+
+                if ((entry.capo != null) && !entry.names.isEmpty()) {
+                    capos.put(entry.names.split("\\|")[0].trim(), entry.capo);
+                }
+            }
+
+            return capos;
+        } catch (Exception ex) {
+            return new HashMap<>();
+        }
+    }
+
+    //------------------//
+    // hasHintedOneLine //
+    //------------------//
+    /**
+     * Report whether the parts hint flags a part ":oneline": a part printed on a one-line
+     * (percussion) staff.
+     * <p>
+     * One-line staves are searched for only when the user says there is one: otherwise, a
+     * 5-line staff whose lines were not clustered could leave a single long line, taken as a
+     * one-line staff.
+     *
+     * @return true if at least one hinted part is flagged ":oneline"
+     */
+    public static boolean hasHintedOneLine ()
+    {
+        final String str = constants.partsHint.getValue();
+
+        if ((str == null) || str.isBlank()) {
+            return false;
+        }
+
+        try {
+            for (String token : str.split(";")) {
+                token = token.trim();
+
+                if (!token.isEmpty() && HintEntry.parse(token).oneLine) {
+                    return true;
+                }
+            }
+
+            return false;
+        } catch (Exception ex) {
+            return false;
         }
     }
 
@@ -1020,20 +1103,25 @@ public class PartCollation
         private final Constant.String partsHint = new Constant.String(
                 "",
                 "Parts of the score, top down, as"
-                        + " \"name[|abbrev]:staffCount[:lyrics][:drums][:tab|:tab4][:gmN]\""
+                        + " \"name[|abbrev]:staffCount[:lyrics][:drums][:oneline][:tab|:tab4][:gmN][:capoN]\""
                         + " separated by ';' (e.g. \"Vocal:1:lyrics; Guitar:2:tab; Drums|Dr.:1:drums\")."
                         + " ':lyrics' restricts lyrics to the flagged parts,"
                         + " ':drums' exports the flagged part as drum set,"
+                        + " ':oneline' tells that the part is printed on a one-line staff"
+                        + " (one-line staves are searched for only with this flag),"
                         + " ':tab' (':tab4') tells that the last staff of the part is a 6-line"
                         + " (4-line) tablature, ':gmN' sets the MIDI program (General MIDI, 1..128)"
-                        + " of the part. Empty means no hint.");
+                        + " of the part, ':capoN' tells that the part is a guitar with a capo on"
+                        + " fret N (1..11), written N semitones below concert pitch."
+                        + " Empty means no hint.");
     }
 
     //-----------//
     // HintEntry //
     //-----------//
     /**
-     * One part of the parts hint: "name[|abbrev]:staffCount[:lyrics][:drums][:tab|:tab4][:gmN]".
+     * One part of the parts hint:
+     * "name[|abbrev]:staffCount[:lyrics][:drums][:oneline][:tab|:tab4][:gmN][:capoN]".
      */
     private static class HintEntry
     {
@@ -1051,12 +1139,20 @@ public class PartCollation
         /** MIDI program (General MIDI, 1..128), or null if not given. */
         final Integer program;
 
+        /** Printed on a one-line staff. */
+        final boolean oneLine;
+
+        /** Capo fret (1..11) of a guitar written below concert pitch, or null if none. */
+        final Integer capo;
+
         HintEntry (String names,
                    int staffCount,
                    boolean lyrics,
                    boolean drums,
                    int tabLines,
-                   Integer program)
+                   Integer program,
+                   boolean oneLine,
+                   Integer capo)
         {
             this.names = names;
             this.staffCount = staffCount;
@@ -1064,6 +1160,8 @@ public class PartCollation
             this.drums = drums;
             this.tabLines = tabLines;
             this.program = program;
+            this.oneLine = oneLine;
+            this.capo = capo;
         }
 
         static HintEntry parse (String token)
@@ -1073,6 +1171,8 @@ public class PartCollation
             boolean drums = false;
             int tabLines = 0;
             Integer program = null;
+            boolean oneLine = false;
+            Integer capo = null;
             int last = fields.length - 1;
 
             // Trailing flags, after the staff count
@@ -1087,6 +1187,15 @@ public class PartCollation
                     tabLines = 6;
                 } else if (flag.equalsIgnoreCase("tab4")) {
                     tabLines = 4;
+                } else if (flag.equalsIgnoreCase("oneline")) {
+                    oneLine = true;
+                } else if (flag.matches("(?i)capo\\d+")) {
+                    capo = Integer.parseInt(flag.substring(4));
+
+                    if ((capo < 1) || (capo > 11)) {
+                        throw new IllegalArgumentException(
+                                "partsHint ':capo' needs 1..11: " + flag);
+                    }
                 } else if (flag.matches("(?i)gm\\d+")) {
                     program = Integer.parseInt(flag.substring(2));
 
@@ -1112,7 +1221,19 @@ public class PartCollation
                 throw new IllegalArgumentException("partsHint ':tab' needs 2 staves or more");
             }
 
-            return new HintEntry(names, staffCount, lyrics, drums, tabLines, program);
+            if ((capo != null) && names.isEmpty()) {
+                throw new IllegalArgumentException("partsHint ':capo' needs a part name");
+            }
+
+            return new HintEntry(
+                    names,
+                    staffCount,
+                    lyrics,
+                    drums,
+                    tabLines,
+                    program,
+                    oneLine,
+                    capo);
         }
     }
 

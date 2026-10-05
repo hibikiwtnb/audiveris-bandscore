@@ -197,8 +197,10 @@ public class LinesRetriever
     // addHintedOneLines //
     //-------------------//
     /**
-     * With a parts hint, a one-line staff is any long horizontal line left out of the
-     * clusters, alone in its vertical neighborhood.
+     * With a parts hint that flags a part ":oneline", a one-line staff is any long horizontal
+     * line left out of the clusters, alone in its vertical neighborhood.
+     * Without this flag no one-line staff is searched for: a 5-line staff whose lines were not
+     * clustered could leave one long line alone, and become a one-line staff.
      * <p>
      * Long: at least 0.8 of the median cluster width.
      * Alone: no staff line and no other long line within 2.5 interlines (this keeps out the
@@ -1647,7 +1649,7 @@ public class LinesRetriever
             }
 
             // Parts hint: one-line (percussion) staves
-            if ((PartCollation.getHintedStaffCount() != null) && !sheet.getStub()
+            if (PartCollation.hasHintedOneLine() && !sheet.getStub()
                     .getProcessingSwitches().getValue(ProcessingSwitch.oneLineStaves)) {
                 addHintedOneLines();
             }
