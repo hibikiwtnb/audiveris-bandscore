@@ -44,6 +44,7 @@ import org.audiveris.omr.sheet.Scale.InterlineScale;
 import org.audiveris.omr.sheet.Sheet;
 import org.audiveris.omr.sheet.Staff;
 import org.audiveris.omr.sheet.SystemInfo;
+import org.audiveris.omr.sheet.grid.LineInfo;
 import org.audiveris.omr.sheet.header.StaffHeader;
 import org.audiveris.omr.sig.SIGraph;
 import org.audiveris.omr.sig.inter.KeyAlterInter;
@@ -254,6 +255,8 @@ public class KeyExtractor
      * of 'coreLength' with a black ratio of at least 'minBlackRatio'.
      * <p>
      * A row is considered as black if it contains at least one black pixel.
+     * The rows of a staff line the "stem" crosses are black when the line removal erased them:
+     * on thick staff lines, the gaps left in a flat stem would otherwise fail the black ratio.
      *
      * @param area          the vertical very narrow rectangle of interest
      * @param coreLength    minimum "stem" length
@@ -276,6 +279,31 @@ public class KeyExtractor
                     blacks[y] = true;
 
                     break;
+                }
+            }
+        }
+
+        // Rows of the staff lines crossed: black in the binary image, erased in the staff-free one
+        final ByteProcessor binary = sheet.getPicture().getSource(Picture.SourceKey.BINARY);
+        final int xMid = safeArea.x + (safeArea.width / 2);
+        final int halfLine = (sheet.getScale().getMaxFore() + 1) / 2;
+
+        for (LineInfo line : staff.getLines()) {
+            final int yLine = line.yAt(xMid);
+
+            for (int y = yLine - halfLine; y <= (yLine + halfLine); y++) {
+                final int row = y - safeArea.y;
+
+                if ((row < 0) || (row >= safeArea.height) || blacks[row]) {
+                    continue;
+                }
+
+                for (int x = 0; x < safeArea.width; x++) {
+                    if (binary.get(safeArea.x + x, y) == 0) {
+                        blacks[row] = true;
+
+                        break;
+                    }
                 }
             }
         }
