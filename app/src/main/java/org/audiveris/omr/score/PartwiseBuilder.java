@@ -2121,6 +2121,11 @@ public class PartwiseBuilder
         current.instrumentMap = current.drumInstruments.get(logicalPart);
         current.keys.clear();
 
+        // A sequence of measure repeats belongs to its part: it goes on in the same part on the
+        // next page, and must not leak into the next part of this page
+        current.repeatStarted = current.partRepeatStarted.getOrDefault(logicalPart, false);
+        current.repeatStyleNumber = current.partRepeatStyleNumber.get(logicalPart);
+
         // Delegate to children the filling of measures
         logger.debug("Populating {}", logicalPart);
         isFirst.system = true;
@@ -2132,6 +2137,9 @@ public class PartwiseBuilder
         for (SystemInfo system : current.page.getSystems()) {
             processSystem(system);
         }
+
+        current.partRepeatStarted.put(logicalPart, current.repeatStarted);
+        current.partRepeatStyleNumber.put(logicalPart, current.repeatStyleNumber);
     }
 
     //---------------//
@@ -4472,6 +4480,11 @@ public class PartwiseBuilder
         Set<Integer> repeatStaves; // Indices in part of staves to copy, when repeatCopying
 
         BigInteger repeatStyleNumber; // Staff number of current measure-repeat style, if any
+
+        // Per part: repeatStarted and repeatStyleNumber at the end of its last page exported
+        final Map<LogicalPart, Boolean> partRepeatStarted = new HashMap<>();
+
+        final Map<LogicalPart, BigInteger> partRepeatStyleNumber = new HashMap<>();
 
         Rational measureEndCounter; // Time counter at end of last exported voice in measure
 

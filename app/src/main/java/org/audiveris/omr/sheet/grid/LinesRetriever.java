@@ -1126,6 +1126,30 @@ public class LinesRetriever
         }
     }
 
+    //---------//
+    // getBend //
+    //---------//
+    /**
+     * Report how far the filament goes from the straight line between its two ends.
+     *
+     * @param fil the filament
+     * @return the maximum distance (in pixels), over 50 equal steps
+     */
+    private static double getBend (StaffFilament fil)
+    {
+        final Point2D p1 = fil.getStartPoint();
+        final Point2D p2 = fil.getStopPoint();
+        final double slope = (p2.getY() - p1.getY()) / (p2.getX() - p1.getX());
+        double bend = 0;
+
+        for (int i = 0; i <= 50; i++) {
+            final double x = p1.getX() + (((p2.getX() - p1.getX()) * i) / 50);
+            bend = Math.max(bend, Math.abs(fil.yAt(x) - (p1.getY() + (slope * (x - p1.getX())))));
+        }
+
+        return bend;
+    }
+
     //---------------//
     // purgeClusters //
     //---------------//
@@ -1138,7 +1162,7 @@ public class LinesRetriever
      * Test for discarding candidates (any condition may apply)
      * <ul>
      * <li>Being way too short (shorter than minStaffLength, applies to ANY cluster)
-     * <li>Being sloped (test performed only on non-sloped sheets)
+     * <li>Being bent (a chain of long ties, not a straight line)
      * <li>Being almost void (many holes in it)
      * <li>No significant barline peak found.
      * NOTA: this last condition is not tested here, but later in {@link PeakGraph.findBarPeaks()}.
@@ -1160,22 +1184,16 @@ public class LinesRetriever
                 .filter(cl -> cl.isOneLine()) //
                 .collect(Collectors.toList());
 
-        if (globalSlope == 0) {
-            // For nearly-horizontal scores, be very strict on cluster slope
-            final Integer line = scale.getFore();
-            if (line != null) {
-                final List<LineCluster> slopedOneLines = oneLines.stream() //
-                        .filter(cl -> {
-                            final Rectangle bounds = cl.getBounds();
-                            final double slope = (double) (bounds.height - line) / bounds.width;
-                            return Math.abs(slope) > params.maxOneLineSlope;
-                        }) //
-                        .peek(cl -> logger.info("Too sloped {} at {}", cl, cl.getBounds())) //
-                        .collect(Collectors.toList());
-                allClusters.removeAll(slopedOneLines);
-                oneLines.removeAll(slopedOneLines);
-            }
-        }
+        // A staff line is straight, even on a warped page where it follows the warp with a slope
+        // of its own (054: a one-line staff at 0.0023 below a staff at 0.0012, on a page whose
+        // mean slope is 0). A chain of long ties left out of the clusters is not: it bends by
+        // about one interline, while one-line staves bend by less than 3 pixels.
+        final List<LineCluster> bentOneLines = oneLines.stream() //
+                .filter(cl -> getBend(cl.getFirstLine()) > params.maxOneLineBend) //
+                .peek(cl -> logger.info("Too bent {} at {}", cl, cl.getBounds())) //
+                .collect(Collectors.toList());
+        allClusters.removeAll(bentOneLines);
+        oneLines.removeAll(bentOneLines);
 
         {
             // Avoid near empty lines
@@ -1690,10 +1708,9 @@ public class LinesRetriever
                 0.025,
                 "Maximum delta slope between filament and sheet");
 
-        private final Constant.Double maxOneLineSlope = new Constant.Double(
-                "tangent",
-                0.001,
-                "Maximum absolute slope value for a 1-line staff on perfect sheet");
+        private final Scale.Fraction maxOneLineBend = new Scale.Fraction(
+                0.4,
+                "Maximum distance of a 1-line staff from the straight line between its ends");
 
         private final Constant.Ratio minTrueLengthRatio = new Constant.Ratio(
                 0.3,
@@ -1936,7 +1953,7 @@ public class LinesRetriever
         final double minSlope;
 
         /** Maximum absolute slope for a 1-line staff on a perfect sheet. */
-        final double maxOneLineSlope;
+        final double maxOneLineBend;
 
         /** Minimum polished radius. */
         final int minRadius;
@@ -1982,7 +1999,7 @@ public class LinesRetriever
             maxStickerExtension = (int) Math.ceil(
                     scale.toPixelsDouble(constants.maxStickerExtension));
             minSlope = constants.minSlope.getValue();
-            maxOneLineSlope = constants.maxOneLineSlope.getValue();
+            maxOneLineBend = scale.toPixelsDouble(constants.maxOneLineBend);
             minTrueLengthRatio = constants.minTrueLengthRatio.getValue();
 
             if (logger.isDebugEnabled()) {

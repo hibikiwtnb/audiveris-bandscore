@@ -180,6 +180,17 @@ public class RestInter
             return null;
         }
 
+        // A whole or half rest is a small block, about one interline wide: a much wider glyph
+        // is something else (054: the text "(Handclap)" above a one-line staff, 4.8 interlines)
+        if ((shape == Shape.WHOLE_REST) || (shape == Shape.HALF_REST)) {
+            final double maxWidth = constants.maxBlockRestWidth.getValue() * restStaff
+                    .getSpecificInterline();
+
+            if (glyph.getBounds().width > maxWidth) {
+                return null;
+            }
+        }
+
         // Check horizontal position WRT head-chords
         final int minDx = system.getSheet().getScale().toPixels(constants.minInterChordDx);
         final Rectangle glyphBox = glyph.getBounds();
@@ -284,5 +295,9 @@ public class RestInter
         private final Scale.Fraction minInterChordDx = new Scale.Fraction(
                 0.5,
                 "Minimum horizontal delta between two chords");
+
+        private final Constant.Ratio maxBlockRestWidth = new Constant.Ratio(
+                2.5,
+                "Maximum width of a whole or half rest, in staff interlines");
     }
 }
