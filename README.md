@@ -150,7 +150,7 @@ Audiveris 是成熟的開源 OMR 引擎，對古典譜（IMSLP 類）效果很�
 | 改進 | 效果 | 設定 |
 |---|---|---|
 | 批次處理加速 | • 批次執行時不再每個步驟都存檔，整本在最後存一次，速度更快、結果不變 | 預設 |
-| OCR 加速 | • PP-OCR 在 CPU 上的文字辨識速度提升約一倍<br>• PP-OCR 現在可以用 GPU 執行，每頁 OCR 從約 50 秒縮短到約 3 秒，結果和 CPU 完全相同 | GPU 需要 [`--device`](USAGE.md#paddleocr-服務) |
+| OCR 加速 | • PP-OCR 在 CPU 上現在能使用 oneDNN 加速（Windows 除外）<br>• PP-OCR 現在可以用 GPU 執行，每頁 OCR 從約 50 秒縮短到約 3 秒，結果和 CPU 完全相同 | GPU 需要 [`--device`](USAGE.md#paddleocr-服務) |
 
 ---
 
