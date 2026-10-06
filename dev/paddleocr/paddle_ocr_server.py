@@ -2,7 +2,7 @@
 """Local PP-OCRv5 server for Audiveris (engine selected by OcrUtil.ocrEngine=paddle).
 
     python paddle_ocr_server.py [--port 8868] [--rec en_PP-OCRv5_mobile_rec]
-                                [--lyrics-rec PP-OCRv5_server_rec]
+                                [--lyrics-rec PP-OCRv5_server_rec] [--device gpu:0]
 
 GET  /health  -> "ok <det> <rec> lyrics=<lyrics-rec>"
 POST /ocr     body = PNG/TIFF image bytes
@@ -24,6 +24,10 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 os.environ.setdefault('PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK', 'True')
+# On GPU (--device gpu:N), full fp32: with TF32 (Ampere default) and free cuDNN algorithms the
+# texts differ from the CPU (e.g. chord Eb read E\); without, the same texts, boxes and scores
+os.environ.setdefault('NVIDIA_TF32_OVERRIDE', '0')
+os.environ.setdefault('FLAGS_cudnn_deterministic', '1')
 
 import cv2
 import numpy as np
@@ -177,10 +181,10 @@ def refine_chars(gray, word):
 
 
 class Engine:
-    def __init__(self, det, rec):
+    def __init__(self, det, rec, device):
         self.name = f'{det} {rec}'
         self.lock = threading.Lock()
-        self.ocr = PaddleOCR(text_detection_model_name=det, text_recognition_model_name=rec,
+        self.ocr = PaddleOCR(text_detection_model_name=det, text_recognition_model_name=rec, device=device,
                              use_doc_orientation_classify=False, use_doc_unwarping=False,
                              use_textline_orientation=False, return_word_box=True)
 
@@ -231,9 +235,9 @@ class LyricsReader:
     SMALL_SIZE = 0.76
     LARGE_SIZE = 0.9
 
-    def __init__(self, rec):
+    def __init__(self, rec, device):
         self.lock = threading.Lock()
-        self.model = create_model(model_name=rec)
+        self.model = create_model(model_name=rec, device=device)
         self.decoder = self.model._predictor.post_op
         index = {ch: i for i, ch in enumerate(self.decoder.character)}
         self.other_form = {index[a]: index[b] for a, b in list(SMALL.items()) + list(LARGE.items())
@@ -402,9 +406,10 @@ def main():
     ap.add_argument('--det', default='PP-OCRv5_mobile_det')
     ap.add_argument('--rec', default='en_PP-OCRv5_mobile_rec')
     ap.add_argument('--lyrics-rec', default='PP-OCRv5_server_rec')
+    ap.add_argument('--device', default='cpu', help='cpu, or gpu:N with paddlepaddle-gpu')
     args = ap.parse_args()
-    engine = Engine(args.det, args.rec)
-    lyrics = LyricsReader(args.lyrics_rec)
+    engine = Engine(args.det, args.rec, args.device)
+    lyrics = LyricsReader(args.lyrics_rec, args.device)
 
     class Handler(BaseHTTPRequestHandler):
         def _send(self, code, body):
