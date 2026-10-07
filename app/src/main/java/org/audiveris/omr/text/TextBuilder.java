@@ -223,7 +223,7 @@ public class TextBuilder
 
         for (TextLine line : textLines) {
             final List<WordInter> createdWords = new ArrayList<>();
-            final TextRole role = line.getRole();
+            final TextRole role = line.getRole() != null ? line.getRole() : TextRole.Direction;
             final SentenceInter sentence = switch (role) {
                 case Lyrics -> LyricLineInter.create(line);
                 case ChordName -> ChordNameInter.create(line);
