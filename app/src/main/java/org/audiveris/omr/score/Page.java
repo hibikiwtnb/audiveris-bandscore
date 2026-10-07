@@ -195,7 +195,13 @@ public class Page
 
             // Compute greatest duration divisor for the page
             Rational[] durationArray = durations.toArray(new Rational[durations.size()]);
-            Rational divisor = Rational.gcd(durationArray);
+            Rational divisor = (durationArray.length == 0) ? Rational.QUARTER
+                    : Rational.gcd(durationArray);
+            if (divisor.den < 4) {
+                // Make a quarter note representable (divisions >= 1): a page whose shortest
+                // duration is a half or whole note otherwise exports divisions="0"
+                divisor = Rational.gcd(divisor, Rational.QUARTER);
+            }
             logger.debug("durations={} divisor={}", Arrays.deepToString(durationArray), divisor);
 
             return divisor.den;
