@@ -29,6 +29,7 @@ import org.audiveris.omr.sheet.Staff;
 import org.audiveris.omr.sheet.SystemInfo;
 import org.audiveris.omr.sheet.clef.ClefBuilder;
 import org.audiveris.omr.sheet.key.KeyColumn;
+import org.audiveris.omr.sheet.key.KeyTemplates;
 import org.audiveris.omr.sheet.time.HeaderTimeColumn;
 import org.audiveris.omr.sig.SIGraph;
 import org.audiveris.omr.sig.inter.BarlineInter;
@@ -285,6 +286,9 @@ public class HeaderBuilder
 
         // We should be able now to select the best clef for each staff
         clefColumn.selectClefs();
+
+        // Key signatures read again with the book templates, if any
+        KeyTemplates.reread(system);
 
         // Purge barline inters found within headers
         purgeBarlines();

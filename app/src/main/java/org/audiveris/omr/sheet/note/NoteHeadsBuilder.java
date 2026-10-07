@@ -1315,6 +1315,21 @@ public class NoteHeadsBuilder
         return withCrosses(shapes, ShapeSet.getTemplateNotesStem(null));
     }
 
+    //------------------//
+    // hintedDrumStaves //
+    //------------------//
+    /**
+     * Report the staves of this system that the parts hint flags as drums (for the key
+     * signature templates, which skip them).
+     *
+     * @param system the system at hand
+     * @return the flagged staves, perhaps empty
+     */
+    public static Set<Staff> hintedDrumStaves (SystemInfo system)
+    {
+        return getHintedDrumStaves(system);
+    }
+
     //---------------------//
     // getHintedDrumStaves //
     //---------------------//

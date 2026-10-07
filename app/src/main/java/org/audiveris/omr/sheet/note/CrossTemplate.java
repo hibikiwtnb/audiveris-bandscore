@@ -371,13 +371,13 @@ public class CrossTemplate
      * where white above and below: the same rule as tools/learn_template.py, so that page and
      * template look alike.
      */
-    private static class Band
+    public static class Band
     {
         final int x0, y0, w, hgt;
 
         final float[][] dark; // [y - y0][x - x0], 0 white .. 1 black
 
-        Band (ByteProcessor image,
+        public Band (ByteProcessor image,
               Staff staff,
               int x0,
               int x1,
@@ -466,7 +466,7 @@ public class CrossTemplate
         }
 
         /** Darkness at (x, y), 0 outside the band. */
-        double at (int x,
+        public double at (int x,
                    int y)
         {
             final int bx = x - x0;
