@@ -533,7 +533,11 @@ public class MeasureRhythm
      */
     public boolean process ()
     {
-        final boolean ok = doProcess();
+        boolean ok = doProcess();
+
+        if (ParenthesizedChords.dropLaterPasses(measure)) {
+            ok = doProcess();
+        }
 
         if (removeMisfitTuplets()) {
             return doProcess();
