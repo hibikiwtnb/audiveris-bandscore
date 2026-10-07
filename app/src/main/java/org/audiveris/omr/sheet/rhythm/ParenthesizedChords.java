@@ -83,9 +83,9 @@ public class ParenthesizedChords
 
     private static final Logger logger = LoggerFactory.getLogger(ParenthesizedChords.class);
 
-    /** Later-pass texts: "2x", "3X", "D.S.x", "D.C.x". */
+    /** Later-pass texts: "2x", "3X", "D.S.x", "D.C.x" ("1x" is the first pass). */
     private static final Pattern LATER_PASS = Pattern.compile(
-            "(?i)(?<![a-z0-9])([1-9]\\s*[x×]|D\\.?\\s*[SC]\\.?\\s*[x×])(?![a-z])");
+            "(?i)(?<![a-z0-9])([2-9]\\s*[x×]|D\\.?\\s*[SC]\\.?\\s*[x×])(?![a-z])");
 
     //~ Instance fields ----------------------------------------------------------------------------
 
