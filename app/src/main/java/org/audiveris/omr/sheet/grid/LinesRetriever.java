@@ -300,6 +300,53 @@ public class LinesRetriever
         }
     }
 
+    //-------------------//
+    // useStaffInterline //
+    //-------------------//
+    /**
+     * Band scores have no small (cue, ossia) staff: all 5-line staves have the same size, while
+     * their tablatures may be printed with wider line spacing. The sheet interline is the one
+     * of most 5-line staves, and no staff is flagged small.
+     * <p>
+     * Otherwise, with tablatures of wider spacing, the interline measured on the whole sheet
+     * could be the tablature one, and all 5-line staves were taken as small staves: their
+     * ledgers and the heads on them were mostly missed.
+     */
+    private void useStaffInterline ()
+    {
+        final long large = clustersRetriever.getClusters().stream()
+                .filter(cl -> cl.getSize() == 5).count();
+        final long small = smallClustersRetriever.getClusters().stream()
+                .filter(cl -> cl.getSize() == 5).count();
+        final Scale sheetScale = sheet.getScale();
+
+        final Scale newScale;
+
+        if ((small > large) && (smallClustersRetriever.getInterline() < clustersRetriever
+                .getInterline())) {
+            logger.info("Interline {} of the 5-line staves, not {}",
+                    smallClustersRetriever.getInterline(), clustersRetriever.getInterline());
+            newScale = new Scale(
+                    sheetScale.getSmallInterlineScale(),
+                    sheetScale.getLineScale(),
+                    (sheetScale.getSmallBeamScale() != null) ? sheetScale.getSmallBeamScale()
+                            : sheetScale.getBeamScale(),
+                    null,
+                    null);
+            newScale.setOtherInterlineScale(sheetScale.getInterlineScale());
+        } else {
+            newScale = new Scale(
+                    sheetScale.getInterlineScale(),
+                    sheetScale.getLineScale(),
+                    sheetScale.getBeamScale(),
+                    null,
+                    null);
+            newScale.setOtherInterlineScale(sheetScale.getSmallInterlineScale());
+        }
+
+        sheet.setScale(newScale);
+    }
+
     //----------------//
     // countFiveLines //
     //----------------//
@@ -331,13 +378,9 @@ public class LinesRetriever
         final List<LineCluster> allClusters = new ArrayList<>();
         allClusters.addAll(clustersRetriever.getClusters());
 
-        Integer smallInterline = null;
-
         if (smallClustersRetriever != null) {
             allClusters.addAll(smallClustersRetriever.getClusters());
-            smallInterline = Math.min(
-                    clustersRetriever.getInterline(),
-                    smallClustersRetriever.getInterline());
+            useStaffInterline();
         }
 
         // Discard false 1-line clusters
@@ -387,11 +430,6 @@ public class LinesRetriever
             };
 
             staffManager.addStaff(staff);
-
-            // Flag small staff if any (smaller height than others)
-            if ((smallInterline != null) && (smallInterline == cluster.getInterline())) {
-                staff.setSmall();
-            }
         }
 
         // Flag short staves (side by side) if any

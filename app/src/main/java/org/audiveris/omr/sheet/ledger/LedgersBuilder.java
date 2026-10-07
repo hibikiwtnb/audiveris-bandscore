@@ -1125,6 +1125,13 @@ public class LedgersBuilder
             if (small != null) {
                 map.put(small, new LedgerSuite(sheetScale.getSmallInterlineScale()));
             }
+
+            // Tablatures of wider line spacing
+            final Scale.InterlineScale other = sheetScale.getOtherInterlineScale();
+
+            if ((other != null) && !map.containsKey(other.main)) {
+                map.put(other.main, new LedgerSuite(other));
+            }
         }
 
         LedgerSuite getSuite (int interline)

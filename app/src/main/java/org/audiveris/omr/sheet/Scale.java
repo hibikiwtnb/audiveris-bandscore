@@ -181,6 +181,13 @@ public class Scale
     @XmlElement(name = "small-interline")
     private InterlineScale smallInterlineScale;
 
+    /**
+     * Interline of the staves that are neither large nor small (tablatures of wider line
+     * spacing than the 5-line staves), if any: known for their own scale, never a small staff.
+     */
+    @XmlElement(name = "other-interline")
+    private InterlineScale otherInterlineScale;
+
     /** Typical thickness of beams and beam hooks. */
     @XmlElement(name = "beam")
     private BeamScale beamScale;
@@ -386,7 +393,37 @@ public class Scale
             return smallInterlineScale;
         }
 
+        if ((otherInterlineScale != null) && (otherInterlineScale.main == interline)) {
+            return otherInterlineScale;
+        }
+
         throw new IllegalArgumentException("No interline scale for provided value " + interline);
+    }
+
+    //------------------------//
+    // getOtherInterlineScale //
+    //------------------------//
+    /**
+     * Report the interline scale of staves that are neither large nor small, if any.
+     *
+     * @return the scale, perhaps null
+     */
+    public InterlineScale getOtherInterlineScale ()
+    {
+        return otherInterlineScale;
+    }
+
+    //------------------------//
+    // setOtherInterlineScale //
+    //------------------------//
+    /**
+     * Remember the interline scale of staves that are neither large nor small.
+     *
+     * @param otherInterlineScale the scale, perhaps null
+     */
+    public void setOtherInterlineScale (InterlineScale otherInterlineScale)
+    {
+        this.otherInterlineScale = otherInterlineScale;
     }
 
     //--------------//
