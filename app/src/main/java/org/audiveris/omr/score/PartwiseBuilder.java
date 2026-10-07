@@ -2004,8 +2004,8 @@ public class PartwiseBuilder
                     current.measure.getStack());
 
             if (concert != null) {
-                processAgreedKey(concert + KeyAgreement.transpositionOf(current.measure
-                        .getPart()));
+                processAgreedKey(KeyAgreement.enharmonic(concert + KeyAgreement
+                        .transpositionOf(current.measure.getPart())));
 
                 return;
             }

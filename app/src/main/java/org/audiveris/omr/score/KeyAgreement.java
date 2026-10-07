@@ -63,8 +63,9 @@ import java.util.regex.Pattern;
  * This does not apply to a courtesy key signature printed at the end of the system (last
  * measure, key in its right half): the change is for the next system.
  * <p>
- * A guitar with a capo (parts hint ":capoN") is written N semitones below concert pitch: it
- * votes and is exported like a transposing instrument.
+ * A guitar with a capo (parts hint ":capoN") is written N semitones below concert pitch, a guitar
+ * or bass tuned down (":downN") N semitones above: it votes and is exported like a transposing
+ * instrument.
  */
 public class KeyAgreement
 {
@@ -94,6 +95,13 @@ public class KeyAgreement
      * a capo on fret N writes and what it sounds: minor second, major second, minor third...
      */
     private static final int[] CAPO_STEPS = {0, 1, 1, 2, 2, 3, 3, 4, 5, 5, 6, 6};
+
+    /**
+     * Diatonic steps of the interval of N semitones (index N, 1..11) between what an instrument
+     * tuned down N semitones writes and what it sounds: augmented unison (A written for A flat),
+     * major second, minor third...
+     */
+    private static final int[] DOWN_STEPS = {0, 0, 1, 2, 2, 3, 3, 4, 5, 5, 6, 6};
 
     //~ Instance fields ----------------------------------------------------------------------------
 
@@ -150,7 +158,7 @@ public class KeyAgreement
                         final int concert;
 
                         if (key != null && key.getFifths() != null) {
-                            concert = key.getFifths() - shift;
+                            concert = enharmonic(key.getFifths() - shift);
                             read.computeIfAbsent(concert, k -> new ArrayList<>()).add(key);
                         } else if (systemStart || (inForce == null)) {
                             continue;
@@ -236,10 +244,11 @@ public class KeyAgreement
     // capoOf //
     //--------//
     /**
-     * Report the capo fret of a part, as given by the parts hint (":capoN").
+     * Report the capo fret of a part, as given by the parts hint (":capoN"), or minus the
+     * semitones it is tuned down (":downN").
      *
      * @param part the part at hand
-     * @return the capo fret (1..11), or null if none
+     * @return the capo fret (1..11), minus the semitones tuned down (-11..-1), or null if none
      */
     public static Integer capoOf (Part part)
     {
@@ -253,6 +262,32 @@ public class KeyAgreement
         final String name = (logical != null) ? logical.getName() : part.getName();
 
         return (name != null) ? capos.get(name) : null;
+    }
+
+    //------------//
+    // enharmonic //
+    //------------//
+    /**
+     * Bring a key brought to or from concert pitch back among the printable keys (7 flats to
+     * 7 sharps), by its enharmonic equivalent: a guitar tuned down a semitone writes B flat
+     * (2 flats) for A (3 sharps), 9 flats once taken back, 3 sharps here.
+     *
+     * @param fifths the key, perhaps beyond 7 flats or sharps
+     * @return the same key, as printed
+     */
+    public static int enharmonic (int fifths)
+    {
+        int result = fifths;
+
+        while (result > 7) {
+            result -= 12;
+        }
+
+        while (result < -7) {
+            result += 12;
+        }
+
+        return result;
     }
 
     //------------//
@@ -316,7 +351,7 @@ public class KeyAgreement
                 final KeyInter key = measure.getKey(staff);
 
                 if ((key != null) && (key.getFifths() != null)) {
-                    counts.merge(key.getFifths() - shift, 1, Integer::sum);
+                    counts.merge(enharmonic(key.getFifths() - shift), 1, Integer::sum);
                 }
             }
         }
@@ -366,7 +401,9 @@ public class KeyAgreement
      * piccolo...) do not change the key.
      * <p>
      * A part hinted with a capo (":capoN") comes first: written N semitones below concert
-     * pitch, e.g. capo 1 writes G (1 sharp) for A flat (4 flats), 5 fifths above.
+     * pitch, e.g. capo 1 writes G (1 sharp) for A flat (4 flats), 5 fifths above. So does a
+     * part tuned down (":downN"), written N semitones above concert pitch, e.g. down 1 writes
+     * A (3 sharps) for A flat, 7 fifths above.
      *
      * @param part the part at hand
      * @return the key shift in fifths (e.g. 2 for an instrument in B flat)
@@ -376,7 +413,8 @@ public class KeyAgreement
         final Integer capo = capoOf(part);
 
         if (capo != null) {
-            return (12 * CAPO_STEPS[capo]) - (7 * capo);
+            return (capo > 0) ? (12 * CAPO_STEPS[capo]) - (7 * capo)
+                    : (-7 * capo) - (12 * DOWN_STEPS[-capo]);
         }
 
         final LogicalPart logical = part.getLogicalPart();

@@ -12,7 +12,7 @@
 -constant "org.audiveris.omr.score.PartCollation.partsHint=A.Piano|A.pf:2; Strings I|Str. I:1; ..."
 ```
 
-格式：`名稱[|縮寫]:譜表數[:lyrics][:drums][:oneline][:tab|:tab4][:gmN][:capoN]`，聲部之間用 `;` 分隔。
+格式：`名稱[|縮寫]:譜表數[:lyrics][:drums][:oneline][:tab|:tab4][:gmN][:capoN|:downN]`，聲部之間用 `;` 分隔。
 
 - 寫完整系統（所有聲部都在的那一行），順序與譜表數必須與原譜完全一致。譜表數是這個聲部印了幾行譜表：五線譜、TAB、一線譜都是一行（大譜表寫 `:2`，五線譜加 TAB 寫 `:2:tab`，單行寫 `:1`）。
 - 用 `|` 列出全名與縮寫，讓首頁與後續頁都能對上。
@@ -59,6 +59,12 @@
 `:capo` 加夾的格數（1–11），例 `A.Guitar|A.G.:1:capo1`，需要寫聲部名稱。
 
 夾 capo 的吉他寫的音比實際音高低 N 個半音（capo 1：寫 G 調、實際是 A♭）。這個聲部在[每小節統一調號](#每小節統一調號)裡當移調樂器：投票時換回實際音高，匯出時用自己寫的調號。`<transpose>` 不由 Audiveris 寫，由後處理依同一個標記補上。
+
+### :down
+
+`:down` 加調低的半音數（1–11），例 `E.Bass|E.B.:2:tab4:down1`，需要寫聲部名稱。
+
+降 N 個半音調弦的吉他、貝斯寫的音比實際音高 N 個半音（down 1：寫 A 調、實際是 A♭；同一個字母，所以是增一度）。調號的處理和 [`:capo`](#capo) 一樣，只是方向相反。
 
 ---
 

@@ -592,14 +592,14 @@ public class PartCollation
      * Build the logical parts defined by the user parts hint, if any.
      * <p>
      * Syntax: parts separated by ';', each part as
-     * <code>name[|abbreviation]:staffCount[:lyrics][:drums][:oneline][:tab|:tab4][:gmN][:capoN]</code>,
+     * <code>name[|abbreviation]:staffCount[:lyrics][:drums][:oneline][:tab|:tab4][:gmN][:capoN|:downN]</code>,
      * top down.
      * Names are optional, e.g. "A.Piano|A.pf:2; Strings I|Str. I:1" or "2;1;1".
      * The optional ":lyrics" flag is used by {@link #getHintedLyricsStaves()},
      * the optional ":drums" flag by {@link #getHintedDrumNames()}.
      * The optional ":gmN" flag sets the MIDI program (General MIDI, 1..128) of the part.
      * The optional ":oneline" flag is used by {@link #hasHintedOneLine()},
-     * the optional ":capoN" flag by {@link #getHintedCapos()}.
+     * the optional ":capoN" and ":downN" flags by {@link #getHintedCapos()}.
      *
      * @return the hinted logicals, or null if no (valid) hint
      */
@@ -663,13 +663,16 @@ public class PartCollation
     // getHintedCapos //
     //----------------//
     /**
-     * Report the hinted parts flagged ":capoN": a guitar played with a capo on fret N, written
-     * N semitones below what it sounds (e.g. "A.Guitar|A.G.:2:tab:capo1", written in G in a
+     * Report the hinted parts flagged ":capoN" or ":downN": a guitar played with a capo on
+     * fret N, written N semitones below what it sounds (e.g. "A.Guitar|A.G.:2:tab:capo1",
+     * written in G in a score in A flat), or a guitar or bass tuned down N semitones, written
+     * N semitones above what it sounds (e.g. "E.Bass|E.B.:2:tab4:down1", written in A in a
      * score in A flat).
      * <p>
      * Such a part keeps its own written key, while the other parts share the concert key.
      *
-     * @return the capo fret (1..11) per (main) name of the flagged parts, perhaps empty
+     * @return per (main) name of the flagged parts, the capo fret (1..11) or minus the
+     *         semitones tuned down (-11..-1), perhaps empty
      */
     public static Map<String, Integer> getHintedCapos ()
     {
@@ -1103,7 +1106,7 @@ public class PartCollation
         private final Constant.String partsHint = new Constant.String(
                 "",
                 "Parts of the score, top down, as"
-                        + " \"name[|abbrev]:staffCount[:lyrics][:drums][:oneline][:tab|:tab4][:gmN][:capoN]\""
+                        + " \"name[|abbrev]:staffCount[:lyrics][:drums][:oneline][:tab|:tab4][:gmN][:capoN|:downN]\""
                         + " separated by ';' (e.g. \"Vocal:1:lyrics; Guitar:2:tab; Drums|Dr.:1:drums\")."
                         + " ':lyrics' restricts lyrics to the flagged parts,"
                         + " ':drums' exports the flagged part as drum set,"
@@ -1112,7 +1115,9 @@ public class PartCollation
                         + " ':tab' (':tab4') tells that the last staff of the part is a 6-line"
                         + " (4-line) tablature, ':gmN' sets the MIDI program (General MIDI, 1..128)"
                         + " of the part, ':capoN' tells that the part is a guitar with a capo on"
-                        + " fret N (1..11), written N semitones below concert pitch."
+                        + " fret N (1..11), written N semitones below concert pitch, ':downN' that"
+                        + " the part is a guitar or bass tuned down N semitones (1..11), written N"
+                        + " semitones above concert pitch."
                         + " Empty means no hint.");
     }
 
@@ -1121,7 +1126,7 @@ public class PartCollation
     //-----------//
     /**
      * One part of the parts hint:
-     * "name[|abbrev]:staffCount[:lyrics][:drums][:oneline][:tab|:tab4][:gmN][:capoN]".
+     * "name[|abbrev]:staffCount[:lyrics][:drums][:oneline][:tab|:tab4][:gmN][:capoN|:downN]".
      */
     private static class HintEntry
     {
@@ -1142,7 +1147,10 @@ public class PartCollation
         /** Printed on a one-line staff. */
         final boolean oneLine;
 
-        /** Capo fret (1..11) of a guitar written below concert pitch, or null if none. */
+        /**
+         * Capo fret (1..11) of a guitar written below concert pitch, minus the semitones
+         * (-11..-1) of a guitar or bass tuned down and written above, or null if none.
+         */
         final Integer capo;
 
         HintEntry (String names,
@@ -1196,6 +1204,13 @@ public class PartCollation
                         throw new IllegalArgumentException(
                                 "partsHint ':capo' needs 1..11: " + flag);
                     }
+                } else if (flag.matches("(?i)down\\d+")) {
+                    capo = -Integer.parseInt(flag.substring(4));
+
+                    if ((capo > -1) || (capo < -11)) {
+                        throw new IllegalArgumentException(
+                                "partsHint ':down' needs 1..11: " + flag);
+                    }
                 } else if (flag.matches("(?i)gm\\d+")) {
                     program = Integer.parseInt(flag.substring(2));
 
@@ -1222,7 +1237,7 @@ public class PartCollation
             }
 
             if ((capo != null) && names.isEmpty()) {
-                throw new IllegalArgumentException("partsHint ':capo' needs a part name");
+                throw new IllegalArgumentException("partsHint ':capo' or ':down' needs a part name");
             }
 
             return new HintEntry(
