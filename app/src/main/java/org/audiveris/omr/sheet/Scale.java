@@ -188,6 +188,10 @@ public class Scale
     @XmlElement(name = "other-interline")
     private InterlineScale otherInterlineScale;
 
+    /** Interline scales of staves measured on their own lines (not persisted). */
+    private final java.util.Map<Integer, InterlineScale> staffScales =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
     /** Typical thickness of beams and beam hooks. */
     @XmlElement(name = "beam")
     private BeamScale beamScale;
@@ -397,7 +401,11 @@ public class Scale
             return otherInterlineScale;
         }
 
-        throw new IllegalArgumentException("No interline scale for provided value " + interline);
+        // A staff interline measured on its own lines: same range around it as the main one
+        return staffScales.computeIfAbsent(interline, il -> new InterlineScale(
+                il - (interlineScale.main - interlineScale.min),
+                il,
+                il + (interlineScale.max - interlineScale.main)));
     }
 
     //------------------------//

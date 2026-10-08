@@ -471,6 +471,7 @@ public class Staff
             // Specific interline for this staff
             Scale scale = system.getSheet().getScale();
             specificInterline = isSmall() ? scale.getSmallInterline() : scale.getInterline();
+            measureInterline();
 
             // Populate sideBars
             retrieveSideBars();
@@ -1472,6 +1473,39 @@ public class Staff
     public int getSpecificInterline ()
     {
         return specificInterline;
+    }
+
+    //------------------//
+    // measureInterline //
+    //------------------//
+    /**
+     * Set the specific interline of this staff to the spacing of its own lines (median of the
+     * spacings between consecutive lines, at 5 abscissae along the staff).
+     * <p>
+     * In a band score, each 5-line staff and each tablature has its own line spacing, wider for
+     * the tablatures; the sheet interline is only that of the 5-line staves at large. The line
+     * cluster a staff came from does not always tell its spacing either: a 5-line staff could be
+     * given the tablature interline, and its heads and key signature were then looked for at the
+     * wrong size. The median keeps a missed line (a double spacing) out.
+     */
+    public void measureInterline ()
+    {
+        if (lines.size() < 2) {
+            return;
+        }
+
+        final List<Double> dys = new ArrayList<>();
+
+        for (int i = 0; i <= 4; i++) {
+            final double x = left + (((right - left) * i) / 4.0);
+
+            for (int j = 1; j < lines.size(); j++) {
+                dys.add(lines.get(j).yAt(x) - lines.get(j - 1).yAt(x));
+            }
+        }
+
+        Collections.sort(dys);
+        specificInterline = (int) Math.round(dys.get(dys.size() / 2));
     }
 
     //------------------//

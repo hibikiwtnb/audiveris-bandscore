@@ -1115,8 +1115,12 @@ public class LedgersBuilder
     {
         final Map<Integer, LedgerSuite> map = new HashMap<>();
 
+        final Scale sheetScale;
+
         Suites (Scale sheetScale)
         {
+            this.sheetScale = sheetScale;
+
             final Integer large = sheetScale.getInterline();
             map.put(large, new LedgerSuite(sheetScale.getInterlineScale()));
 
@@ -1136,7 +1140,9 @@ public class LedgersBuilder
 
         LedgerSuite getSuite (int interline)
         {
-            return map.get(interline);
+            // A staff interline measured on its own lines
+            return map.computeIfAbsent(interline, il -> new LedgerSuite(sheetScale
+                    .getInterlineScale(il)));
         }
     }
 }

@@ -212,11 +212,11 @@ public class LinesRetriever
      */
     private void addHintedOneLines ()
     {
-        // The retriever of the standard (5-line) staves gives the interline
+        // The retriever of the standard (5-line) staves gives the interline: the smaller one
         ClustersRetriever retriever = clustersRetriever;
 
-        if ((smallClustersRetriever != null) && (countFiveLines(smallClustersRetriever)
-                > countFiveLines(clustersRetriever))) {
+        if ((smallClustersRetriever != null) && (countFiveLines(smallClustersRetriever) > 0)
+                && (smallClustersRetriever.getInterline() < clustersRetriever.getInterline())) {
             retriever = smallClustersRetriever;
         }
 
@@ -305,24 +305,26 @@ public class LinesRetriever
     //-------------------//
     /**
      * Band scores have no small (cue, ossia) staff: all 5-line staves have the same size, while
-     * their tablatures may be printed with wider line spacing. The sheet interline is the one
-     * of most 5-line staves, and no staff is flagged small.
+     * their tablatures are printed with wider line spacing. With two interlines on the sheet,
+     * the smaller one is that of the 5-line staves and becomes the sheet interline, the wider
+     * one is kept as the other interline; no staff is flagged small, and each staff (5-line staff
+     * or tablature) takes the spacing of its own lines ({@link Staff#measureInterline}).
      * <p>
      * Otherwise, with tablatures of wider spacing, the interline measured on the whole sheet
      * could be the tablature one, and all 5-line staves were taken as small staves: their
-     * ledgers and the heads on them were mostly missed.
+     * ledgers and the heads on them were mostly missed. Counting the 5-line clusters of each
+     * interline was not enough: a tablature whose sixth line is missed also gives a 5-line
+     * cluster.
      */
     private void useStaffInterline ()
     {
-        final long large = clustersRetriever.getClusters().stream()
-                .filter(cl -> cl.getSize() == 5).count();
         final long small = smallClustersRetriever.getClusters().stream()
                 .filter(cl -> cl.getSize() == 5).count();
         final Scale sheetScale = sheet.getScale();
 
         final Scale newScale;
 
-        if ((small > large) && (smallClustersRetriever.getInterline() < clustersRetriever
+        if ((small > 0) && (smallClustersRetriever.getInterline() < clustersRetriever
                 .getInterline())) {
             logger.info("Interline {} of the 5-line staves, not {}",
                     smallClustersRetriever.getInterline(), clustersRetriever.getInterline());
@@ -428,6 +430,8 @@ public class LinesRetriever
                 case 1 -> new OneLineStaff(++staffId, left, right, cluster.getInterline(), infos);
                 default -> new Tablature(++staffId, left, right, cluster.getInterline(), infos);
             };
+
+            staff.measureInterline();
 
             staffManager.addStaff(staff);
         }
