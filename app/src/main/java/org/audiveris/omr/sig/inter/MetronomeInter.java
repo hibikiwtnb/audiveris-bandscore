@@ -934,6 +934,9 @@ public class MetronomeInter
             // We retrieve the 'characters' glyph located just before the equal sign.
             final String noteStr = getGroup(matcher, NOTE).trim();
             logger.debug("create. noteStr:\"{}\" codes[{}]", noteStr, codesOf(noteStr));
+            if (noteStr.isEmpty()) {
+                reporter.alert("No note characters found before '=' in line: " + line);
+            }
 
             // Perhaps the note 'characters' are in the same word as the '=' sign
             ctx.noteWord = line.getWords().get(equalIndex);
@@ -1279,18 +1282,33 @@ public class MetronomeInter
                                        int charIndex,
                                        int length)
     {
+        if (length <= 0 || charIndex < 0 || noteWord == null) {
+            return null;
+        }
+
+        final List<TextChar> chars = noteWord.getChars();
+        if (charIndex + length > chars.size()) {
+            return null;
+        }
+
         Rectangle noteBox = null;
 
         for (int i = 0; i < length; i++) {
-            final TextChar noteChar = noteWord.getChars().get(charIndex + i);
+            final TextChar noteChar = chars.get(charIndex + i);
             logger.debug("noteChar: {}", noteChar);
             final Rectangle charBox = noteChar.getBounds();
 
-            if (noteBox == null) {
-                noteBox = charBox;
-            } else {
-                noteBox = noteBox.union(charBox);
+            if (charBox != null) {
+                if (noteBox == null) {
+                    noteBox = charBox;
+                } else {
+                    noteBox = noteBox.union(charBox);
+                }
             }
+        }
+
+        if (noteBox == null) {
+            return null;
         }
 
         final List<Glyph> glyphs = glyphIndex.getContainedEntities(noteBox);
