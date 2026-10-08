@@ -301,6 +301,12 @@ public class ClefBuilder
         inner.grow(0, -params.yCoreMargin);
         inner.x += params.xCoreMargin;
         inner.width -= params.xCoreMargin;
+        if (inner.width < 0) {
+            inner.width = 0;
+        }
+        if (inner.height < 0) {
+            inner.height = 0;
+        }
         staff.addAttachment("c", inner);
 
         return inner;
@@ -347,8 +353,14 @@ public class ClefBuilder
             }
         }
 
-        Rectangle outer = new Rectangle(xMin, yMin, xMax - xMin + 1, yMax - yMin + 1);
+        Rectangle outer = new Rectangle(xMin, yMin, Math.max(0, xMax - xMin + 1), Math.max(0, yMax - yMin + 1));
         outer.grow(-params.beltMargin, 0);
+        if (outer.width < 0) {
+            outer.width = 0;
+        }
+        if (outer.height < 0) {
+            outer.height = 0;
+        }
         staff.addAttachment("C", outer);
 
         return outer;
@@ -366,6 +378,9 @@ public class ClefBuilder
     private List<Glyph> getParts (boolean isFirstPass)
     {
         final Rectangle rect = isFirstPass ? outerRect : innerRect;
+        if (rect == null || rect.width <= 0 || rect.height <= 0) {
+            return new ArrayList<>();
+        }
 
         // Grab pixels out of staff-free source
         ByteProcessor source = sheet.getPicture().getSource(Picture.SourceKey.NO_STAFF);
