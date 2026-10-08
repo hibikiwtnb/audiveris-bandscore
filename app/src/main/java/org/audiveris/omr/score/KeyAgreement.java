@@ -155,18 +155,12 @@ public class KeyAgreement
                         }
 
                         final KeyInter key = measure.getKey(staff);
-                        final int concert;
 
                         if (key != null && key.getFifths() != null) {
-                            concert = enharmonic(key.getFifths() - shift);
+                            final int concert = enharmonic(key.getFifths() - shift);
                             read.computeIfAbsent(concert, k -> new ArrayList<>()).add(key);
-                        } else if (systemStart || (inForce == null)) {
-                            continue;
-                        } else {
-                            concert = inForce;
+                            votes.computeIfAbsent(concert, k -> new ArrayList<>()).add(staff.getId());
                         }
-
-                        votes.computeIfAbsent(concert, k -> new ArrayList<>()).add(staff.getId());
                     }
                 }
 
@@ -188,29 +182,43 @@ public class KeyAgreement
                         }
                     }
 
-                    // A change read by a few staves only, that the next system confirms
-                    if (!systemStart && (nextStart != null) && (inForce != null) && winner.equals(
-                            inForce) && !nextStart.equals(inForce) && read.containsKey(nextStart)) {
-                        final boolean last = stack == stacks.get(stacks.size() - 1);
-
-                        if (last && isCourtesy(stack, read.get(nextStart))) {
-                            logger.info("{} m{}: key {} at system end is for the next system",
-                                    page.getSheet().getId(), stack.getIdValue(), nextStart);
-                        } else {
-                            logger.info(
-                                    "{} m{}: key {} read on {} of {} staves, as next system starts",
-                                    page.getSheet().getId(), stack.getIdValue(), nextStart,
-                                    votes.get(nextStart).size(),
-                                    votes.values().stream().mapToInt(List::size).sum());
-                            winner = nextStart;
-                        }
+                    // A courtesy key at the end of a system is for the next system
+                    final boolean last = stack == stacks.get(stacks.size() - 1);
+                    if (last && (winner != null) && read.containsKey(winner) && isCourtesy(
+                            stack, read.get(winner))) {
+                        logger.info("{} m{}: key {} at system end is for the next system",
+                                page.getSheet().getId(), stack.getIdValue(), winner);
+                        winner = inForce;
+                    } else if (!systemStart && (inForce != null) && (max == 1)
+                            && !winner.equals(inForce)
+                            && !winner.equals(nextStart)) {
+                        // A lone unconfirmed change inside a system does not overturn inForce
+                        winner = inForce;
                     }
 
                     if (votes.size() > 1) {
                         final Map<Integer, List<Integer>> others = new LinkedHashMap<>(votes);
                         others.remove(winner);
-                        logger.warn("{} m{}: key {} by most staves, staves (key) {} overruled",
-                                page.getSheet().getId(), stack.getIdValue(), winner, others);
+                        others.values().forEach(ids -> ids.removeIf(id -> {
+                            for (Part p : system.getParts()) {
+                                final Measure m = stack.getMeasureAt(p);
+                                if (m != null) {
+                                    for (Staff s : p.getStaves()) {
+                                        if (s.getId() == id) {
+                                            final KeyInter k = m.getKey(s);
+                                            return (k != null) && k.isFromTemplate();
+                                        }
+                                    }
+                                }
+                            }
+                            return false;
+                        }));
+                        others.entrySet().removeIf(e -> e.getValue().isEmpty());
+
+                        if (!others.isEmpty()) {
+                            logger.warn("{} m{}: key {} by most staves, staves (key) {} overruled",
+                                    page.getSheet().getId(), stack.getIdValue(), winner, others);
+                        }
                     }
 
                     inForce = winner;

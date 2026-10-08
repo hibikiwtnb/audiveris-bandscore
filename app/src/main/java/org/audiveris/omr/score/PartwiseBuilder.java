@@ -1997,6 +1997,29 @@ public class PartwiseBuilder
     }
 
     //-------------//
+    //----------------//
+    // hasTemplateKey //
+    //----------------//
+    /**
+     * Report whether any staff in the current measure has a key signature read or confirmed
+     * by book templates.
+     */
+    private boolean hasTemplateKey ()
+    {
+        final int staffCount = current.measure.getPart().getStaves().size();
+
+        for (int index = 0; index < staffCount; index++) {
+            final KeyInter key = current.measure.getKey(index);
+
+            if ((key != null) && key.isFromTemplate()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    //-------------//
     // processKeys //
     //-------------//
     /**
@@ -2007,6 +2030,21 @@ public class PartwiseBuilder
     private void processKeys ()
     {
         if (!current.isDrumPart) {
+            // Keep keys read or confirmed by book templates
+            if (hasTemplateKey()) {
+                if (current.measure.hasSameKeys()) {
+                    processKey(current.measure.getKey(0), true); // global: true
+                } else {
+                    final int staffCount = current.measure.getPart().getStaves().size();
+
+                    for (int index = 0; index < staffCount; index++) {
+                        processKey(current.measure.getKey(index), false); // global: false
+                    }
+                }
+
+                return;
+            }
+
             // Pitched part: the key agreed for the measure stack, whatever this part shows
             final Integer concert = current.keyAgreement.getConcertKey(
                     current.measure.getStack());

@@ -198,6 +198,9 @@ public class KeyTemplates
                     : 0;
 
             if (fifths == oldFifths) {
+                if (old != null && n > 0) {
+                    old.setFromTemplate(true);
+                }
                 continue;
             }
 
@@ -326,6 +329,7 @@ public class KeyTemplates
 
         final KeyInter key = new KeyInter(series.mean(), (shape == Shape.FLAT) ? -series.size()
                 : series.size(), shape);
+        key.setFromTemplate(true);
         key.setStaff(staff);
         key.setBounds(box);
         sig.addVertex(key);

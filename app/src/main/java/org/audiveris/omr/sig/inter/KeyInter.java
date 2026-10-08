@@ -156,6 +156,10 @@ public class KeyInter
     @XmlAttribute(name = "fifths")
     private Integer fifths;
 
+    /** True if this key signature was read or confirmed by book templates. */
+    @XmlAttribute(name = "from-template")
+    private Boolean fromTemplate;
+
     //~ Constructors -------------------------------------------------------------------------------
 
     /**
@@ -381,6 +385,32 @@ public class KeyInter
         }
 
         return fifths;
+    }
+
+    //----------------//
+    // isFromTemplate //
+    //----------------//
+    /**
+     * Report whether this key signature was read or confirmed by book templates.
+     *
+     * @return true if from templates
+     */
+    public boolean isFromTemplate ()
+    {
+        return Boolean.TRUE.equals(fromTemplate);
+    }
+
+    //-----------------//
+    // setFromTemplate //
+    //-----------------//
+    /**
+     * Flag this key signature as read or confirmed by book templates.
+     *
+     * @param fromTemplate true if from templates
+     */
+    public void setFromTemplate (boolean fromTemplate)
+    {
+        this.fromTemplate = fromTemplate ? Boolean.TRUE : null;
     }
 
     //------------//
