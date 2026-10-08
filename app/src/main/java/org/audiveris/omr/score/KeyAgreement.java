@@ -384,7 +384,7 @@ public class KeyAgreement
     //---------//
     // isDrums //
     //---------//
-    private static boolean isDrums (Part part)
+    public static boolean isDrums (Part part)
     {
         if (part.isDrumPart()) {
             return true;

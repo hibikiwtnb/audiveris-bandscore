@@ -137,6 +137,7 @@ import org.audiveris.proxymusic.DirectionType;
 import org.audiveris.proxymusic.Dynamics;
 import org.audiveris.proxymusic.Empty;
 import org.audiveris.proxymusic.EmptyPlacement;
+import org.audiveris.proxymusic.EmptyPlacementSmufl;
 import org.audiveris.proxymusic.EnclosureShape;
 import org.audiveris.proxymusic.Encoding;
 import org.audiveris.proxymusic.Ending;
@@ -2991,7 +2992,10 @@ public class PartwiseBuilder
                     Instrument instrument = null;
 
                     if (map != null) {
-                        final DrumInstrument drum = map.get(ms);
+                        DrumInstrument drum = map.get(ms);
+                        if ((drum == null) && (sign == Shape.PLAYING_CLOSED)) {
+                            drum = map.get(new MotifSign(motif, null));
+                        }
                         if (drum != null) {
                             instrument = factory.createInstrument();
                             instrument.setId(current.instrumentMap.get(drum.sound.getMidi()));
@@ -3130,6 +3134,23 @@ public class PartwiseBuilder
 
                     getTechnical().getUpBowOrDownBowOrHarmonic().add(
                             factory.createTechnicalPluck(placement));
+                }
+
+                // Playing sign? (e.g. Hi-Hat open circle 'o' or stopped '+')
+                final PlayingInter playing = head.getPlayingSign();
+                if (playing != null) {
+                    final Shape playingShape = playing.getShape();
+                    if (playingShape == Shape.PLAYING_OPEN) {
+                        final EmptyPlacementSmufl open = factory.createEmptyPlacementSmufl();
+                        open.setPlacement(AboveBelow.ABOVE);
+                        getTechnical().getUpBowOrDownBowOrHarmonic().add(
+                                factory.createTechnicalOpen(open));
+                    } else if (playingShape == Shape.PLAYING_CLOSED) {
+                        final EmptyPlacementSmufl stopped = factory.createEmptyPlacementSmufl();
+                        stopped.setPlacement(AboveBelow.ABOVE);
+                        getTechnical().getUpBowOrDownBowOrHarmonic().add(
+                                factory.createTechnicalStopped(stopped));
+                    }
                 }
             }
 

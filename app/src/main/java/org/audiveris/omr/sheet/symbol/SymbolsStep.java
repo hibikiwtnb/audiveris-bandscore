@@ -27,6 +27,7 @@ import org.audiveris.omr.glyph.Glyph;
 import org.audiveris.omr.sheet.Sheet;
 import org.audiveris.omr.sheet.SystemInfo;
 import org.audiveris.omr.sheet.note.ChordsBuilder;
+import org.audiveris.omr.sheet.note.HiHatTemplate;
 import org.audiveris.omr.step.AbstractSystemStep;
 import org.audiveris.omr.step.OmrStep;
 import org.audiveris.omr.step.StepException;
@@ -130,6 +131,10 @@ public class SymbolsStep
         // Some checks that need presence of other symbols
         watch.start("lateChecks");
         factory.lateChecks();
+
+        // Hi-Hat open/closed marks from book templates if any
+        watch.start("hiHatTemplates");
+        HiHatTemplate.match(system);
 
         if (constants.printWatch.isSet()) {
             watch.print();
