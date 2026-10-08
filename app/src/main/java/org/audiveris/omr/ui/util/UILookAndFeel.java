@@ -45,6 +45,10 @@ public class UILookAndFeel
 
     private static final Logger logger = LoggerFactory.getLogger(UILookAndFeel.class);
 
+    public static final String THEME_LIGHT_NAME = "com.formdev.flatlaf.FlatLightLaf";
+
+    public static final String THEME_DARK_NAME = "com.formdev.flatlaf.FlatDarkLaf";
+
     static {
         if (WellKnowns.MAC_OS_X) {
             System.setProperty("apple.laf.useScreenMenuBar", "true");
@@ -62,40 +66,12 @@ public class UILookAndFeel
 
     //~ Static Methods -----------------------------------------------------------------------------
 
-    // Available Themes:
+    // Available Look & Feel classes (see com.formdev.flatlaf):
     //
-    // AbstractSkyTheme
-    // BrownSugar
-    // Colors
-    // DarkStar
-    // DesertBlue
-    // DesertBluer
-    // DesertGreen
-    // DesertRed
-    // DesertYellow
-    // ExperienceBlue
-    // ExperienceGreen
-    // Silver
-    // SkyBlue
-    // SkyBluer
-    // SkyBluerTahoma
-    // SkyGreen
-    // SkyKrupp
-    // SkyPink
-    // SkyRed
-    // SkyYellow
-    //         try {
-    //             // Available Look & Feel:
-    //             //
-    //             // WindowsLookAndFeel
-    //             // PlasticLookAndFeel
-    //             // Plastic3DLookAndFeel
-    //             // PlasticXPLookAndFeel
-    //             PlasticLookAndFeel.setMyCurrentTheme(new SkyKrupp());
-    //             UIManager.setLookAndFeel(new Plastic3DLookAndFeel());
-    //         } catch (Exception ex) {
-    //             ex.printStackTrace();
-    //         }
+    // FlatLightLaf
+    // FlatDarkLaf
+    // FlatIntelliJLaf
+    // FlatDarculaLaf
     //-------//
     // setUI //
     //-------//
@@ -108,8 +84,6 @@ public class UILookAndFeel
      */
     public static void setUI (String className)
     {
-        com.jgoodies.looks.Options.setUseNarrowButtons(true);
-
         try {
             if (className != null) {
                 UIManager.setLookAndFeel(className);
@@ -124,6 +98,19 @@ public class UILookAndFeel
         }
     }
 
+    //--------------//
+    // getThemeName //
+    //--------------//
+    /**
+     * Get the current theme name as a string.
+     *
+     * @return the full class name of the current look and feel
+     */
+    public static String getThemeName ()
+    {
+        return constants.lookAndFeel.getValue();
+    }
+
     //~ Inner Classes ------------------------------------------------------------------------------
 
     //-----------//
@@ -133,7 +120,7 @@ public class UILookAndFeel
             extends ConstantSet
     {
         private final Constant.String lookAndFeel = new Constant.String(
-                "com.jgoodies.looks.plastic.Plastic3DLookAndFeel",
+                THEME_LIGHT_NAME,
                 "Full class path to the desired UI Look & Feel");
     }
 }

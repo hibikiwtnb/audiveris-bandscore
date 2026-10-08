@@ -16,8 +16,8 @@ Table of contents
 
 ## Dialog
 
-The pull-down menu  {{ site.book_parameters }} opens a dialog to review and modify
-high-level processing parameters.
+The pull-down menu  {{ site.book_parameters }} or the `Ctrl+B` shortcut (`Command+B` for macOS)
+opens a dialog to review and modify high-level processing parameters.
 
 The following example displays the parameters dialog for a book (`Dichterliebe01`) which contains
 two sheets:

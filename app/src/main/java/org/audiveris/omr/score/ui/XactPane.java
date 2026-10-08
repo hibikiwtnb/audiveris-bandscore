@@ -53,8 +53,8 @@ public abstract class XactPane<E>
     private static final Logger logger = LoggerFactory.getLogger(XactPane.class);
 
     /** Resource injection. */
-    private static final ResourceMap resources =
-            Application.getInstance().getContext().getResourceMap(XactPane.class);
+    private static final ResourceMap resources = Application.getInstance().getContext()
+            .getResourceMap(XactPane.class);
 
     //~ Instance fields ----------------------------------------------------------------------------
 

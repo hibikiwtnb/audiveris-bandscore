@@ -30,6 +30,7 @@ import org.audiveris.omr.sheet.ui.ObjectUIModel;
 import static org.audiveris.omr.ui.symbol.Alignment.AREA_CENTER;
 import static org.audiveris.omr.ui.symbol.Alignment.TOP_LEFT;
 import static org.audiveris.omr.ui.symbol.MusicFont.TINY_INTERLINE;
+import static org.audiveris.omr.ui.symbol.OmrFont.defaultIconColor;
 import static org.audiveris.omr.ui.symbol.OmrFont.defaultImageColor;
 
 import org.slf4j.Logger;
@@ -366,6 +367,19 @@ public class ShapeSymbol
         }
     }
 
+    //----------------//
+    // getDescription //
+    //----------------//
+    /**
+     * Report the description text to display for this symbol.
+     *
+     * @return the description
+     */
+    public String getDescription ()
+    {
+        return shape.getDescription();
+    }
+
     //--------------//
     // getDimension //
     //--------------//
@@ -552,7 +566,7 @@ public class ShapeSymbol
      */
     public String getTip ()
     {
-        return shape.toString(); // By default, use the shape name
+        return shape.getTip();
     }
 
     //-----------------//
@@ -686,7 +700,7 @@ public class ShapeSymbol
         logger.trace("ShapeSymbol.paintIcon {} family:{}", this, musicFamily);
         final MusicFont font = MusicFont.getBaseFont(musicFamily, TINY_INTERLINE);
         final Graphics2D g2 = (Graphics2D) g;
-        g.setColor(logger.isDebugEnabled() ? Color.BLUE : defaultImageColor);
+        g.setColor(logger.isDebugEnabled() ? Color.BLUE : defaultIconColor);
         paint(g2, getParams(font), new Point(x, y), Alignment.TOP_LEFT);
     }
 

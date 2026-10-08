@@ -21,6 +21,9 @@
 // </editor-fold>
 package org.audiveris.omr.ui.symbol;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.itextpdf.awt.PdfGraphics2D;
 import com.itextpdf.text.Document;
 import com.itextpdf.text.DocumentException;
@@ -34,10 +37,11 @@ import java.awt.Graphics2D;
 import java.awt.font.FontRenderContext;
 import java.awt.font.TextLayout;
 import java.awt.geom.Rectangle2D;
-import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 /**
  * Class <code>FontPrintOut</code> generates a PDF file for a provided font
@@ -48,6 +52,8 @@ import java.io.IOException;
 public class FontPrintOut
 {
     //~ Static fields/initializers -----------------------------------------------------------------
+
+    private static final Logger logger = LoggerFactory.getLogger(FontPrintOut.class);
 
     protected static final int itemsPerLine = 8;
 
@@ -74,7 +80,7 @@ public class FontPrintOut
 
     protected final Font font;
 
-    protected File file;
+    protected Path path;
 
     protected FileOutputStream fos;
 
@@ -179,11 +185,11 @@ public class FontPrintOut
     public void start ()
     {
         try {
-            final File dir = new File("build/data/temp");
-            dir.mkdirs();
+            final Path dir = Paths.get("build/data/temp");
+            dir.toFile().mkdirs();
 
-            file = new File(dir, font.getFontName() + ".pdf");
-            fos = new FileOutputStream(file);
+            path = dir.resolve(font.getFontName() + ".pdf");
+            fos = new FileOutputStream(path.toFile());
 
             rect = new Rectangle(pageWidth, pageHeight);
             document = new Document(rect);
@@ -210,6 +216,7 @@ public class FontPrintOut
 
         try {
             fos.close();
+            logger.info("Printed {}", path.toAbsolutePath());
         } catch (IOException ex) {
             System.out.println("Exception " + ex);
         }

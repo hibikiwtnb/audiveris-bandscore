@@ -1697,7 +1697,7 @@ public class BookActions
             final JDialog dialog = new JDialog(OMR.gui.getFrame(), frameTitle, false); // Non modal
 
             // For SAF life cycle (to save dialog size and location across application runs)
-            dialog.setName("ScoreParamsDialog");
+            dialog.setName("BookParametersDialog");
 
             // To avoid memory leak when user closes window via the upper right cross
             dialog.addWindowListener(new WindowAdapter()

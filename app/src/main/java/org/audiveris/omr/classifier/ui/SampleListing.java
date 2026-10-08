@@ -656,12 +656,13 @@ class SampleListing
         private static String fullName (Shape shape)
         {
             final Shape physical = shape.getPhysicalShape();
+            final String text = " [" + shape.getDescription() + "]";
 
             if (physical == shape) {
-                return shape.name();
+                return shape.name() + text;
             }
 
-            return physical + " / " + shape;
+            return physical + " / " + shape + text;
         }
 
         public Shape getShape ()

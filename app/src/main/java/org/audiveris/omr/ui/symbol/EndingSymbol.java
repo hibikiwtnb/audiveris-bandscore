@@ -21,10 +21,9 @@
 // </editor-fold>
 package org.audiveris.omr.ui.symbol;
 
-import static org.audiveris.omr.ui.symbol.Alignment.TOP_LEFT;
-
 import org.audiveris.omr.glyph.Shape;
 import org.audiveris.omr.sig.inter.EndingInter;
+import static org.audiveris.omr.ui.symbol.Alignment.TOP_LEFT;
 
 import java.awt.Graphics2D;
 import java.awt.Point;
@@ -97,15 +96,6 @@ public class EndingSymbol
         p.offset = new Point2D.Double(0, -height / 2);
 
         return p;
-    }
-
-    //--------//
-    // getTip //
-    //--------//
-    @Override
-    public String getTip ()
-    {
-        return shape + (withRightLeg ? " (w/ right leg)" : "");
     }
 
     //-------//

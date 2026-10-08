@@ -78,8 +78,7 @@ public class TemplateBoard
     private static final Logger logger = LoggerFactory.getLogger(TemplateBoard.class);
 
     /** Events this entity is interested in */
-    private static final Class<?>[] eventsRead = new Class<?>[]
-    { LocationEvent.class };
+    private static final Class<?>[] eventsRead = new Class<?>[] { LocationEvent.class };
 
     //~ Instance fields ----------------------------------------------------------------------------
 
@@ -132,7 +131,14 @@ public class TemplateBoard
                           DistanceTable table,
                           SelectionService templateService)
     {
-        super(Board.TEMPLATE, sheet.getLocationService(), eventsRead, true, false, false, false);
+        super(
+                BoardDesc.TEMPLATE,
+                sheet.getLocationService(),
+                eventsRead,
+                true,
+                false,
+                false,
+                false);
         this.sheet = sheet;
         this.table = table;
         this.templateService = templateService;
@@ -322,7 +328,7 @@ public class TemplateBoard
             final Anchor anchor = anchoredTemplate.anchor;
             final Template template = anchoredTemplate.template;
 
-            final double dist = template.evaluate(pt.x, pt.y, anchor, table);
+            final double dist = template.evaluate(pt.x, pt.y, anchor, table, false);
             evalField.setText(String.format("%.3f", dist));
 
             final double grade = Math.max(0, Grades.intrinsicRatio * Template.impactOf(dist));

@@ -284,6 +284,7 @@ public class ArcRetriever
         Staff staff = sheet.getStaffManager().getClosestStaff(p0);
 
         if (staff == null) {
+            // Outside every staff area (e.g. a margin text): not a portion of staff line
             return false;
         }
 

@@ -249,13 +249,29 @@ public class CompoundNoteInter
         final SIGraph theSig = system.getSig();
         final int profile = Math.max(getProfile(), system.getProfile());
 
+        // Safer
+        final Rectangle headBounds = model.headBox.getBounds();
+        if (head.getBounds() == null) {
+            head.setBounds(headBounds);
+        }
+
+        // Safer
+        final Rectangle stemBounds = model.stemBox.getBounds();
+        if (stem.getBounds() == null) {
+            stem.setBounds(stemBounds);
+        }
+
+        // Safer
+        if (staff != null) {
+            head.setStaff(staff);
+            stem.setStaff(staff);
+        }
+
         // Look for beams around, this also updates head and stem data
         final Collection<Link> stemLinks = stem.lookupBeamLinks(system, profile);
 
-        final Rectangle headBounds = model.headBox.getBounds();
         tasks.add(new AdditionTask(theSig, head, headBounds, Collections.emptySet()));
 
-        final Rectangle stemBounds = model.stemBox.getBounds();
         tasks.add(new AdditionTask(theSig, stem, stemBounds, Collections.emptySet()));
 
         tasks.add(new LinkTask(theSig, head, stem, new HeadStemRelation()));

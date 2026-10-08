@@ -1028,7 +1028,7 @@ public class SampleBrowser
         SampleEvaluationBoard (SampleController controller,
                                Classifier classifier)
         {
-            super(true, null, classifier, controller.getGlyphService(), null, true);
+            super(null, classifier, controller.getGlyphService(), null, true);
         }
 
         @Override
@@ -1232,7 +1232,8 @@ public class SampleBrowser
             }
 
             setFont(list.getFont());
-            setText(shape.toString());
+            setText(shape.name());
+            setToolTipText(shape.getDescription());
 
             final ShapeSymbol symbol = shape.getDecoratedSymbol(MusicFamily.Bravura);
             if (symbol != null) {

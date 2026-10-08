@@ -48,9 +48,9 @@ import org.audiveris.omr.ui.action.ActionManager;
 import org.audiveris.omr.ui.action.Actions;
 import org.audiveris.omr.ui.selection.MouseMovement;
 import org.audiveris.omr.ui.selection.StubEvent;
-import org.audiveris.omr.ui.symbol.MusicFont;
 import org.audiveris.omr.ui.util.ModelessOptionPane;
 import org.audiveris.omr.ui.util.SeparableMenu;
+import org.audiveris.omr.ui.util.UILookAndFeel;
 import org.audiveris.omr.ui.util.UIUtil;
 import org.audiveris.omr.util.OmrExecutors;
 import org.audiveris.omr.util.WeakPropertyChangeListener;
@@ -66,9 +66,6 @@ import org.bushe.swing.event.EventSubscriber;
 import java.awt.BorderLayout;
 import java.awt.Container;
 import java.awt.Dimension;
-import java.awt.GridLayout;
-import java.awt.event.ComponentAdapter;
-import java.awt.event.ComponentEvent;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.util.ArrayList;
@@ -157,9 +154,9 @@ public class MainGui
     private void defineLayout ()
     {
         // +=============================================================+
-        // | menuBar               | voices |   progressBar     | memory |
+        // | menuBar                                                     |
         // +=============================================================+
-        // | toolBar                                                     |
+        // | toolBar                    | voices | progressBar | memory  |
         // +=============================================================+
         // | +=========================================================+ |
         // | | stubsPane                                               | |
@@ -188,8 +185,18 @@ public class MainGui
         final Container content = frame.getContentPane();
         content.setLayout(new BorderLayout());
 
-        // Top: ToolBar
-        content.add(ActionManager.getInstance().getToolBar(), BorderLayout.NORTH);
+        // Top: ToolBar, with voice-color legend and memory meter to its right
+        final JPanel toolBarPanel = new JPanel(new BorderLayout());
+        toolBarPanel.add(ActionManager.getInstance().getToolBar(), BorderLayout.CENTER);
+
+        final JPanel gauges = new JPanel(new BorderLayout(UIUtil.adjustedSize(8), 0));
+        gauges.add(SheetPainter.getVoicePanel(), BorderLayout.WEST);
+        gauges.add(StepMonitoring.createMonitor().getComponent(), BorderLayout.CENTER);
+        gauges.add(new MemoryMeter().getComponent(), BorderLayout.EAST);
+        UIUtil.suppressBorders(gauges);
+        toolBarPanel.add(gauges, BorderLayout.EAST);
+
+        content.add(toolBarPanel, BorderLayout.NORTH);
 
         // Center: stubsPane on top and Log on bottom
         mainPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, stubsController.getComponent(), null);
@@ -268,27 +275,10 @@ public class MainGui
         }
 
         // Menu bar
-        JMenuBar innerBar = mgr.getMenuBar();
+        JMenuBar menuBar = mgr.getMenuBar();
+        menuBar.setBorder(null);
 
-        // Gauges = voices | progress | memory
-        JPanel gauges = new JPanel();
-        gauges.setLayout(new BorderLayout());
-        gauges.add(SheetPainter.getVoicePanel(), BorderLayout.WEST);
-        gauges.add(StepMonitoring.createMonitor().getComponent(), BorderLayout.CENTER);
-        gauges.add(new MemoryMeter().getComponent(), BorderLayout.EAST);
-
-        // Outer bar = menu | gauges
-        JMenuBar outerBar = new JMenuBar();
-        outerBar.setLayout(new GridLayout(1, 0));
-        outerBar.add(innerBar);
-        outerBar.add(gauges);
-
-        // Remove useless borders
-        UIUtil.suppressBorders(gauges);
-        innerBar.setBorder(null);
-        outerBar.setBorder(null);
-
-        frame.setJMenuBar(outerBar);
+        frame.setJMenuBar(menuBar);
 
         //        // Mac Application menu
         //        if (WellKnowns.MAC_OS_X) {
@@ -435,6 +425,15 @@ public class MainGui
     {
         logger.debug("MainGui. 1/initialize");
 
+        // Apply UI theme from preferences before other UI initialization
+        UILookAndFeel.setUI(null);
+
+        // Select proper fonts names and sizes.
+        // NOTA: This must take place after the look and feel has been set (see Application.create()),
+        // since installing a look and feel (FlatLaf in particular) overwrites these UIManager font
+        // entries with its own defaults.
+        UIUtil.adjustDefaultFonts();
+
         // Launch background pre-loading tasks?
         if (constants.preloadCostlyPackages.isSet()) {
             ShapeClassifier.preload();
@@ -540,9 +539,6 @@ public class MainGui
         // Weakly listen to OmrGui Actions parameters
         PropertyChangeListener weak = new WeakPropertyChangeListener(this);
         GuiActions.getInstance().addPropertyChangeListener(weak);
-
-        // Check MusicFont is loaded
-        MusicFont.checkMusicFont();
 
         // Just in case we already have messages pending
         notifyLog();

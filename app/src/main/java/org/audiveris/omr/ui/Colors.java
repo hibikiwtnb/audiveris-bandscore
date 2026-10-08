@@ -22,6 +22,7 @@
 package org.audiveris.omr.ui;
 
 import java.awt.Color;
+import org.audiveris.omr.ui.util.UILookAndFeel;
 
 /**
  * Class <code>Colors</code> gathers in one place the various colors used by
@@ -163,7 +164,7 @@ public abstract class Colors
     public static final Color SHEET_NOT_OK = Color.RED;
 
     /** Color for OK sheet tab. */
-    public static final Color SHEET_OK = Color.BLACK;
+    public static final Color SHEET_OK;
 
     /** Time slot. */
     public static final Color SLOT = new Color(192, 192, 192, alpha);
@@ -192,8 +193,36 @@ public abstract class Colors
     /** Background of a MusicPane. */
     public static final Color MUSIC_PANE_BACKGROUND = new Color(255, 255, 240);
 
-    /** Background of the custom set panel. */
-    public static final Color CUSTOM_SET_BACKGROUND = new Color(230, 255, 230);
+    /** Default color for score/rendered images. */
+    public static final Color DEFAULT_IMAGE_COLOR = Color.BLACK;
+
+    /** Default color for UI button icon symbols. */
+    public static final Color DEFAULT_ICON_COLOR;
+
+    /** Colors for logging levels */
+    public static final Color LOG_ERROR = Color.RED;
+    public static final Color LOG_WARNING;
+    public static final Color LOG_INFO;
+    public static final Color LOG_OTHER;
+
+    static {
+        // Initialize colors based on current FlatLaf theme
+        String themeName = UILookAndFeel.getThemeName();
+
+        if (themeName != null && themeName.contains("Dark")) {
+            SHEET_OK = Color.WHITE;
+            LOG_WARNING = Color.CYAN;
+            LOG_INFO = Color.WHITE;
+            LOG_OTHER = Color.LIGHT_GRAY;
+            DEFAULT_ICON_COLOR = Color.WHITE;
+        } else {
+            SHEET_OK = Color.BLACK;
+            LOG_WARNING = Color.BLUE;
+            LOG_INFO = Color.BLACK;
+            LOG_OTHER = Color.GRAY;
+            DEFAULT_ICON_COLOR = Color.BLACK;
+        }
+    }
 
     //~ Constructors -------------------------------------------------------------------------------
 

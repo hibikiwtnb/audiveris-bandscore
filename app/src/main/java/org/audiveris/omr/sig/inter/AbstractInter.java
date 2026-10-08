@@ -831,7 +831,7 @@ public abstract class AbstractInter
     @Override
     public String getShapeString ()
     {
-        return shape.toString();
+        return shape.getDescription();
     }
 
     //----------------//

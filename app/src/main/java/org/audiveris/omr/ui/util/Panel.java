@@ -262,7 +262,7 @@ public class Panel
         final String labelInterval = Panel.getLabelInterval();
         final String fieldInterval = Panel.getFieldInterval();
 
-        StringBuilder sbc = new StringBuilder();
+        final StringBuilder sbc = new StringBuilder();
 
         for (int i = 0; i < cols; i++) {
             if (i != 0) {
@@ -275,8 +275,9 @@ public class Panel
                 sbc.append(",");
             }
 
-            sbc.append(labelAlignment).append(labelWidth).append(",").append(labelInterval).append(
-                    ",").append(fieldWidth);
+            sbc.append(labelAlignment).append(labelWidth) //
+                    .append(",").append(labelInterval) //
+                    .append(",").append(fieldWidth);
         }
 
         return sbc.toString();
@@ -434,7 +435,7 @@ public class Panel
                 "Horizontal gap between two fields");
 
         private final Constant.String fieldWidth = new Constant.String(
-                "35dlu",
+                "38dlu",
                 "Width of a field value");
 
         private final PixelCount insetBottom = new PixelCount(6, "Value of Bottom inset");

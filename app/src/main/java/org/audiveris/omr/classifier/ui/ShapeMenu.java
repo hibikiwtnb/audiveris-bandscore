@@ -25,6 +25,7 @@ import org.audiveris.omr.glyph.Glyph;
 import org.audiveris.omr.glyph.Shape;
 import org.audiveris.omr.glyph.ShapeSet;
 import org.audiveris.omr.sheet.Sheet;
+import org.audiveris.omr.sig.ui.ShapeMenuItem;
 import org.audiveris.omr.ui.symbol.MusicFamily;
 import org.audiveris.omr.ui.util.SeparableMenu;
 
@@ -36,7 +37,6 @@ import java.awt.event.ActionListener;
 import java.util.List;
 
 import javax.swing.JMenu;
-import javax.swing.JMenuItem;
 
 /**
  * Class <code>ShapeMenu</code> is a menu dedicated to assigning an inter to a glyph.
@@ -74,11 +74,9 @@ public class ShapeMenu
         this.sheet = sheet;
         this.glyph = glyph;
 
-        shapeListener = (ActionEvent e) ->
-        {
-            JMenuItem source = (JMenuItem) e.getSource();
-            Shape shape = Shape.valueOf(source.getText());
-            sheet.getInterController().assignGlyph(glyph, shape);
+        shapeListener = (ActionEvent e) -> {
+            final ShapeMenuItem source = (ShapeMenuItem) e.getSource();
+            sheet.getInterController().assignGlyph(glyph, source.getShape());
         };
 
         populateMenu();
@@ -97,10 +95,7 @@ public class ShapeMenu
             final MusicFamily family = sheet.getStub().getMusicFamily();
 
             for (Shape shape : shapes) {
-                JMenuItem menuItem = new JMenuItem(
-                        shape.toString(),
-                        shape.getDecoratedSymbol(family));
-                menuItem.setToolTipText(shape.getDescription());
+                final ShapeMenuItem menuItem = new ShapeMenuItem(shape, family);
                 menuItem.addActionListener(shapeListener);
                 add(menuItem);
             }

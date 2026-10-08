@@ -44,7 +44,6 @@ import org.audiveris.omr.sig.inter.WordInter;
 import org.audiveris.omr.text.FontAttributes;
 import org.audiveris.omr.text.FontInfo;
 import org.audiveris.omr.text.TextRole;
-import org.audiveris.omr.ui.Board;
 import org.audiveris.omr.ui.EntityBoard;
 import org.audiveris.omr.ui.PixelCount;
 import org.audiveris.omr.ui.field.LCheckBox;
@@ -110,6 +109,10 @@ public class InterBoard
     private static final ResourceMap resources = Application.getInstance().getContext()
             .getResourceMap(InterBoard.class);
 
+    private static final String customNumberTip = resources.getString("customNumber.toolTipText");
+
+    private static final String customTimeTip = resources.getString("customTime.toolTipText");
+
     //~ Instance fields ----------------------------------------------------------------------------
 
     /** Related sheet. */
@@ -119,28 +122,19 @@ public class InterBoard
     private final JLabel shapeIcon = new JLabel();
 
     /** Output: grade (intrinsic/contextual). */
-    private final LTextField grade = new LTextField(
-            false,
-            resources.getString("grade.text"),
-            resources.getString("grade.toolTipText"));
+    private final LTextField grade = new LTextField(false, "grade");
 
     /** Output: implicit / manual. */
     private final JLabel specific = new JLabel("");
 
     /** Output: shape. */
-    private final LLabel shapeName = new LLabel("", resources.getString("shapeName.toolTipText"));
+    private final LLabel shapeName = new LLabel("shapeName");
 
     /** Output: lyric verse. */
-    private final LIntegerField verse = new LIntegerField(
-            false,
-            resources.getString("verse.text"),
-            resources.getString("verse.toolTipText"));
+    private final LIntegerField verse = new LIntegerField(false, "verse");
 
     /** Output: voice. */
-    private final LIntegerField voice = new LIntegerField(
-            false,
-            resources.getString("voice.text"),
-            resources.getString("voice.toolTipText"));
+    private final LIntegerField voice = new LIntegerField(false, "voice");
 
     /** Output: lyrics above or below related note line. */
     private final JLabel aboveBelow = new JLabel();
@@ -152,38 +146,22 @@ public class InterBoard
     private final BoardToEnsembleAction toEnsAction = new BoardToEnsembleAction();
 
     /** To set into Edit mode. */
-    private final LCheckBox edit = new LCheckBox(
-            resources.getString("edit.text"),
-            resources.getString("edit.toolTipText"));
+    private final LCheckBox edit = new LCheckBox("edit");
 
     /** To set Tie aspect for a slur. */
-    private final LCheckBox tie = new LCheckBox(
-            resources.getString("tie.text"),
-            resources.getString("tie.toolTipText"));
+    private final LCheckBox tie = new LCheckBox("tie");
 
     /** Value or Numerator/Denominator of custom count or time. */
-    private final LTextField custom = new LTextField(
-            true,
-            resources.getString("time.text"),
-            resources.getString("time.toolTipText"));
+    private final LTextField custom = new LTextField(true, "custom");
 
     /** Font attributes for word. */
-    private final LTextField fontAttributes = new LTextField(
-            true,
-            resources.getString("fontAttributes.text"),
-            resources.getString("fontAttributes.toolTipText"));
+    private final LTextField fontAttributes = new LTextField(true, "fontAttributes");
 
     /** ComboBox for sentence role. */
-    private final LComboBox<TextRole> roleCombo = new LComboBox<>(
-            resources.getString("roleCombo.text"),
-            resources.getString("roleCombo.toolTipText"),
-            TextRole.values());
+    private final LComboBox<TextRole> roleCombo = new LComboBox<>("roleCombo", TextRole.values());
 
     /** Input/Output: textual content. */
-    private final LTextField textField = new LTextField(
-            true,
-            resources.getString("textField.text"),
-            resources.getString("textField.toolTipText"));
+    private final LTextField textField = new LTextField(true, "textField");
 
     /** Input/Output: mixed music & text content. */
     private final MusicPane musicPane;
@@ -215,7 +193,7 @@ public class InterBoard
     public InterBoard (Sheet sheet,
                        boolean selected)
     {
-        super(Board.INTER, sheet.getInterIndex().getEntityService(), selected);
+        super(BoardDesc.INTER, sheet.getInterIndex().getEntityService(), selected);
         this.sheet = sheet;
 
         paramAction = new ParamAction();
@@ -407,6 +385,9 @@ public class InterBoard
                 KeyStroke.getKeyStroke("ENTER"),
                 "MusicAction");
         musicPane.getActionMap().put("MusicAction", paramAction);
+
+        // Resources injection
+        resources.injectComponents(getComponent());
     }
 
     //---------------------//
@@ -579,6 +560,7 @@ public class InterBoard
                         custom.setText(number.getValue().toString());
                         custom.setEnabled(true);
                         custom.setVisible(true);
+                        custom.getField().setToolTipText(customNumberTip);
 
                         selfUpdatingText = false;
                     }
@@ -590,6 +572,7 @@ public class InterBoard
                     custom.setText(timeCustomInter.getTimeRational().toString());
                     custom.setEnabled(true);
                     custom.setVisible(true);
+                    custom.getField().setToolTipText(customTimeTip);
 
                     selfUpdatingText = false;
                 }

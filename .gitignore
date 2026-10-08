@@ -31,6 +31,9 @@ dist/*
 config/run.properties
 app/data
 app/data/*
+app/res/Bravura.otf
+app/res/BravuraText.otf
+app/res/JazzPerc.ttf
 data/args
 data/args/*
 data/benches

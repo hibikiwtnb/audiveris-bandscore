@@ -443,7 +443,7 @@ public class Scale
      * @param item desired item
      * @return item value, perhaps null
      */
-    public Integer getItemValue (Item item)
+    public Integer getItemValue (ScaleItem item)
     {
         return switch (item) {
             case line -> getFore();
@@ -727,7 +727,7 @@ public class Scale
      * @param v    new value. If the new value is 0 or less, the scale object is set to null
      * @return the modified scale object
      */
-    public Object setItemValue (Item item,
+    public Object setItemValue (ScaleItem item,
                                 int v)
     {
         return switch (item) {
@@ -1338,39 +1338,6 @@ public class Scale
                                              Fraction frac)
         {
             return interline * frac.getValue();
-        }
-    }
-
-    //------//
-    // Item //
-    //------//
-    /**
-     * Scale information kind.
-     */
-    public static enum Item
-    {
-        line("Line thickness"),
-        interline("Interline"),
-        smallInterline("Small interline"),
-        beam("Beam thickness"),
-        smallBeam("Small beam thickness"),
-        stem("Stem thickness");
-
-        private final String description;
-
-        Item (String description)
-        {
-            this.description = description;
-        }
-
-        /**
-         * Report item description
-         *
-         * @return description
-         */
-        public String getDescription ()
-        {
-            return description;
         }
     }
 

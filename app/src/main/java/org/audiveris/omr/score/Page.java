@@ -164,7 +164,7 @@ public class Page
     /**
      * Browse this page to determine the global page duration divisor.
      * <p>
-     * TODO: Here we retrieve divisor for the page. We could work on each part only.
+     * TODO: Here we retrieve divisor for the page. We could work on each part separately.
      *
      * @return the page duration divisor
      */
@@ -173,13 +173,18 @@ public class Page
         try {
             final SortedSet<Rational> durations = new TreeSet<>();
 
+            // We must make sure that a quarter can be expressed with the chosen division value
+            // Because the MusicXML division value is stated as the duration of one quarter (1/4)
+            durations.add(Rational.QUARTER);
+
             // Collect duration values for each standard chord in this page
             for (SystemInfo system : getSystems()) {
                 for (MeasureStack stack : system.getStacks()) {
                     for (AbstractChordInter chord : stack.getStandardChords()) {
                         try {
-                            final Rational duration = chord.isMeasureRest() ? stack
-                                    .getExpectedDuration() : chord.getDuration();
+                            final Rational duration = chord.isMeasureRest() //
+                                    ? stack.getExpectedDuration()
+                                    : chord.getDuration();
 
                             if (duration != null) {
                                 durations.add(duration);
@@ -193,8 +198,8 @@ public class Page
                 }
             }
 
-            // Compute greatest duration divisor for the page
-            Rational[] durationArray = durations.toArray(new Rational[durations.size()]);
+            // Compute the greatest duration divisor for the page
+            final Rational[] durationArray = durations.toArray(Rational[]::new);
             Rational divisor = (durationArray.length == 0) ? Rational.QUARTER
                     : Rational.gcd(durationArray);
             if (divisor.den < 4) {
@@ -202,7 +207,7 @@ public class Page
                 // duration is a half or whole note otherwise exports divisions="0"
                 divisor = Rational.gcd(divisor, Rational.QUARTER);
             }
-            logger.debug("durations={} divisor={}", Arrays.deepToString(durationArray), divisor);
+            logger.debug("durations={} gcd={}", Arrays.deepToString(durationArray), divisor);
 
             return divisor.den;
         } catch (Exception ex) {
@@ -707,11 +712,11 @@ public class Page
      * the page.
      *
      * @param value the raw duration
-     * @return the simple duration expression, in the param of proper divisions
+     * @return the simple duration expression, stated in number of proper divisions
      */
     public int simpleDurationOf (Rational value)
     {
-        return value.num * (getDurationDivisor() / value.den);
+        return (value.num * getDurationDivisor()) / value.den;
     }
 
     //----------//

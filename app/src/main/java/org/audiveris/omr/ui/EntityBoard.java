@@ -155,7 +155,6 @@ public class EntityBoard<E extends Entity>
         // Dump
         if (useDump) {
             dump = getDumpButton();
-            dump.setToolTipText(resources.getString("dump.toolTipText"));
             dump.setEnabled(false);
             dump.addActionListener(this);
         }
@@ -212,7 +211,7 @@ public class EntityBoard<E extends Entity>
         int r = 1; // --------------------------------
 
         if (idSpinner != null) {
-            builder.addLabel("Id").xy(1, r);
+            builder.addLabel("Id ").xy(1, r);
             builder.addRaw(idSpinner).xy(3, r);
         }
 
@@ -352,6 +351,18 @@ public class EntityBoard<E extends Entity>
         spinner.setLocale(Locale.ENGLISH);
         SpinnerUtil.setRightAlignment(spinner);
         SpinnerUtil.setEditable(spinner, true);
+
+        // Prevent thousands separator in display
+        final JSpinner.DefaultEditor editor = (JSpinner.DefaultEditor) spinner.getEditor();
+        final javax.swing.JFormattedTextField ftf = editor.getTextField();
+        final java.text.NumberFormat nf = java.text.NumberFormat.getIntegerInstance(Locale.ENGLISH);
+        nf.setGroupingUsed(false);
+        final javax.swing.text.NumberFormatter formatter = new javax.swing.text.NumberFormatter(nf);
+        formatter.setAllowsInvalid(false);
+        formatter.setValueClass(Integer.class); // HB
+        //formatter.setCommitsOnValidEdit(true); // HB
+        ftf.setFormatterFactory(new javax.swing.text.DefaultFormatterFactory(formatter));
+        ftf.setFocusLostBehavior(javax.swing.JFormattedTextField.COMMIT_OR_REVERT);
 
         return spinner;
     }

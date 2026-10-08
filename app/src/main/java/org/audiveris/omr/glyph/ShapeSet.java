@@ -27,6 +27,7 @@ import static org.audiveris.omr.glyph.Shape.*;
 import org.audiveris.omr.sheet.ProcessingSwitch;
 import org.audiveris.omr.sheet.ProcessingSwitches;
 import org.audiveris.omr.sheet.Sheet;
+import org.audiveris.omr.sig.ui.ShapeMenuItem;
 import org.audiveris.omr.ui.Colors;
 import org.audiveris.omr.ui.symbol.MusicFamily;
 
@@ -881,11 +882,9 @@ public class ShapeSet
     {
         // All shapes in the given range
         for (Shape shape : set.getSortedShapes()) {
-            JMenuItem menuItem = new JMenuItem(shape.toString(), shape.getDecoratedSymbol(family));
-            addColoredItem(top, menuItem, shape.getColor());
-
-            menuItem.setToolTipText(shape.getDescription());
+            final ShapeMenuItem menuItem = new ShapeMenuItem(shape, family);
             menuItem.addActionListener(listener);
+            addColoredItem(top, menuItem, shape.getColor());
         }
     }
 

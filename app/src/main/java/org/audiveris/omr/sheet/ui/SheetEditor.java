@@ -205,7 +205,6 @@ public class SheetEditor
         boards.add(shapeBoard = new ShapeBoard(sheet, this, constants.selectShapeBoard.isSet()));
         boards.add(
                 evaluationBoard = new EvaluationBoard(
-                        true,
                         sheet,
                         BasicClassifier.getInstance(),
                         sheet.getGlyphIndex().getEntityService(),

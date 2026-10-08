@@ -32,6 +32,7 @@ import org.audiveris.omr.sheet.Sheet;
 import org.audiveris.omr.sheet.SystemInfo;
 import org.audiveris.omr.sheet.SystemManager;
 import org.audiveris.omr.sig.ui.InterController;
+import org.audiveris.omr.sig.ui.ShapeButton;
 import org.audiveris.omr.ui.Board;
 import org.audiveris.omr.ui.selection.EntityListEvent;
 import org.audiveris.omr.ui.selection.EntityService;
@@ -44,6 +45,9 @@ import org.audiveris.omr.ui.symbol.ShapeSymbol;
 import org.audiveris.omr.ui.util.FixedWidthIcon;
 import org.audiveris.omr.ui.util.Panel;
 import org.audiveris.omr.util.Navigable;
+
+import org.jdesktop.application.Application;
+import org.jdesktop.application.ResourceMap;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,10 +63,7 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 
-import javax.swing.JButton;
-import javax.swing.JComponent;
 import javax.swing.JLabel;
-import javax.swing.JTextField;
 import javax.swing.SwingConstants;
 
 /**
@@ -82,13 +83,16 @@ public class EvaluationBoard
 
     private static final Logger logger = LoggerFactory.getLogger(EvaluationBoard.class);
 
-    /** Events this board is interested in */
+    private static final ResourceMap resources = Application.getInstance().getContext()
+            .getResourceMap(EvaluationBoard.class);
+
+    /** Events this board is interested in. */
     private static final Class<?>[] eventsRead = new Class<?>[] { EntityListEvent.class };
 
-    /** Color for well recognized glyphs */
+    /** Color for well recognized glyphs. */
     private static final Color EVAL_GOOD_COLOR = new Color(100, 200, 100);
 
-    /** Color for hardly recognized glyphs */
+    /** Color for hardly recognized glyphs. */
     private static final Color EVAL_SOSO_COLOR = new Color(150, 150, 150);
 
     //~ Instance fields ----------------------------------------------------------------------------
@@ -107,10 +111,7 @@ public class EvaluationBoard
     protected final Selector selector;
 
     /** Do we use GlyphChecker annotations?. */
-    private boolean useAnnotations;
-
-    /** True for active buttons, false for passive fields. */
-    protected final boolean isActive;
+    private final boolean useAnnotations;
 
     //~ Constructors -------------------------------------------------------------------------------
 
@@ -121,22 +122,20 @@ public class EvaluationBoard
      * Create an evaluation board with one neural network classifier and the ability to
      * force glyph shape.
      *
-     * @param isActive        true for active buttons
      * @param sheet           the related sheet, or null
      * @param classifier      the classifier to use
      * @param glyphService    the service to get glyphs
      * @param interController the related inters controller
      * @param selected        true for pre-selection
      */
-    public EvaluationBoard (boolean isActive,
-                            Sheet sheet,
+    public EvaluationBoard (Sheet sheet,
                             Classifier classifier,
                             EntityService glyphService,
                             InterController interController,
                             boolean selected)
     {
         super(
-                new Desc(classifier.getName(), 700),
+                new BasicDesc(classifier.getName(), BoardDesc.SHAPE.getPosition()),
                 glyphService,
                 eventsRead,
                 selected,
@@ -146,7 +145,6 @@ public class EvaluationBoard
 
         this.classifier = classifier;
         this.interController = interController;
-        this.isActive = isActive;
         this.sheet = sheet;
 
         selector = new Selector();
@@ -161,10 +159,13 @@ public class EvaluationBoard
     //--------------//
     private void defineLayout ()
     {
-        String colSpec = Panel.makeColumns(2, "right:", Panel.getLabelWidth(), "50dlu");
-        FormLayout layout = new FormLayout(colSpec, "");
-
-        int visibleButtons = Math.min(constants.visibleButtons.getValue(), selector.buttons.size());
+        // Use 6dlu gap between grade label and button, button fills remaining width
+        final String labelWidth = Panel.getLabelWidth();
+        final String colSpec = "right:" + labelWidth + ",6dlu,pref:grow";
+        final FormLayout layout = new FormLayout(colSpec, "");
+        final int visibleButtons = Math.min(
+                constants.visibleButtons.getValue(),
+                selector.buttons.size());
 
         for (int i = 0; i < visibleButtons; i++) {
             if (i != 0) {
@@ -178,9 +179,9 @@ public class EvaluationBoard
 
         for (int i = 0; i < visibleButtons; i++) {
             int r = (2 * i) + 1; // --------------------------------
-            EvalButton evb = selector.buttons.get(i);
+            final EvalButton evb = selector.buttons.get(i);
             builder.addRaw(evb.grade).xy(1, r);
-            builder.addRaw(isActive ? evb.button : evb.field).xyw(3, r, 5);
+            builder.addRaw(evb.button).xy(3, r);
         }
     }
 
@@ -201,7 +202,7 @@ public class EvaluationBoard
             if (sheet != null) {
                 // TODO: this picks up the first system that may be interested by the glyph!
                 // TODO: there is no support for staff specific scale!
-                SystemManager systemManager = sheet.getSystemManager();
+                final SystemManager systemManager = sheet.getSystemManager();
 
                 for (SystemInfo system : systemManager.getSystemsOf(glyph)) {
                     selector.setEvals(
@@ -254,8 +255,8 @@ public class EvaluationBoard
             }
 
             if (event instanceof EntityListEvent) {
-                EntityListEvent<Glyph> listEvent = (EntityListEvent<Glyph>) event;
-                Glyph glyph = listEvent.getEntity();
+                final EntityListEvent<Glyph> listEvent = (EntityListEvent<Glyph>) event;
+                final Glyph glyph = listEvent.getEntity();
 
                 if (glyph != null) {
                     evaluate(glyph);
@@ -295,15 +296,9 @@ public class EvaluationBoard
         if (musicFamily != cachedMusicFamily) {
             selector.buttons.forEach(b -> {
                 if ((b.button != null) && b.button.isVisible()) {
-                    final Shape shape = Shape.valueOf(b.button.getText());
+                    final Shape shape = b.button.getShape();
                     final ShapeSymbol symbol = shape.getDecoratedSymbol(musicFamily);
                     b.button.setIcon((symbol != null) ? new FixedWidthIcon(symbol) : null);
-                }
-
-                if ((b.field != null) && b.field.isVisible()) {
-                    final Shape shape = Shape.valueOf(b.field.getText());
-                    final ShapeSymbol symbol = shape.getDecoratedSymbol(musicFamily);
-                    b.field.setIcon((symbol != null) ? new FixedWidthIcon(symbol) : null);
                 }
             });
 
@@ -363,31 +358,19 @@ public class EvaluationBoard
     private class EvalButton
             implements ActionListener
     {
-        // Shape button or text field. Only one of them will be created and used
-        final JButton button;
-
-        final JLabel field;
+        // The related shape button
+        final ShapeButton button;
 
         // The related grade
-        JLabel grade = new JLabel("", SwingConstants.RIGHT);
+        final JLabel grade = new JLabel("", SwingConstants.RIGHT);
 
         public EvalButton ()
         {
-            grade.setToolTipText("Grade of the evaluation");
+            grade.setToolTipText(resources.getString("grade.text"));
 
-            if (isActive) {
-                button = new JButton();
-                button.addActionListener(this);
-                button.setToolTipText("Assignable shape");
-                button.setHorizontalAlignment(SwingConstants.LEFT);
-                field = null;
-            } else {
-                field = new JLabel();
-                field.setHorizontalAlignment(JTextField.CENTER);
-                field.setToolTipText("Evaluated shape");
-                field.setHorizontalAlignment(SwingConstants.LEFT);
-                button = null;
-            }
+            button = new ShapeButton();
+            button.addActionListener(this);
+            button.setHorizontalAlignment(SwingConstants.LEFT);
         }
 
         // Triggered by button
@@ -397,11 +380,11 @@ public class EvaluationBoard
             // Assign inter on current glyph with selected shape
             if (interController != null) {
                 @SuppressWarnings("unchecked")
-                Glyph glyph = ((EntityService<Glyph>) getSelectionService()).getSelectedEntity();
+                final Glyph glyph = ((EntityService<Glyph>) getSelectionService())
+                        .getSelectedEntity();
 
                 if (glyph != null) {
-                    String str = button.getText();
-                    Shape shape = Shape.valueOf(str);
+                    final Shape shape = button.getShape();
 
                     // Actually assign the shape
                     interController.assignGlyph(glyph, shape);
@@ -414,42 +397,24 @@ public class EvaluationBoard
         public void setEval (Evaluation eval,
                              boolean enabled)
         {
-            final JComponent comp = isActive ? button : field;
-
             if (eval != null) {
                 final Evaluation.Failure failure = eval.failure;
-                final String text = eval.shape.toString();
-                final String tip = (failure != null) ? failure.toString() : null;
                 final MusicFamily family = sheet != null ? sheet.getStub().getMusicFamily()
                         : MusicFont.getDefaultMusicFamily();
                 final ShapeSymbol symbol = eval.shape.getDecoratedSymbol(family);
 
-                if (isActive) {
-                    button.setEnabled(enabled);
-                    button.setText(text);
-                    button.setToolTipText(tip);
+                button.setShape(eval.shape);
+                button.setIcon((symbol != null) ? new FixedWidthIcon(symbol) : null);
+                button.setEnabled(enabled);
 
-                    button.setIcon((symbol != null) ? new FixedWidthIcon(symbol) : null);
-                } else {
-                    field.setText(text);
-                    field.setToolTipText(tip);
-
-                    field.setIcon((symbol != null) ? new FixedWidthIcon(symbol) : null);
-                }
-
-                comp.setVisible(true);
-
-                if (failure == null) {
-                    comp.setForeground(EVAL_GOOD_COLOR);
-                } else {
-                    comp.setForeground(EVAL_SOSO_COLOR);
-                }
+                button.setVisible(true);
+                button.setForeground((failure == null) ? EVAL_GOOD_COLOR : EVAL_SOSO_COLOR);
 
                 grade.setVisible(true);
                 grade.setText(String.format("%.4f", eval.grade));
             } else {
                 grade.setVisible(false);
-                comp.setVisible(false);
+                button.setVisible(false);
             }
         }
     }
@@ -488,9 +453,6 @@ public class EvaluationBoard
             return evals.length;
         }
 
-        //----------//
-        // setEvals //
-        //----------//
         /**
          * Display the evaluations.
          * Only first evalCount evaluations are displayed.
@@ -510,9 +472,9 @@ public class EvaluationBoard
                 return;
             }
 
-            boolean enabled = true;
-            double minGrade = constants.minGrade.getValue();
-            int iBound = Math.min(evalCount(), positiveEvals(evals));
+            final boolean enabled = true;
+            final double minGrade = constants.minGrade.getValue();
+            final int iBound = Math.min(evalCount(), positiveEvals(evals));
             int i;
 
             for (i = 0; i < iBound; i++) {

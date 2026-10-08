@@ -22,8 +22,11 @@
 package org.audiveris.omr.sheet;
 
 import org.audiveris.omr.constant.Constant;
+import org.audiveris.omr.util.ResourceUtil;
 
 import java.util.EnumSet;
+import java.util.MissingResourceException;
+import java.util.ResourceBundle;
 
 /**
  * Class <code>ProcessingSwitch</code> is the enumeration of all possible processing
@@ -84,6 +87,11 @@ public enum ProcessingSwitch
     smallVoidHeads(null),
     smallWholeHeads(null);
 
+    //~ Static fields/initializers -----------------------------------------------------------------
+
+    /** Resource injection. */
+    private static final ResourceBundle resources = ResourceUtil.getBundle(ProcessingSwitch.class);
+
     /**
      * The switches currently supported.
      */
@@ -119,7 +127,9 @@ public enum ProcessingSwitch
             poorInputMode,
             smallWholeHeads);
 
-    /** Underlying boolean constant. */
+    //~ Instance fields ----------------------------------------------------------------------------
+
+    /** The underlying boolean constant. */
     private final Constant.Boolean constant;
 
     //~ Constructors -------------------------------------------------------------------------------
@@ -147,5 +157,27 @@ public enum ProcessingSwitch
     public Constant.Boolean getConstant ()
     {
         return constant;
+    }
+
+    //---------//
+    // getText //
+    //---------//
+    public String getText ()
+    {
+        try {
+            // Priority is given to text in resources file if any
+            return resources.getString(name() + ".text");
+        } catch (MissingResourceException ignored) {
+            // Fallback using constant description text
+            return constant.getDescription();
+        }
+    }
+
+    //--------//
+    // getTip //
+    //--------//
+    public String getTip ()
+    {
+        return resources.getString(name() + ".toolTipText");
     }
 }

@@ -29,6 +29,7 @@ import org.audiveris.omr.ui.symbol.FontSymbol;
 import org.audiveris.omr.ui.symbol.MusicFamily;
 import org.audiveris.omr.ui.symbol.MusicFont;
 import org.audiveris.omr.ui.symbol.ShapeSymbol;
+import org.audiveris.omr.util.ResourceUtil;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,6 +40,8 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.MissingResourceException;
+import java.util.ResourceBundle;
 
 /**
  * Enum <code>Shape</code> defines the comprehensive enumeration of glyph shapes.
@@ -94,141 +97,141 @@ public enum Shape
     //
     // Sets ---
     //
-    DOT_set("Dot set"),
-    HW_REST_set("Half & Whole Rest set"),
-    EIGHTH_set("Grace & beat unit set"),
+    DOT_set,
+    HW_REST_set,
+    EIGHTH_set,
 
     //
     // Bars ---
     //
-    DAL_SEGNO("D.S.: Repeat from the sign"),
-    DA_CAPO("D.C.: Repeat from the beginning"),
-    SEGNO("Sign"),
-    CODA("Closing section"),
-    BREATH_MARK("Breath Mark"),
-    CAESURA("Caesura"),
-    FERMATA("Fermata arc + dot"),
-    FERMATA_BELOW("Fermata below, arc + dot"),
-    REPEAT_ONE_BAR("Repeat last bar"),
-    REPEAT_TWO_BARS("Repeat last two bars"),
-    REPEAT_FOUR_BARS("Repeat last four bars"),
+    DAL_SEGNO,
+    DA_CAPO,
+    SEGNO,
+    CODA,
+    BREATH_MARK,
+    CAESURA,
+    FERMATA,
+    FERMATA_BELOW,
+    REPEAT_ONE_BAR,
+    REPEAT_TWO_BARS,
+    REPEAT_FOUR_BARS,
 
     //
     // Clefs ---
     //
-    G_CLEF("Treble Clef"),
-    G_CLEF_SMALL("Small Treble Clef"),
-    G_CLEF_8VA("Treble Clef Ottava Alta"),
-    G_CLEF_8VB("Treble Clef Ottava Bassa"),
-    C_CLEF("Ut Clef"),
-    F_CLEF("Bass Clef"),
-    F_CLEF_SMALL("Small Bass Clef"),
-    F_CLEF_8VA("Bass Clef Ottava Alta"),
-    F_CLEF_8VB("Bass Clef Ottava Bassa"),
-    PERCUSSION_CLEF("Percussion Clef"),
+    G_CLEF,
+    G_CLEF_SMALL,
+    G_CLEF_8VA,
+    G_CLEF_8VB,
+    C_CLEF,
+    F_CLEF,
+    F_CLEF_SMALL,
+    F_CLEF_8VA,
+    F_CLEF_8VB,
+    PERCUSSION_CLEF,
     //CLEF_OTTAVA("Clef 8"), Not handled without its related clef
 
     //
     // Accidentals ---
     //
-    FLAT("Minus one half step"),
-    NATURAL("Natural value"),
-    SHARP("Plus one half step"),
-    DOUBLE_SHARP("Double Sharp"),
-    DOUBLE_FLAT("Double Flat"),
+    FLAT,
+    NATURAL,
+    SHARP,
+    DOUBLE_SHARP,
+    DOUBLE_FLAT,
 
     //
     // Time ---
     //
-    TIME_ZERO("Time digit 0"),
-    TIME_ONE("Time digit 1"),
-    TIME_TWO("Time digit 2"),
-    TIME_THREE("Time digit 3"),
-    TIME_FOUR("Time digit 4"),
-    TIME_FIVE("Time digit 5"),
-    TIME_SIX("Time digit 6"),
-    TIME_SEVEN("Time digit 7"),
-    TIME_EIGHT("Time digit 8"),
-    TIME_NINE("Time digit 9"),
-    TIME_TWELVE("Time number 12"),
-    TIME_SIXTEEN("Time number 16"),
+    TIME_ZERO,
+    TIME_ONE,
+    TIME_TWO,
+    TIME_THREE,
+    TIME_FOUR,
+    TIME_FIVE,
+    TIME_SIX,
+    TIME_SEVEN,
+    TIME_EIGHT,
+    TIME_NINE,
+    TIME_TWELVE,
+    TIME_SIXTEEN,
 
     // Whole time sigs
-    COMMON_TIME("Alpha = 4/4"),
-    CUT_TIME("Semi-Alpha = 2/2"),
+    COMMON_TIME,
+    CUT_TIME,
 
     // Predefined time combos
-    TIME_FOUR_FOUR("Rational 4/4"),
-    TIME_TWO_TWO("Rational 2/2"),
-    TIME_TWO_FOUR("Rational 2/4"),
-    TIME_THREE_FOUR("Rational 3/4"),
-    TIME_FIVE_FOUR("Rational 5/4"),
-    TIME_SIX_FOUR("Rational 6/4"),
-    TIME_THREE_EIGHT("Rational 3/8"),
-    TIME_SIX_EIGHT("Rational 6/8"),
-    TIME_TWELVE_EIGHT("Rational 12/8"),
+    TIME_FOUR_FOUR,
+    TIME_TWO_TWO,
+    TIME_TWO_FOUR,
+    TIME_THREE_FOUR,
+    TIME_FIVE_FOUR,
+    TIME_SIX_FOUR,
+    TIME_THREE_EIGHT,
+    TIME_SIX_EIGHT,
+    TIME_TWELVE_EIGHT,
 
     //
     // Octave shifts ---
     //
-    OTTAVA("8"),
-    QUINDICESIMA("15"),
-    VENTIDUESIMA("22"),
+    OTTAVA,
+    QUINDICESIMA,
+    VENTIDUESIMA,
 
     //
     // Rests ---
     //
-    LONG_REST("Rest for 4 measures"),
-    BREVE_REST("Rest for 2 measures"),
-    QUARTER_REST("Rest for a 1/4"),
-    EIGHTH_REST("Rest for a 1/8"),
-    ONE_16TH_REST("Rest for a 1/16"),
-    ONE_32ND_REST("Rest for a 1/32"),
-    ONE_64TH_REST("Rest for a 1/64"),
-    ONE_128TH_REST("Rest for a 1/128"),
+    LONG_REST,
+    BREVE_REST,
+    QUARTER_REST,
+    EIGHTH_REST,
+    ONE_16TH_REST,
+    ONE_32ND_REST,
+    ONE_64TH_REST,
+    ONE_128TH_REST,
 
     //
     // Flags ---
     //
-    FLAG_1("Single flag"),
-    FLAG_1_DOWN("Single flag down"),
-    FLAG_2("Double flag"),
-    FLAG_2_DOWN("Double flag down"),
-    FLAG_3("Triple flag"),
-    FLAG_3_DOWN("Triple flag down"),
-    FLAG_4("Quadruple flag"),
-    FLAG_4_DOWN("Quadruple flag down"),
-    FLAG_5("Quintuple flag"),
-    FLAG_5_DOWN("Quintuple flag down"),
+    FLAG_1,
+    FLAG_1_DOWN,
+    FLAG_2,
+    FLAG_2_DOWN,
+    FLAG_3,
+    FLAG_3_DOWN,
+    FLAG_4,
+    FLAG_4_DOWN,
+    FLAG_5,
+    FLAG_5_DOWN,
 
     //
     // Small Flags
     //
-    SMALL_FLAG("Flag for grace note"),
-    SMALL_FLAG_DOWN("Flag for grace note down"),
-    SMALL_FLAG_SLASH("Slashed flag for grace note"),
-    SMALL_FLAG_SLASH_DOWN("Slashed flag for grace note down"),
+    SMALL_FLAG,
+    SMALL_FLAG_DOWN,
+    SMALL_FLAG_SLASH,
+    SMALL_FLAG_SLASH_DOWN,
 
     //
     // Grace notes ---
     //
     //GRACE_NOTE("Grace Note with no slash"), // Handled by EIGHTH_set
-    GRACE_NOTE_DOWN("Grace Note down with no slash"),
-    GRACE_NOTE_SLASH("Grace Note with a slash"),
-    GRACE_NOTE_SLASH_DOWN("Grace Note down with a slash"),
+    GRACE_NOTE_DOWN,
+    GRACE_NOTE_SLASH,
+    GRACE_NOTE_SLASH_DOWN,
 
     //
     // Notes for metronome indication ---
     //
-    METRO_WHOLE("Metronome whole note", Colors.SCORE_PHYSICALS),
-    METRO_HALF("Metronome half note", Colors.SCORE_PHYSICALS),
-    METRO_QUARTER("Metronome quarter note", Colors.SCORE_PHYSICALS),
+    METRO_WHOLE(Colors.SCORE_PHYSICALS),
+    METRO_HALF(Colors.SCORE_PHYSICALS),
+    METRO_QUARTER(Colors.SCORE_PHYSICALS),
     //METRO_EIGHTH("Metronome 8th note"),  // Handled by EIGHTH_set
-    METRO_SIXTEENTH("Metronome 16th note", Colors.SCORE_PHYSICALS),
-    METRO_DOTTED_HALF("Metronome dotted half note", Colors.SCORE_PHYSICALS),
-    METRO_DOTTED_QUARTER("Metronome dotted quarter note", Colors.SCORE_PHYSICALS),
-    METRO_DOTTED_EIGHTH("Metronome dotted 8th note", Colors.SCORE_PHYSICALS),
-    METRO_DOTTED_SIXTEENTH("Metronome dotted 16th note", Colors.SCORE_PHYSICALS),
+    METRO_SIXTEENTH(Colors.SCORE_PHYSICALS),
+    METRO_DOTTED_HALF(Colors.SCORE_PHYSICALS),
+    METRO_DOTTED_QUARTER(Colors.SCORE_PHYSICALS),
+    METRO_DOTTED_EIGHTH(Colors.SCORE_PHYSICALS),
+    METRO_DOTTED_SIXTEENTH(Colors.SCORE_PHYSICALS),
 
     //
     // Articulations ---
@@ -254,53 +257,53 @@ public enum Shape
     //    DYNAMICS_SFFZ,
     //    DYNAMICS_SFP("Subito fortepiano"),
     //    DYNAMICS_SFPP,
-    DYNAMICS_P("Piano"),
-    DYNAMICS_PP("Pianissimo"),
-    DYNAMICS_PPP("Pianississimo"),
-    DYNAMICS_MP("Mezzo piano"),
-    DYNAMICS_F("Forte"),
-    DYNAMICS_FF("Fortissimo"),
-    DYNAMICS_FFF("Fortississimo"),
-    DYNAMICS_MF("Mezzo forte"),
-    DYNAMICS_FP("FortePiano"),
-    DYNAMICS_FZ("Forzando"),
-    DYNAMICS_SF("Subito forte"),
-    DYNAMICS_SFZ("Sforzando"),
+    DYNAMICS_P,
+    DYNAMICS_PP,
+    DYNAMICS_PPP,
+    DYNAMICS_MP,
+    DYNAMICS_F,
+    DYNAMICS_FF,
+    DYNAMICS_FFF,
+    DYNAMICS_MF,
+    DYNAMICS_FP,
+    DYNAMICS_FZ,
+    DYNAMICS_SF,
+    DYNAMICS_SFZ,
 
     //
     // Ornaments ---
     //
-    TR("Trill"),
-    TURN("Turn"),
-    TURN_INVERTED("Inverted Turn"),
-    TURN_UP("Turn Up"),
-    TURN_SLASH("Turn with a Slash"),
-    MORDENT("Lower mordent (with bisecting vertical line)"),
-    MORDENT_INVERTED("Upper mordent (no vertical line)"),
+    TR,
+    TURN,
+    TURN_INVERTED,
+    TURN_UP,
+    TURN_SLASH,
+    MORDENT,
+    MORDENT_INVERTED,
 
     //
     // Tuplets ---
     //
-    TUPLET_THREE("3"),
-    TUPLET_SIX("6"),
+    TUPLET_THREE,
+    TUPLET_SIX,
 
     //
     // Techniques ---
     //
-    BOW_DOWN("stringsDownBow"),
-    BOW_UP("stringsUpBow"),
-    PEDAL_MARK("Pedal down"),
-    PEDAL_UP_MARK("Pedal downup"),
+    BOW_DOWN,
+    BOW_UP,
+    PEDAL_MARK,
+    PEDAL_UP_MARK,
 
     //
     // Small digits ---
     //
-    DIGIT_0("Digit 0"),
-    DIGIT_1("Digit 1"),
-    DIGIT_2("Digit 2"),
-    DIGIT_3("Digit 3"),
-    DIGIT_4("Digit 4"),
-    DIGIT_5("Digit 5"),
+    DIGIT_0,
+    DIGIT_1,
+    DIGIT_2,
+    DIGIT_3,
+    DIGIT_4,
+    DIGIT_5,
     //    DIGIT_6("Digit 6"),
     //    DIGIT_7("Digit 7"),
     //    DIGIT_8("Digit 8"),
@@ -309,45 +312,45 @@ public enum Shape
     //
     // Roman numerals ---
     //
-    ROMAN_I("Roman number 1"),
-    ROMAN_II("Roman number 2"),
-    ROMAN_III("Roman number 3"),
-    ROMAN_IV("Roman number 4"),
-    ROMAN_V("Roman number 5"),
-    ROMAN_VI("Roman number 6"),
-    ROMAN_VII("Roman number 7"),
-    ROMAN_VIII("Roman number 8"),
-    ROMAN_IX("Roman number 9"),
-    ROMAN_X("Roman number 10"),
-    ROMAN_XI("Roman number 11"),
-    ROMAN_XII("Roman number 12"),
+    ROMAN_I,
+    ROMAN_II,
+    ROMAN_III,
+    ROMAN_IV,
+    ROMAN_V,
+    ROMAN_VI,
+    ROMAN_VII,
+    ROMAN_VIII,
+    ROMAN_IX,
+    ROMAN_X,
+    ROMAN_XI,
+    ROMAN_XII,
 
     //
     // Plucking ---
     //
-    PLUCK_P("Plucking pouce/pulgar/thumb"),
-    PLUCK_I("Plucking index/indicio/index"),
-    PLUCK_M("Plucking majeur/medio/middle"),
-    PLUCK_A("Plucking annulaire/anular/ring"),
+    PLUCK_P,
+    PLUCK_I,
+    PLUCK_M,
+    PLUCK_A,
 
     //
     // Percussion playing technique ---
     //
-    PLAYING_OPEN("Pict open: o"),
-    PLAYING_HALF_OPEN("Pict half-open: ø"),
-    PLAYING_CLOSED("Pict closed: +"),
+    PLAYING_OPEN,
+    PLAYING_HALF_OPEN,
+    PLAYING_CLOSED,
 
     //
     // Tremolos
     //
-    TREMOLO_1("Single tremolo"),
-    TREMOLO_2("Double tremolo"),
-    TREMOLO_3("Triple tremolo"),
+    TREMOLO_1,
+    TREMOLO_2,
+    TREMOLO_3,
 
     //
     // Miscellaneous ---
     //
-    CLUTTER("Pure clutter", Colors.SHAPE_UNKNOWN),
+    CLUTTER(Colors.SHAPE_UNKNOWN),
 
     /**
      * =============================================================================================
@@ -357,192 +360,194 @@ public enum Shape
      * =============================================================================================
      */
 
-    TEXT("Sequence of letters & spaces"),
-    CHARACTER("Any letter"),
+    TEXT,
+    CHARACTER,
 
     //
     // Shapes based on physical DOT_set ---
     //
-    REPEAT_DOT("Repeat dot", DOT_set),
-    AUGMENTATION_DOT("Augmentation Dot", DOT_set),
-    STACCATO("Staccato dot", DOT_set),
+    REPEAT_DOT(DOT_set),
+    AUGMENTATION_DOT(DOT_set),
+    STACCATO(DOT_set),
 
     //
     // Shapes based on physical HW_REST_set ---
     //
-    WHOLE_REST("Rest for a 1", HW_REST_set),
-    HALF_REST("Rest for a 1/2", HW_REST_set),
+    WHOLE_REST(HW_REST_set),
+    HALF_REST(HW_REST_set),
 
     //
     // Shapes based on physical EIGHTH_set ---
     //
-    GRACE_NOTE("Grace Note with no slash", EIGHTH_set),
-    METRO_EIGHTH("Metronome 8th note", EIGHTH_set),
+    GRACE_NOTE(EIGHTH_set),
+    METRO_EIGHTH(EIGHTH_set),
 
     //
     // StemLessHeads duration 2 ---
     //
-    BREVE("Double Whole"),
-    BREVE_SMALL("Small Double Whole"),
-    BREVE_CROSS("Double Whole Cross"),
-    BREVE_DIAMOND("Double Whole Diamond"),
-    BREVE_TRIANGLE_DOWN("Double Whole Triangle Down"),
-    BREVE_CIRCLE_X("Double Whole Circle X"),
+    BREVE,
+    BREVE_SMALL,
+    BREVE_CROSS,
+    BREVE_DIAMOND,
+    BREVE_TRIANGLE_DOWN,
+    BREVE_CIRCLE_X,
 
     //
     // StemLessHeads duration 1 ---
     //
-    WHOLE_NOTE("Hollow node head for wholes"),
-    WHOLE_NOTE_SMALL("Small hollow node head for grace or cue wholes"),
-    WHOLE_NOTE_CROSS("Hollow cross shape note head for unpitched percussion wholes"),
-    WHOLE_NOTE_DIAMOND("Hollow diamond-shaped note head for unpitched percussion wholes"),
-    WHOLE_NOTE_TRIANGLE_DOWN("Hollow point-down triangle shape for unpitched percussion wholes"),
-    WHOLE_NOTE_CIRCLE_X("Stemless circle-x head shape for unpitched percussion wholes"),
+    WHOLE_NOTE,
+    WHOLE_NOTE_SMALL,
+    WHOLE_NOTE_CROSS,
+    WHOLE_NOTE_DIAMOND,
+    WHOLE_NOTE_TRIANGLE_DOWN,
+    WHOLE_NOTE_CIRCLE_X,
 
     //
     // Noteheads duration 1/2 ---
     //
-    NOTEHEAD_VOID("Hollow note head for halves"),
-    NOTEHEAD_VOID_SMALL("Small hollow note head for grace or cue"),
-    NOTEHEAD_CROSS_VOID("Hollow cross shape note head for unpitched percussion"),
-    NOTEHEAD_DIAMOND_VOID("Hollow diamond shape note head for unpitched percussion"),
-    NOTEHEAD_TRIANGLE_DOWN_VOID(
-            "Hollow point-down triangle shape note head for unpitched percussion"),
-    NOTEHEAD_CIRCLE_X_VOID("Hollow circle-x shape note head for unpitched percussion"),
+    NOTEHEAD_VOID,
+    NOTEHEAD_VOID_SMALL,
+    NOTEHEAD_CROSS_VOID,
+    NOTEHEAD_DIAMOND_VOID,
+    NOTEHEAD_TRIANGLE_DOWN_VOID,
+    NOTEHEAD_CIRCLE_X_VOID,
 
     //
     // Noteheads duration 1/4 ---
     //
-    NOTEHEAD_BLACK("Filled note head for quarters and less"),
-    NOTEHEAD_BLACK_SMALL("Small filled note head for grace or cue"),
-    NOTEHEAD_CROSS("Ghost note with rhythmic value but no discernible pitch"),
-    NOTEHEAD_DIAMOND_FILLED("Filled diamond shape note head for unpitched percussion"),
-    NOTEHEAD_TRIANGLE_DOWN_FILLED(
-            "Filled point-down triangle shape note head for unpitched percussion"),
-    NOTEHEAD_CIRCLE_X("Circle-x shape note head for unpitched percussion"),
+    NOTEHEAD_BLACK,
+    NOTEHEAD_BLACK_SMALL,
+    NOTEHEAD_CROSS,
+    NOTEHEAD_DIAMOND_FILLED,
+    NOTEHEAD_TRIANGLE_DOWN_FILLED,
+    NOTEHEAD_CIRCLE_X,
 
     //
     // Compound notes ---
     //
-    SIXTEENTH_NOTE_UP("Filled head plus its up stem and two flags"),
-    DOTTED_SIXTEENTH_NOTE_UP("Filled head plus its up stem, two flag and dot"),
-    EIGHTH_NOTE_UP("Filled head plus its up stem and flag"),
-    DOTTED_EIGHTH_NOTE_UP("Filled head plus its up stem, flag and dot"),
-    QUARTER_NOTE_UP("Filled head plus its up stem"),
-    QUARTER_NOTE_DOWN("Filled head plus its down stem"),
-    DOTTED_QUARTER_NOTE_UP("Filled head plus its up stem and dot"),
-    HALF_NOTE_UP("Hollow head plus its up stem"),
-    HALF_NOTE_DOWN("Hollow head plus its down stem"),
-    DOTTED_HALF_NOTE_UP("Hollow head plus its up stem and dot"),
+    SIXTEENTH_NOTE_UP,
+    DOTTED_SIXTEENTH_NOTE_UP,
+    EIGHTH_NOTE_UP,
+    DOTTED_EIGHTH_NOTE_UP,
+    QUARTER_NOTE_UP,
+    QUARTER_NOTE_DOWN,
+    DOTTED_QUARTER_NOTE_UP,
+    HALF_NOTE_UP,
+    HALF_NOTE_DOWN,
+    DOTTED_HALF_NOTE_UP,
 
     //
     // Beams and slurs ---
     //
-    BEAM("Beam between two stems"),
-    BEAM_SMALL("Small beam for cue notes"),
-    BEAM_HOOK("Hook of a beam attached on one stem"),
-    BEAM_HOOK_SMALL("Small hook of a beam for cue notes"),
-    SLUR("Slur above or below notes"),
-    SLUR_ABOVE("Slur above notes"),
-    SLUR_BELOW("Slur below notes"),
-    MULTIPLE_REST("Multiple measure rest"),
-    MULTIPLE_REST_LEFT("Multiple measure rest left"),
-    MULTIPLE_REST_MIDDLE("Multiple measure rest middle"),
-    MULTIPLE_REST_RIGHT("Multiple measure rest right"),
+    BEAM,
+    BEAM_SMALL,
+    BEAM_HOOK,
+    BEAM_HOOK_SMALL,
+    SLUR,
+    SLUR_ABOVE,
+    SLUR_BELOW,
+    MULTIPLE_REST,
+    MULTIPLE_REST_LEFT,
+    MULTIPLE_REST_MIDDLE,
+    MULTIPLE_REST_RIGHT,
 
     //
     // Key signatures ---
     //
-    KEY_FLAT_7("Seven Flats"),
-    KEY_FLAT_6("Six Flats"),
-    KEY_FLAT_5("Five Flats"),
-    KEY_FLAT_4("Four Flats"),
-    KEY_FLAT_3("Three Flats"),
-    KEY_FLAT_2("Two Flats"),
-    KEY_FLAT_1("One Flat"),
-    KEY_CANCEL("Key Cancel"),
-    KEY_SHARP_1("One Sharp"),
-    KEY_SHARP_2("Two Sharps"),
-    KEY_SHARP_3("Three Sharps"),
-    KEY_SHARP_4("Four Sharps"),
-    KEY_SHARP_5("Five Sharps"),
-    KEY_SHARP_6("Six Sharps"),
-    KEY_SHARP_7("Seven Sharps"),
+    KEY_FLAT_7,
+    KEY_FLAT_6,
+    KEY_FLAT_5,
+    KEY_FLAT_4,
+    KEY_FLAT_3,
+    KEY_FLAT_2,
+    KEY_FLAT_1,
+    KEY_CANCEL,
+    KEY_SHARP_1,
+    KEY_SHARP_2,
+    KEY_SHARP_3,
+    KEY_SHARP_4,
+    KEY_SHARP_5,
+    KEY_SHARP_6,
+    KEY_SHARP_7,
 
     //
     // Bars ---
     //
-    DUMMY_BARLINE("Dummy bar line"),
-    THIN_BARLINE("Thin bar line"),
-    THIN_CONNECTOR("Connector between thin barlines", Colors.SCORE_FRAME),
-    THICK_BARLINE("Thick bar line"),
-    THICK_CONNECTOR("Connector between thick barlines", Colors.SCORE_FRAME),
-    BRACKET_CONNECTOR("Connector between bracket items", Colors.SCORE_FRAME),
-    DOUBLE_BARLINE("Double thin bar line"),
-    FINAL_BARLINE("Thin / Thick bar line"),
-    REVERSE_FINAL_BARLINE("Thick / Thin bar line"),
-    LEFT_REPEAT_SIGN("Thick / Thin bar line + Repeat dots"),
-    RIGHT_REPEAT_SIGN("Repeat dots + Thin / Thick bar line"),
-    BACK_TO_BACK_REPEAT_SIGN("Repeat dots + Thin / Thick / Thin  + Repeat dots"),
-    ENDING("Alternate ending"),
-    ENDING_WRL("Alternate ending with right leg"),
+    DUMMY_BARLINE,
+    THIN_BARLINE,
+    THIN_CONNECTOR(Colors.SCORE_FRAME),
+    THICK_BARLINE,
+    THICK_CONNECTOR(Colors.SCORE_FRAME),
+    BRACKET_CONNECTOR(Colors.SCORE_FRAME),
+    DOUBLE_BARLINE,
+    FINAL_BARLINE,
+    REVERSE_FINAL_BARLINE,
+    LEFT_REPEAT_SIGN,
+    RIGHT_REPEAT_SIGN,
+    BACK_TO_BACK_REPEAT_SIGN,
+    ENDING,
+    ENDING_WRL,
 
     //
     // Wedges ---
     //
-    CRESCENDO("Crescendo"),
-    DIMINUENDO("Diminuendo"),
+    CRESCENDO,
+    DIMINUENDO,
 
     //
     // Miscellaneous ---
     //
-    BRACE("Brace"),
-    BRACKET("Bracket"),
-    REPEAT_DOT_PAIR("Pair of repeat dots"),
-    NOISE("Too small stuff", Colors.SHAPE_UNKNOWN),
-    LEDGER("Ledger"),
-    SEGMENT("Wedge or ending segment"),
-    LYRICS("Lyrics", Colors.SCORE_LYRICS),
-    METRONOME("Text-based notes", Colors.SCORE_PHYSICALS),
+    BRACE,
+    BRACKET,
+    REPEAT_DOT_PAIR,
+    NOISE(Colors.SHAPE_UNKNOWN),
+    LEDGER,
+    SEGMENT,
+    LYRICS(Colors.SCORE_LYRICS),
+    METRONOME(Colors.SCORE_PHYSICALS),
 
     //
     // Stems ---
     //
-    STEM("Stem"),
-    VERTICAL_SERIF("Vertical serif"),
+    STEM,
+    VERTICAL_SERIF,
 
     //
     // Other stuff ---
     //
-    FORWARD("To indicate a forward"),
-    NON_DRAGGABLE("Non draggable shape"),
-    GLYPH_PART("Part of a larger glyph"),
-    NUMBER_CUSTOM("Number defined by user"),
-    TIME_CUSTOM("Time signature defined by user"),
-    NO_LEGAL_TIME("No Legal Time Shape"),
-    BRACKET_UPPER_SERIF("Top serif of a bracket"),
-    BRACKET_LOWER_SERIF("Bottom serif of a bracket"),
-    STAFF_LINES("5-line staff"),
-    NOTEHEAD_SLASH("Slash: the previous chord again, with this rhythm"),
+    FORWARD,
+    NON_DRAGGABLE,
+    GLYPH_PART,
+    NUMBER_CUSTOM,
+    TIME_CUSTOM,
+    NO_LEGAL_TIME,
+    BRACKET_UPPER_SERIF,
+    BRACKET_LOWER_SERIF,
+    STAFF_LINES,
+    NOTEHEAD_SLASH,
 
     //
     // Obsolete, kept for backward compatibility ---
     //
-    FLAG_1_UP("OBSOLETE Single flag up"),
-    FLAG_2_UP("OBSOLETE Double flag up"),
-    FLAG_3_UP("OBSOLETE Triple flag up"),
-    FLAG_4_UP("OBSOLETE Quadruple flag up"),
-    FLAG_5_UP("OBSOLETE Quintuple flag up"),
-    FERMATA_DOT("Fermata dot"),
-    FERMATA_ARC("Fermata arc, without dot"),
-    FERMATA_ARC_BELOW("Fermata arc below, without dot"),
-    STRONG_ACCENT("Marcato");
+    FLAG_1_UP,
+    FLAG_2_UP,
+    FLAG_3_UP,
+    FLAG_4_UP,
+    FLAG_5_UP,
+    FERMATA_DOT,
+    FERMATA_ARC,
+    FERMATA_ARC_BELOW,
+    STRONG_ACCENT;
 
     // =============================================================================================
     // This is the end of shape enumeration
     // =============================================================================================
 
+    //~ Static fields/initializers -----------------------------------------------------------------
+
     private static final Logger logger = LoggerFactory.getLogger(Shape.class);
+
+    private static final ResourceBundle resources = ResourceUtil.getBundle(Shape.class);
 
     /** Last physical shape. */
     public static final Shape LAST_PHYSICAL_SHAPE = CLUTTER;
@@ -557,7 +562,10 @@ public enum Shape
     //~ Instance fields ----------------------------------------------------------------------------
 
     /** Explanation of the glyph shape. */
-    private final String description;
+    private String description;
+
+    /** Tip of the glyph shape. */
+    private String tip;
 
     /** Potential related physical shape. */
     private Shape physicalShape;
@@ -572,31 +580,22 @@ public enum Shape
 
     Shape ()
     {
-        this("", null, null);
+        this(null, null);
     }
 
-    Shape (String description)
+    Shape (Color color)
     {
-        this(description, null, null);
+        this(null, color);
     }
 
-    Shape (String description,
+    Shape (Shape physicalShape)
+    {
+        this(physicalShape, null);
+    }
+
+    Shape (Shape physicalShape,
            Color color)
     {
-        this(description, null, color);
-    }
-
-    Shape (String description,
-           Shape physicalShape)
-    {
-        this(description, physicalShape, null);
-    }
-
-    Shape (String description,
-           Shape physicalShape,
-           Color color)
-    {
-        this.description = description;
         this.physicalShape = physicalShape;
         this.color = color;
 
@@ -667,10 +666,14 @@ public enum Shape
     public String getDescription ()
     {
         if (description == null) {
-            return toString(); // Could be improved
-        } else {
-            return description;
+            description = resources.getString(name() + ".text");
+
+            if (description == null) {
+                description = toString(); // Better than nothing!
+            }
         }
+
+        return description;
     }
 
     //---------------//
@@ -869,6 +872,28 @@ public enum Shape
         return (fs != null) ? fs.symbol : null;
     }
 
+    //--------//
+    // getTip //
+    //--------//
+    /**
+     * Report a user-friendly explanation of this shape.
+     *
+     * @return the shape tip
+     */
+    public String getTip ()
+    {
+        if (tip == null) {
+            try {
+                tip = resources.getString(name() + ".toolTipText");
+            } catch (MissingResourceException mre) {
+                logger.debug(mre.getMessage());
+                tip = ResourceUtil.NO_RESOURCE;
+            }
+        }
+
+        return (tip != ResourceUtil.NO_RESOURCE) ? tip : null;
+    }
+
     //---------//
     // isAbove //
     //---------//
@@ -1050,7 +1075,7 @@ public enum Shape
     // isTrainable //
     //-------------//
     /**
-     * Report whether this shape can be used to train an classifier.
+     * Report whether this shape can be used to train a classifier.
      *
      * @return true if trainable, false otherwise
      */
@@ -1096,7 +1121,7 @@ public enum Shape
      */
     public static void dumpShapeColors ()
     {
-        List<String> names = new ArrayList<>();
+        final List<String> names = new ArrayList<>();
 
         for (Shape shape : Shape.values()) {
             names.add(shape + " " + Constant.Color.encodeColor(shape.getColor()));

@@ -52,7 +52,7 @@ import javax.xml.bind.annotation.XmlRootElement;
  * place.
  * <p>
  * <img src=
- * "http://upload.wikimedia.org/wikipedia/commons/thumb/1/17/Middle_C_in_four_clefs.svg/600px-Middle_C_in_four_clefs.svg.png"
+ * "https://en.wikipedia.org/wiki/Clef#/media/File:Middle_C_in_four_clefs.svg"
  * alt="Middle C in four clefs">
  * <p>
  * Pitch of NoteStep line of the clef:

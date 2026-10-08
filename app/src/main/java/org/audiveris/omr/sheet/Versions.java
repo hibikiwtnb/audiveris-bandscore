@@ -32,6 +32,7 @@ import org.audiveris.omr.ui.util.BrowserLinkListener;
 import org.audiveris.omr.ui.util.Panel;
 import org.audiveris.omr.ui.util.UIUtil;
 import org.audiveris.omr.util.LabeledEnum;
+import org.audiveris.omr.util.OmrExecutors;
 import org.audiveris.omr.util.Version;
 import org.audiveris.omr.util.Version.UpgradeVersion;
 
@@ -63,6 +64,10 @@ import java.util.Collections;
 import java.util.GregorianCalendar;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
@@ -236,13 +241,12 @@ public abstract class Versions
         final Frequency frequency = constants.releaseCheckFrequency.getValue();
 
         switch (frequency) {
-        case Always -> {
-        }
-        case Daily -> next.add(Calendar.DAY_OF_MONTH, 1);
-        case Weekly -> next.add(Calendar.WEEK_OF_MONTH, 1);
-        case Monthly -> next.add(Calendar.MONTH, 1);
-        case Yearly -> next.add(Calendar.YEAR, 1);
-        case Never -> next = null;
+            case Always -> {}
+            case Daily -> next.add(Calendar.DAY_OF_MONTH, 1);
+            case Weekly -> next.add(Calendar.WEEK_OF_MONTH, 1);
+            case Monthly -> next.add(Calendar.MONTH, 1);
+            case Yearly -> next.add(Calendar.YEAR, 1);
+            case Never -> next = null;
         }
 
         logger.debug(
@@ -316,50 +320,72 @@ public abstract class Versions
     //------//
     /**
      * Poll the GitHub site for a new Audiveris release.
+     * <p>
+     * This action is now guarded by a time-out value, in case the GitHub site does not answer.
      *
      * @param manual true for a user manual poll, false for an automatic poll
      */
     public static void poll (boolean manual)
     {
-        final GHRelease latest = Releases.getLatestRelease();
-        final Version latestVersion = new Version(latest.getTagName().trim());
+        final int timeout = constants.checkTimeOut.getValue();
+        Future<GHRelease> future = null;
 
-        if (Versions.CURRENT_SOFTWARE.compareTo(latestVersion) < 0) {
-            logger.info("A new software release is available: {}", latestVersion);
+        try {
+            future = OmrExecutors.getCachedLowExecutor().submit( () -> {
+                return Releases.getLatestRelease();
+            });
 
-            if (OMR.gui == null) {
-                logger.info("See {}", latest.getHtmlUrl());
+            final GHRelease latest = future.get(timeout, TimeUnit.SECONDS);
+
+            final Version latestVersion = new Version(latest.getTagName().trim());
+
+            if (Versions.CURRENT_SOFTWARE.compareTo(latestVersion) < 0) {
+                logger.info("A new software release is available: {}", latestVersion);
+
+                if (OMR.gui == null) {
+                    logger.info("See {}", latest.getHtmlUrl());
+                } else {
+                    // Explicitly tell the user that check result is positive
+                    final PositivePanel panel = new PositivePanel(latest);
+                    getResources().injectComponents(panel);
+
+                    JOptionPane.showMessageDialog(
+                            OMR.gui.getFrame(),
+                            panel,
+                            panel.getTitle(),
+                            JOptionPane.INFORMATION_MESSAGE);
+                }
             } else {
-                // Explicitly tell the user that check result is positive
-                final PositivePanel panel = new PositivePanel(latest);
-                getResources().injectComponents(panel);
+                logger.info("Software version is up-to-date");
 
-                JOptionPane.showMessageDialog(
-                        OMR.gui.getFrame(),
-                        panel,
-                        panel.getTitle(),
-                        JOptionPane.INFORMATION_MESSAGE);
+                if ((OMR.gui != null) && manual) {
+                    // Explicitly tell the user that check result is negative
+                    final NegativePanel panel = new NegativePanel(latest);
+                    getResources().injectComponents(panel);
+
+                    JOptionPane.showMessageDialog(
+                            OMR.gui.getFrame(),
+                            panel,
+                            panel.getTitle(),
+                            JOptionPane.INFORMATION_MESSAGE);
+                }
             }
-        } else {
-            logger.info("Software version is up-to-date");
 
-            if ((OMR.gui != null) && manual) {
-                // Explicitly tell the user that check result is negative
-                final NegativePanel panel = new NegativePanel(latest);
-                getResources().injectComponents(panel);
-
-                JOptionPane.showMessageDialog(
-                        OMR.gui.getFrame(),
-                        panel,
-                        panel.getTitle(),
-                        JOptionPane.INFORMATION_MESSAGE);
+            if (!manual) {
+                // Remember the date this poll was made
+                final Calendar now = new GregorianCalendar();
+                constants.lastReleaseCheckDate.setValue(now.getTime());
             }
-        }
 
-        if (!manual) {
-            // Remember the date this poll was made
-            final Calendar now = new GregorianCalendar();
-            constants.lastReleaseCheckDate.setValue(now.getTime());
+        } catch (TimeoutException tex) {
+            logger.warn("Timeout {} seconds while checking version", timeout);
+        } catch (InterruptedException | ExecutionException ex) {
+            logger.warn("Error while checking version", ex);
+        } finally {
+            // Signal the on-going check to stop (if possible)
+            if (future != null) {
+                future.cancel(true);
+            }
         }
     }
 
@@ -381,6 +407,7 @@ public abstract class Versions
         protected LLabel tag = new LLabel(JLabel.LEFT);
 
         protected LComboBox<LabeledEnum<Frequency>> polling = new LComboBox<>(
+                "polling",
                 getLocaleFrequencies());
 
         /** The JGoodies/Form layout to be used by all subclasses. */
@@ -399,7 +426,6 @@ public abstract class Versions
 
             status.setName("status");
             tag.setName("tag");
-            polling.setName("polling");
 
             paramAction = new ParamAction();
             builder = FormBuilder.create().layout(layout).panel(this);
@@ -495,6 +521,11 @@ public abstract class Versions
         private final Constant.Date lastReleaseCheckDate = new Constant.Date(
                 "1-Jan-2000",
                 "Date when last release check was made");
+
+        private final Constant.Integer checkTimeOut = new Constant.Integer(
+                "Seconds",
+                10,
+                "Time-out for checking action, specified in seconds");
     }
 
     //-----------//
@@ -597,7 +628,7 @@ public abstract class Versions
             defineLayout();
 
             // Trick to pre-position the scroll pane at its top left
-            javax.swing.SwingUtilities.invokeLater(() -> {
+            javax.swing.SwingUtilities.invokeLater( () -> {
                 scrollPane.getViewport().setViewPosition(new Point(0, 0));
             });
         }

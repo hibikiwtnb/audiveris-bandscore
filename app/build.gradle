@@ -14,6 +14,9 @@ plugins {
 
     // Needed to retrieve all dependencies for flatpak
     id 'io.github.jwharm.flatpak-gradle-generator' version '1.8.0'
+    
+    // Needed to download resources like Bravura.otf
+    id "de.undercouch.download" version "5.7.0"
 }
 
 //------------//
@@ -72,8 +75,8 @@ dependencies {
         "com.github.jai-imageio:jai-imageio-core:1.4.0",
         "com.github.jai-imageio:jai-imageio-jpeg2000:1.4.0",
         "com.itextpdf:itextpdf:5.5.13.2",
+        "com.formdev:flatlaf:3.7.2",
         "com.jgoodies:jgoodies-forms:1.9.0",
-        "com.jgoodies:jgoodies-looks:2.7.0",
         "com.sun.xml.bind:jaxb-core:2.3.0.1",
         "com.sun.xml.bind:jaxb-impl:2.3.1",
         "gov.nist.math:jama:1.0.3",
@@ -187,6 +190,32 @@ tasks.run {
         logger.warn("run. cmdLineArgs: {}", cmdLineArgs)
         args cmdLineArgs.split(',')
     }
+}
+
+// Download Bravura font(s)
+// Remember to also update Flatpak org.audiveris.audiveris.template.yml
+tasks.register('downloadBravura', Download) {
+    def bravuraVersion = '1.480'
+    def root = "https://github.com/steinbergmedia/bravura/releases/download/bravura-${bravuraVersion}"
+    src ["${root}/Bravura.otf",
+       //"${root}/BravuraText.otf",
+    ]
+    dest 'res'
+    overwrite false
+}
+
+// Download JazzPerc font(s)
+// Remember to also update Flatpak org.audiveris.audiveris.template.yml
+tasks.register('downloadJazzPerc', Download) {
+    src "https://ttfonts.net/sfonts/2/20683_JazzPerc.ttf"
+    dest 'res/JazzPerc.ttf'
+    overwrite false
+    tempAndMove true
+}
+
+classes {
+    dependsOn 'downloadBravura'
+    dependsOn 'downloadJazzPerc'
 }
 
 // Generate application.jar
