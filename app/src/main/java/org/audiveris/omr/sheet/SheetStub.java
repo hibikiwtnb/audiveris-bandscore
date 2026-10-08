@@ -540,8 +540,11 @@ public class SheetStub
 
             future.get(timeout, TimeUnit.SECONDS);
 
-            // No save at end of each step: in batch the book is stored once when processing
-            // ends (CLI.ProcessingTask.processBook), a store per step took about 10% of a page
+            // At end of each step, save sheet to disk?
+            if ((OMR.gui == null) && Main.getCli().isSave()) {
+                logger.debug("calling storeSheet");
+                storeSheet();
+            }
         } catch (TimeoutException tex) {
             logger.warn("Timeout {} seconds for step {}", timeout, step, tex);
 
