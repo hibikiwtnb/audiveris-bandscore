@@ -1425,9 +1425,11 @@ public class Measure
         stdChords.addAll(getHeadChords());
         stdChords.addAll(getRestChords());
 
-        // Remove small head chords if any
+        // Remove small head chords if any, and the chords of a later pass
         for (Iterator<AbstractChordInter> it = stdChords.iterator(); it.hasNext();) {
-            if (it.next() instanceof SmallChordInter) {
+            final AbstractChordInter chord = it.next();
+
+            if ((chord instanceof SmallChordInter) || (chord.getPass() > 0)) {
                 it.remove();
             }
         }
@@ -1451,12 +1453,41 @@ public class Measure
             final HeadChordInter headChord = it.next();
             final List<Inter> notes = headChord.getMembers();
 
-            if (notes.isEmpty() || notes.get(0).getShape().isSmallHead()) {
+            if (notes.isEmpty() || notes.get(0).getShape().isSmallHead()
+                    || (headChord.getPass() > 0)) {
                 it.remove();
             }
         }
 
         return standardHeadChords;
+    }
+
+    //--------------------//
+    // getLaterPassChords //
+    //--------------------//
+    /**
+     * Report the chords of a later pass (2x) in this measure, out of the measure rhythm.
+     *
+     * @return the later-pass chords, perhaps empty
+     * @see AbstractChordInter#getPass()
+     */
+    public Set<AbstractChordInter> getLaterPassChords ()
+    {
+        final Set<AbstractChordInter> chords = new LinkedHashSet<>();
+
+        for (AbstractChordInter chord : getHeadChords()) {
+            if (chord.getPass() > 0) {
+                chords.add(chord);
+            }
+        }
+
+        for (AbstractChordInter chord : getRestChords()) {
+            if (chord.getPass() > 0) {
+                chords.add(chord);
+            }
+        }
+
+        return chords;
     }
 
     //------------------//

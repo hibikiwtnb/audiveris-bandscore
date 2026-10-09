@@ -25,6 +25,7 @@ import org.audiveris.omr.math.Rational;
 import org.audiveris.omr.sheet.Part;
 import org.audiveris.omr.sheet.Sheet;
 import org.audiveris.omr.sheet.SystemInfo;
+import org.audiveris.omr.sheet.rhythm.Measure;
 import org.audiveris.omr.sheet.rhythm.MeasureStack;
 import org.audiveris.omr.sig.inter.AbstractChordInter;
 import org.audiveris.omr.sig.inter.SlurInter;
@@ -39,6 +40,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 
@@ -180,7 +182,13 @@ public class Page
             // Collect duration values for each standard chord in this page
             for (SystemInfo system : getSystems()) {
                 for (MeasureStack stack : system.getStacks()) {
-                    for (AbstractChordInter chord : stack.getStandardChords()) {
+                    final Set<AbstractChordInter> chords = stack.getStandardChords();
+
+                    for (Measure measure : stack.getMeasures()) {
+                        chords.addAll(measure.getLaterPassChords()); // Exported too
+                    }
+
+                    for (AbstractChordInter chord : chords) {
                         try {
                             final Rational duration = chord.isMeasureRest() //
                                     ? stack.getExpectedDuration()

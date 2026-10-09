@@ -25,6 +25,7 @@ import org.audiveris.omr.constant.Constant;
 import org.audiveris.omr.constant.ConstantSet;
 import org.audiveris.omr.glyph.Glyph;
 import org.audiveris.omr.glyph.GlyphFactory;
+import org.audiveris.omr.math.GeoUtil;
 import org.audiveris.omr.math.Rational;
 import static org.audiveris.omr.math.Rational.ZERO;
 import static org.audiveris.omr.run.Orientation.VERTICAL;
@@ -56,24 +57,34 @@ import ij.process.ByteProcessor;
 
 import java.awt.Rectangle;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Class <code>ParenthesizedChords</code> drops, from a measure of wrong length, the chords
+ * Class <code>ParenthesizedChords</code> handles, in a measure of wrong length, the chords
  * written between a pair of tall parentheses under a later-pass text such as "2x" or "D.S.x".
  * <p>
  * Band scores write the notes played only on a later pass after the normal notes of the same
  * measure, between parentheses as tall as the staff, with "2x" or "D.S.x" above them. Read
  * together, the measure gets too long. When a voice of the measure has a wrong length, the
  * parentheses of each staff are looked for on the staff-free image (those of a text, like
- * "(Synth.)", do not count), and a pair is used only when a later-pass text lies above it. Its
- * chords (with their stems, beams, flags, dots, accidentals, articulations and tuplets) are
- * dropped only when every voice they belong to then gets the measure length exactly, or nothing
- * is left in it; otherwise the measure is kept as it is.
+ * "(Synth.)", do not count), and a pair is used only when a later-pass text lies above it.
+ * Its chords are used only when every voice they belong to then gets the measure length exactly,
+ * or nothing is left in it; otherwise the measure is kept as it is.
+ * <p>
+ * Under "2x" to "9x" (markLaterPasses), the chords are marked with their pass and kept out of the
+ * measure rhythm: they are exported on their own voices, from the measure start, for that pass
+ * only (MusicXML time-only), provided they fill the measure exactly.
+ * Otherwise (D.S.x, D.C.x, or a later pass that does not fill the measure), they are dropped with
+ * their stems, beams, flags, dots, accidentals, articulations and tuplets (dropParenthesized).
  */
 public class ParenthesizedChords
 {
@@ -86,6 +97,9 @@ public class ParenthesizedChords
     /** Later-pass texts: "2x", "3X", "D.S.x", "D.C.x" ("1x" is the first pass). */
     private static final Pattern LATER_PASS = Pattern.compile(
             "(?i)(?<![a-z0-9])([2-9]\\s*[x×]|D\\.?\\s*[SC]\\.?\\s*[x×])(?![a-z])");
+
+    /** Maximum number of voices in a later pass. */
+    private static final int MAX_PASS_VOICES = 3;
 
     //~ Instance fields ----------------------------------------------------------------------------
 
@@ -316,17 +330,19 @@ public class ParenthesizedChords
     //----------------//
     /**
      * Report the boxes of the later-pass texts just above the staff.
+     *
+     * @return the pass of each text box (0 for D.S.x or D.C.x)
      */
-    private List<Rectangle> laterPassBoxes (Staff staff,
-                                            List<SentenceInter> sentences)
+    private Map<Rectangle, Integer> laterPassBoxes (Staff staff,
+                                                    List<SentenceInter> sentences)
     {
-        final List<Rectangle> boxes = new ArrayList<>();
+        final Map<Rectangle, Integer> boxes = new HashMap<>();
         final int il = staff.getSpecificInterline();
 
         for (SentenceInter sentence : sentences) {
-            final String value = sentence.getValue();
+            final int pass = passOf(sentence.getValue());
 
-            if ((value == null) || !LATER_PASS.matcher(value).find()) {
+            if (pass < 0) {
                 continue;
             }
 
@@ -348,7 +364,7 @@ public class ParenthesizedChords
             }
 
             if ((below == staff) && (best <= (constants.maxTextGap.getValue() * il))) {
-                boxes.add(b);
+                boxes.put(b, pass);
             }
         }
 
@@ -378,7 +394,7 @@ public class ParenthesizedChords
                 continue;
             }
 
-            final List<Rectangle> texts = laterPassBoxes(staff, sentences);
+            final Map<Rectangle, Integer> texts = laterPassBoxes(staff, sentences);
 
             if (texts.isEmpty()) {
                 continue;
@@ -404,8 +420,18 @@ public class ParenthesizedChords
                 open = null;
 
                 // A later-pass text above the pair
-                if (texts.stream().noneMatch(
-                        t -> (t.x <= xClose) && ((t.x + t.width) >= (xOpen - margin)))) {
+                Integer pass = null;
+
+                for (Map.Entry<Rectangle, Integer> entry : texts.entrySet()) {
+                    final Rectangle t = entry.getKey();
+
+                    if ((t.x <= xClose) && ((t.x + t.width) >= (xOpen - margin))) {
+                        pass = entry.getValue();
+                        break;
+                    }
+                }
+
+                if (pass == null) {
                     continue;
                 }
 
@@ -425,15 +451,36 @@ public class ParenthesizedChords
                 }
 
                 if (fits(inside, expected)) {
-                    drop(inside);
-                    done = true;
-                    logger.info(
-                            "{} {} x {}-{}: {} parenthesized chords of a later pass dropped",
-                            measure,
-                            staff,
-                            xOpen,
-                            xClose,
-                            inside.size());
+                    if ((pass >= 2) && constants.markLaterPasses.isSet()
+                            && (laterPassVoices(inside, expected) != null)) {
+                        mark(inside, pass);
+                        done = true;
+                        logger.info(
+                                "{} {} x {}-{}: {} parenthesized chords played on pass {} only",
+                                measure,
+                                staff,
+                                xOpen,
+                                xClose,
+                                inside.size(),
+                                pass);
+                    } else if (constants.dropParenthesized.isSet()) {
+                        drop(inside);
+                        done = true;
+                        logger.info(
+                                "{} {} x {}-{}: {} parenthesized chords of a later pass dropped",
+                                measure,
+                                staff,
+                                xOpen,
+                                xClose,
+                                inside.size());
+                    } else {
+                        logger.info(
+                                "{} {} x {}-{}: parenthesized chords kept, not a full pass",
+                                measure,
+                                staff,
+                                xOpen,
+                                xClose);
+                    }
                 } else {
                     logger.info(
                             "{} {} x {}-{}: parenthesized chords kept, the measure would not fit",
@@ -446,6 +493,184 @@ public class ParenthesizedChords
         }
 
         return done;
+    }
+
+    //------//
+    // mark //
+    //------//
+    /**
+     * Mark the chords as played on the provided pass only, out of the measure rhythm.
+     * A tuplet across a parenthesis was a wrong guess.
+     */
+    private void mark (Set<AbstractChordInter> chords,
+                       int pass)
+    {
+        final MeasureStack stack = measure.getStack();
+
+        for (AbstractChordInter chord : chords) {
+            chord.setPass(pass);
+
+            final TupletInter tuplet = chord.getTuplet();
+
+            if ((tuplet != null) && !chords.containsAll(tuplet.getChords())) {
+                measure.removeInter(tuplet);
+                stack.removeInter(tuplet);
+                tuplet.remove();
+            }
+        }
+    }
+
+    //--------//
+    // passOf //
+    //--------//
+    /**
+     * Report the pass of a later-pass text.
+     *
+     * @return the pass (2 for "2x"), 0 for "D.S.x" or "D.C.x", -1 for no later-pass text
+     */
+    private static int passOf (String value)
+    {
+        if (value == null) {
+            return -1;
+        }
+
+        final Matcher matcher = LATER_PASS.matcher(value);
+
+        if (!matcher.find()) {
+            return -1;
+        }
+
+        final char c = matcher.group(1).charAt(0);
+
+        return Character.isDigit(c) ? (c - '0') : 0;
+    }
+
+    //------------------//
+    // isLaterPassText //
+    //------------------//
+    /**
+     * Report whether the text is a later-pass text, like "2x" or "D.S.x".
+     *
+     * @param value the text value
+     * @return true if so
+     */
+    public static boolean isLaterPassText (String value)
+    {
+        return passOf(value) >= 0;
+    }
+
+    //-----------------//
+    // laterPassVoices //
+    //-----------------//
+    /**
+     * Lay out the chords of a later pass, written in sequence from the measure start, into
+     * voices.
+     * <p>
+     * Chords whose heads overlap in abscissa start together; the shortest of them gives the
+     * start of the next ones. Each chord goes to the first voice free at its start, from top to
+     * bottom.
+     *
+     * @param chords   the chords of a later pass on a staff
+     * @param expected the measure duration, or null for no check
+     * @return the voices, each as its chords with their time offsets in sequence, or null if the
+     *         chords do not fill the expected duration exactly
+     */
+    public static List<Map<AbstractChordInter, Rational>> laterPassVoices (
+            Collection<AbstractChordInter> chords,
+            Rational expected)
+    {
+        final List<AbstractChordInter> sorted = new ArrayList<>(chords);
+        sorted.sort(Comparator.comparingInt(ch -> headsBox(ch).x));
+
+        // Columns of chords starting together
+        final List<List<AbstractChordInter>> columns = new ArrayList<>();
+        Rectangle columnBox = null;
+
+        for (AbstractChordInter chord : sorted) {
+            final Rectangle box = headsBox(chord);
+
+            if ((columnBox == null) || (GeoUtil.xOverlap(columnBox, box) <= 0)) {
+                columns.add(new ArrayList<>());
+                columnBox = new Rectangle(box);
+            } else {
+                columnBox.add(box);
+            }
+
+            columns.get(columns.size() - 1).add(chord);
+        }
+
+        final List<Map<AbstractChordInter, Rational>> voices = new ArrayList<>();
+        final List<Rational> ends = new ArrayList<>();
+        Rational offset = ZERO;
+
+        for (List<AbstractChordInter> column : columns) {
+            column.sort(Comparator.comparingInt(ch -> headsBox(ch).y));
+            Rational shortest = null;
+
+            for (AbstractChordInter chord : column) {
+                final Rational dur = chord.isMeasureRest() ? null : chord.getDuration();
+
+                if (dur == null) {
+                    return null;
+                }
+
+                if ((shortest == null) || (dur.compareTo(shortest) < 0)) {
+                    shortest = dur;
+                }
+
+                int v = 0;
+
+                while ((v < ends.size()) && (ends.get(v).compareTo(offset) > 0)) {
+                    v++;
+                }
+
+                if (v == ends.size()) {
+                    if (v == MAX_PASS_VOICES) {
+                        return null;
+                    }
+
+                    voices.add(new LinkedHashMap<>());
+                    ends.add(ZERO);
+                }
+
+                voices.get(v).put(chord, offset);
+                ends.set(v, offset.plus(dur));
+            }
+
+            offset = offset.plus(shortest);
+        }
+
+        if (expected != null) {
+            if (!offset.equals(expected)) {
+                return null;
+            }
+
+            for (Rational end : ends) {
+                if (end.compareTo(expected) > 0) {
+                    return null;
+                }
+            }
+        }
+
+        return voices;
+    }
+
+    //----------//
+    // headsBox //
+    //----------//
+    private static Rectangle headsBox (AbstractChordInter chord)
+    {
+        Rectangle box = null;
+
+        for (Inter note : chord.getMembers()) {
+            if (box == null) {
+                box = note.getBounds();
+            } else {
+                box.add(note.getBounds());
+            }
+        }
+
+        return (box != null) ? box : chord.getBounds();
     }
 
     //---------//
@@ -499,19 +724,20 @@ public class ParenthesizedChords
         return (bow <= -minBow) ? -1 : ((bow >= minBow) ? 1 : 0);
     }
 
-    //-----------------//
-    // dropLaterPasses //
-    //-----------------//
+    //------------------//
+    // removeLaterPasses //
+    //------------------//
     /**
-     * In a measure with a voice of wrong length, drop the parenthesized chords of a later pass
-     * when the measure then fits, if so set.
+     * In a measure with a voice of wrong length, take the parenthesized chords of a later pass
+     * out of the measure rhythm (marked with their pass, or dropped) when the measure then fits,
+     * if so set.
      *
      * @param measure the measure, with its rhythm processed
-     * @return true if some chords were dropped (rhythm to be processed again)
+     * @return true if some chords were marked or dropped (rhythm to be processed again)
      */
-    public static boolean dropLaterPasses (Measure measure)
+    public static boolean removeLaterPasses (Measure measure)
     {
-        if (!constants.dropParenthesized.isSet()) {
+        if (!constants.markLaterPasses.isSet() && !constants.dropParenthesized.isSet()) {
             return false;
         }
 
@@ -562,6 +788,11 @@ public class ParenthesizedChords
     private static class Constants
             extends ConstantSet
     {
+        private final Constant.Boolean markLaterPasses = new Constant.Boolean(
+                true,
+                "Should the parenthesized chords of a later pass (2x) be exported for that pass"
+                        + " only (MusicXML time-only), in a measure of wrong length?");
+
         private final Constant.Boolean dropParenthesized = new Constant.Boolean(
                 false,
                 "Should the parenthesized chords of a later pass (2x, D.S.x) be dropped"

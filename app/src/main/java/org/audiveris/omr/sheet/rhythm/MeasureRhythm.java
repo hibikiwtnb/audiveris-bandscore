@@ -535,7 +535,7 @@ public class MeasureRhythm
     {
         boolean ok = doProcess();
 
-        if (ParenthesizedChords.dropLaterPasses(measure)) {
+        if (ParenthesizedChords.removeLaterPasses(measure)) {
             ok = doProcess();
         }
 

@@ -103,6 +103,14 @@ public abstract class AbstractChordInter
     @XmlAttribute(name = "preferred-voice-id")
     private Integer preferredVoiceId;
 
+    /**
+     * Repeat pass this chord is played on only, if any (2 for "2x"): such a chord is written
+     * between parentheses after the normal content of its measure and stays out of the measure
+     * rhythm.
+     */
+    @XmlAttribute(name = "pass")
+    private Integer pass;
+
     // Transient data
     //---------------
 
@@ -832,6 +840,19 @@ public abstract class AbstractChordInter
         return super.getPart();
     }
 
+    //---------//
+    // getPass //
+    //---------//
+    /**
+     * Report the repeat pass this chord is played on only.
+     *
+     * @return the pass (2 for "2x"), or 0 for a chord played on every pass
+     */
+    public int getPass ()
+    {
+        return (pass != null) ? pass : 0;
+    }
+
     //---------------------//
     // getPreferredVoiceId //
     //---------------------//
@@ -1376,6 +1397,19 @@ public abstract class AbstractChordInter
     public void setMeasure (Measure measure)
     {
         this.measure = measure;
+    }
+
+    //---------//
+    // setPass //
+    //---------//
+    /**
+     * Set the repeat pass this chord is played on only.
+     *
+     * @param pass the pass (2 for "2x"), or 0 for every pass
+     */
+    public void setPass (int pass)
+    {
+        this.pass = (pass > 0) ? pass : null;
     }
 
     //---------------------//

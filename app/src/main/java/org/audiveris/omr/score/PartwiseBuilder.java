@@ -43,6 +43,7 @@ import org.audiveris.omr.sheet.Staff;
 import org.audiveris.omr.sheet.SystemInfo;
 import org.audiveris.omr.sheet.rhythm.Measure;
 import org.audiveris.omr.sheet.rhythm.MeasureStack;
+import org.audiveris.omr.sheet.rhythm.ParenthesizedChords;
 import org.audiveris.omr.sheet.rhythm.Slot;
 import org.audiveris.omr.sheet.rhythm.SlotVoice;
 import org.audiveris.omr.sheet.rhythm.Voice;
@@ -1001,7 +1002,9 @@ public class PartwiseBuilder
         try {
             Forward forward = factory.createForward();
             forward.setDuration(new BigDecimal(current.page.simpleDurationOf(delta)));
-            forward.setVoice("" + getExportVoiceId(current.voice));
+            forward.setVoice(
+                    "" + ((current.passVoiceId != null) ? current.passVoiceId
+                            : getExportVoiceId(current.voice)));
             current.pmMeasure.getNoteOrBackupOrForward().add(forward);
 
             // Staff? (only if more than one staff in logicalPart)
@@ -1748,6 +1751,10 @@ public class PartwiseBuilder
             }
 
             final String content = sentence.getValue();
+
+            if (!current.laterPasses.isEmpty() && ParenthesizedChords.isLaterPassText(content)) {
+                return; // "2x" of a later pass, told by time-only
+            }
             final Direction direction = factory.createDirection();
             final Point2D location = sentence.getLocation();
 
@@ -2442,6 +2449,13 @@ public class PartwiseBuilder
                 processRehearsal(rehearsal);
             }
 
+            // Staves with a later pass (2x)
+            if (!current.repeatCopying) {
+                for (AbstractChordInter chord : measure.getLaterPassChords()) {
+                    current.laterPasses.merge(chord.getTopStaff(), chord.getPass(), Math::max);
+                }
+            }
+
             // Now voice per voice
             Rational timeCounter = Rational.ZERO;
 
@@ -2639,6 +2653,11 @@ public class PartwiseBuilder
                 }
             }
 
+            // Chords of a later pass (2x), on voices of their own from the measure start
+            if (!current.laterPasses.isEmpty()) {
+                timeCounter = processLaterPasses(measure, voicesToExport, timeCounter);
+            }
+
             current.measureEndCounter = timeCounter;
 
             // Clefs that occur after time slots, if any
@@ -2755,6 +2774,85 @@ public class PartwiseBuilder
         current.endMeasure();
         tupletNumbers.clear();
         isFirst.measure = false;
+    }
+
+    //--------------------//
+    // processLaterPasses //
+    //--------------------//
+    /**
+     * Export the chords of a later pass (2x) of the measure, staff per staff and pass per pass,
+     * each voice from the measure start, on a voice number not used by the staff.
+     *
+     * @param measure        the measure
+     * @param exportedVoices the voices already exported
+     * @param timeCounter    the current time counter
+     * @return the time counter at the end
+     */
+    private Rational processLaterPasses (Measure measure,
+                                         List<Voice> exportedVoices,
+                                         Rational timeCounter)
+    {
+        final Map<Staff, Map<Integer, List<AbstractChordInter>>> passes = new LinkedHashMap<>();
+
+        for (AbstractChordInter chord : measure.getLaterPassChords()) {
+            passes.computeIfAbsent(chord.getTopStaff(), k -> new TreeMap<>()).computeIfAbsent(
+                    chord.getPass(),
+                    k -> new ArrayList<>()).add(chord);
+        }
+
+        final Set<Integer> usedIds = new HashSet<>();
+
+        for (Voice voice : exportedVoices) {
+            usedIds.add(getExportVoiceId(voice));
+        }
+
+        for (Entry<Staff, Map<Integer, List<AbstractChordInter>>> entry : passes.entrySet()) {
+            final Staff staff = entry.getKey();
+
+            // Audiveris numbering: voices 1-4 on the 1st staff of a part, 5-8 on the 2nd...
+            int voiceId = 1 + (4 * Math.max(0, staff.getIndexInPart()));
+
+            for (List<AbstractChordInter> chords : entry.getValue().values()) {
+                final List<Map<AbstractChordInter, Rational>> voices = ParenthesizedChords
+                        .laterPassVoices(chords, null);
+
+                if (voices == null) {
+                    logger.warn("{} {} later pass not exported", measure, staff);
+                    continue;
+                }
+
+                for (Map<AbstractChordInter, Rational> voice : voices) {
+                    while (usedIds.contains(voiceId)) {
+                        voiceId++;
+                    }
+
+                    usedIds.add(voiceId);
+                    current.passVoiceId = voiceId;
+
+                    if (!timeCounter.equals(Rational.ZERO)) {
+                        insertBackup(timeCounter);
+                        timeCounter = Rational.ZERO;
+                    }
+
+                    for (Entry<AbstractChordInter, Rational> e : voice.entrySet()) {
+                        final AbstractChordInter chord = e.getKey();
+                        final Rational offset = e.getValue();
+
+                        if (timeCounter.compareTo(offset) < 0) {
+                            insertForward(offset.minus(timeCounter), chord);
+                        }
+
+                        processChord(chord);
+                        timeCounter = offset.plus(chord.getDuration());
+                    }
+
+                    current.passVoiceId = null;
+                    current.endVoice();
+                }
+            }
+        }
+
+        return timeCounter;
     }
 
     //-------------//
@@ -3019,10 +3117,29 @@ public class PartwiseBuilder
             // Voice
             Voice voice = chord.getVoice();
 
-            if (voice != null) {
+            if (current.passVoiceId != null) {
+                current.pmNote.setVoice("" + current.passVoiceId);
+            } else if (voice != null) {
                 current.pmNote.setVoice("" + getExportVoiceId(voice));
             } else {
                 logger.warn("No voice for {}", chord);
+            }
+
+            // Pass(es) this note is played on, in a staff measure with a later pass (2x)
+            final Integer laterPass = current.laterPasses.get(chord.getTopStaff());
+
+            if (laterPass != null) {
+                if (chord.getPass() > 0) {
+                    current.pmNote.setTimeOnly("" + chord.getPass());
+                } else {
+                    final StringBuilder sb = new StringBuilder("1");
+
+                    for (int p = 2; p < laterPass; p++) {
+                        sb.append(',').append(p);
+                    }
+
+                    current.pmNote.setTimeOnly(sb.toString());
+                }
             }
 
             // Type
@@ -4588,6 +4705,12 @@ public class PartwiseBuilder
 
         final Map<Voice, Integer> voiceIdMap = new HashMap<>();
 
+        // Staves of the measure with a later pass (2x), with their latest pass
+        final Map<Staff, Integer> laterPasses = new HashMap<>();
+
+        // Voice exported for the chords of a later pass, if any
+        Integer passVoiceId;
+
         // Glissando (true) or slide (false) marks of the measure, by start chord and stop chord
         final Map<AbstractChordInter, Boolean> slideStarts = new HashMap<>();
 
@@ -4604,6 +4727,8 @@ public class PartwiseBuilder
             voice = null;
             pmAttributes = null;
             voiceIdMap.clear();
+            laterPasses.clear();
+            passVoiceId = null;
 
             endVoice();
         }
