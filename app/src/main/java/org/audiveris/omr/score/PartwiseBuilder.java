@@ -1997,7 +1997,6 @@ public class PartwiseBuilder
         }
     }
 
-    //-------------//
     //----------------//
     // hasTemplateKey //
     //----------------//
@@ -2031,6 +2030,15 @@ public class PartwiseBuilder
     private void processKeys ()
     {
         if (!current.isDrumPart) {
+            final Integer concert = current.keyAgreement.getConcertKey(
+                    current.measure.getStack());
+            final boolean concertChanged = (concert != null) && !concert.equals(
+                    current.prevConcertKey);
+
+            if (concert != null) {
+                current.prevConcertKey = concert;
+            }
+
             // Keep keys read or confirmed by book templates
             if (hasTemplateKey()) {
                 if (current.measure.hasSameKeys()) {
@@ -2047,10 +2055,8 @@ public class PartwiseBuilder
             }
 
             // Pitched part: the key agreed for the measure stack, whatever this part shows
-            final Integer concert = current.keyAgreement.getConcertKey(
-                    current.measure.getStack());
-
-            if (concert != null) {
+            if ((concert != null) && (current.keys.isEmpty() || current.measure.hasKeys()
+                    || concertChanged)) {
                 processAgreedKey(KeyAgreement.enharmonic(concert + KeyAgreement
                         .transpositionOf(current.measure.getPart())));
 
@@ -2167,6 +2173,7 @@ public class PartwiseBuilder
         current.pmPart = pmPart;
         current.instrumentMap = current.drumInstruments.get(logicalPart);
         current.keys.clear();
+        current.prevConcertKey = null;
 
         // A sequence of measure repeats belongs to its part: it goes on in the same part on the
         // next page, and must not leak into the next part of this page
@@ -4565,6 +4572,8 @@ public class PartwiseBuilder
         ScorePartwise.Part.Measure pmMeasure;
 
         final TreeMap<Integer, Key> keys = new TreeMap<>();
+
+        Integer prevConcertKey;
 
         Voice voice;
 

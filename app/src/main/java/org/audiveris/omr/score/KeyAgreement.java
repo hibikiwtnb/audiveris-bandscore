@@ -136,6 +136,9 @@ public class KeyAgreement
                 // Keys actually read in this stack: key -> key signatures
                 final Map<Integer, List<KeyInter>> read = new LinkedHashMap<>();
 
+                // Template keys read in this stack: concert key -> staff ids
+                final Map<Integer, List<Integer>> templateVotes = new LinkedHashMap<>();
+
                 for (Part part : system.getParts()) {
                     if (isDrums(part)) {
                         continue;
@@ -160,40 +163,68 @@ public class KeyAgreement
                             final int concert = enharmonic(key.getFifths() - shift);
                             read.computeIfAbsent(concert, k -> new ArrayList<>()).add(key);
                             votes.computeIfAbsent(concert, k -> new ArrayList<>()).add(staff.getId());
+                            if (key.isFromTemplate()) {
+                                templateVotes.computeIfAbsent(concert, k -> new ArrayList<>())
+                                        .add(staff.getId());
+                            }
                         }
                     }
                 }
 
                 if (!votes.isEmpty()) {
-                    final int max = votes.values().stream().mapToInt(List::size).max().getAsInt();
                     Integer winner = null;
 
-                    for (Map.Entry<Integer, List<Integer>> entry : votes.entrySet()) {
-                        if (entry.getValue().size() == max) {
-                            if (entry.getKey().equals(inForce)) {
-                                winner = inForce;
+                    if (!templateVotes.isEmpty()) {
+                        final int maxTemplate = templateVotes.values().stream()
+                                .mapToInt(List::size).max().getAsInt();
 
-                                break;
-                            }
+                        for (Map.Entry<Integer, List<Integer>> entry : templateVotes.entrySet()) {
+                            if (entry.getValue().size() == maxTemplate) {
+                                if (entry.getKey().equals(inForce)) {
+                                    winner = inForce;
+                                    break;
+                                }
 
-                            if (winner == null) {
-                                winner = entry.getKey();
+                                if (winner == null) {
+                                    winner = entry.getKey();
+                                }
                             }
                         }
-                    }
 
-                    // A courtesy key at the end of a system is for the next system
-                    final boolean last = stack == stacks.get(stacks.size() - 1);
-                    if (last && (winner != null) && read.containsKey(winner) && isCourtesy(
-                            stack, read.get(winner))) {
-                        logger.info("{} m{}: key {} at system end is for the next system",
-                                page.getSheet().getId(), stack.getIdValue(), winner);
-                        winner = inForce;
-                    } else if (!systemStart && (inForce != null) && (max == 1)
-                            && !winner.equals(inForce)
-                            && !winner.equals(nextStart)) {
-                        // A lone unconfirmed change inside a system does not overturn inForce
-                        winner = inForce;
+                        if (templateVotes.size() > 1) {
+                            logger.warn("{} m{}: inconsistent template keys {}, picking {}",
+                                    page.getSheet().getId(), stack.getIdValue(), templateVotes, winner);
+                        }
+                    } else {
+                        final int max = votes.values().stream().mapToInt(List::size).max().getAsInt();
+
+                        for (Map.Entry<Integer, List<Integer>> entry : votes.entrySet()) {
+                            if (entry.getValue().size() == max) {
+                                if (entry.getKey().equals(inForce)) {
+                                    winner = inForce;
+
+                                    break;
+                                }
+
+                                if (winner == null) {
+                                    winner = entry.getKey();
+                                }
+                            }
+                        }
+
+                        // A courtesy key at the end of a system is for the next system
+                        final boolean last = stack == stacks.get(stacks.size() - 1);
+                        if (last && (winner != null) && read.containsKey(winner) && isCourtesy(
+                                stack, read.get(winner))) {
+                            logger.info("{} m{}: key {} at system end is for the next system",
+                                    page.getSheet().getId(), stack.getIdValue(), winner);
+                            winner = inForce;
+                        } else if (!systemStart && (inForce != null) && (max == 1)
+                                && !winner.equals(inForce)
+                                && !winner.equals(nextStart)) {
+                            // A lone unconfirmed change inside a system does not overturn inForce
+                            winner = inForce;
+                        }
                     }
 
                     if (votes.size() > 1) {
@@ -216,8 +247,9 @@ public class KeyAgreement
                         others.entrySet().removeIf(e -> e.getValue().isEmpty());
 
                         if (!others.isEmpty()) {
-                            logger.warn("{} m{}: key {} by most staves, staves (key) {} overruled",
-                                    page.getSheet().getId(), stack.getIdValue(), winner, others);
+                            logger.warn("{} m{}: key {} by {}, staves (key) {} overruled",
+                                    page.getSheet().getId(), stack.getIdValue(), winner,
+                                    !templateVotes.isEmpty() ? "template" : "most staves", others);
                         }
                     }
 
