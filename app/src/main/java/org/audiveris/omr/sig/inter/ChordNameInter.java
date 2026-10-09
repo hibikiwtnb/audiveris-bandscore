@@ -577,6 +577,11 @@ public class ChordNameInter
     {
         final Point wordCenter = getCenter();
         final MeasureStack stack = system.getStackAt(wordCenter);
+
+        if (stack == null) {
+            return null;
+        }
+
         AbstractChordInter chordBelow = stack.getStandardChordBelow(wordCenter, getBounds());
 
         // Nothing right below (a long note or rest started earlier): closest chord in staff below,
