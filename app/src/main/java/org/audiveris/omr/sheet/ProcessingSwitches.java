@@ -195,7 +195,7 @@ public class ProcessingSwitches
                 "Keep loaded gray images");
 
         final Constant.Boolean indentations = new Constant.Boolean(
-                true,
+                false,
                 "Use of system indentation");
 
         final Constant.Boolean bothSharedHeadDots = new Constant.Boolean(
