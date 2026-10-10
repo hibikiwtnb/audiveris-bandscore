@@ -646,6 +646,10 @@ public class ResidualBeamBuilder
             for (int o = -halfWindow; o <= halfWindow; o++) {
                 final int y = (int) Math.rint(yCenter + o);
 
+                if ((y < 0) || (y >= grey.getHeight()) || (x < 0) || (x >= grey.getWidth())) {
+                    continue; // scan window past the page edge
+                }
+
                 if (grey.get(x, y) < threshold) {
                     darkCounts[o + halfWindow]++;
                 }

@@ -272,7 +272,10 @@ public class DistancesBuilder
         public void paintPixel (int x,
                                 int y)
         {
-            table.setValue(x, y, ChamferDistance.VALUE_UNKNOWN);
+            // A staff line followed into a stem at the page edge can run off the image
+            if ((x >= 0) && (y >= 0) && (x < table.getWidth()) && (y < table.getHeight())) {
+                table.setValue(x, y, ChamferDistance.VALUE_UNKNOWN);
+            }
         }
 
     }

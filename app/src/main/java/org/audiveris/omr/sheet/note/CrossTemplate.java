@@ -384,10 +384,11 @@ public class CrossTemplate
               int top,
               int bot)
         {
-            this.x0 = x0;
+            // clipped to the image: a staff band can reach past the page edge (empty if outside)
+            this.x0 = Math.max(x0, 0);
             this.y0 = Math.max(top, 0);
-            this.w = x1 - x0;
-            this.hgt = Math.min(bot, image.getHeight()) - y0;
+            this.w = Math.max(0, Math.min(x1, image.getWidth()) - this.x0);
+            this.hgt = Math.max(0, Math.min(bot, image.getHeight()) - y0);
             dark = new float[hgt][w];
             final boolean[][] orig = new boolean[hgt][w]; // ink: is it white above and below?
             final boolean[][] line = new boolean[hgt][w]; // dark enough for a line
