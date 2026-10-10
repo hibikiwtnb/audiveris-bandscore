@@ -423,29 +423,42 @@ public class ScaleBuilder
     // getInterlineScale //
     //-------------------//
     /**
-     * Report the scale of the dominant interline population.
+     * Report the scale of the larger interline population.
      * <p>
-     * Combo peaks arrive sorted by decreasing count, so <code>comboPeak</code> is the size most
-     * of the sheet is engraved at, whether or not it is the larger of the two.
+     * Band scores print their tablatures wider than their 5-line staves. The staves of the
+     * larger interline are retrieved first and the others in the "small" pass, then
+     * LinesRetriever.useStaffInterline makes the 5-line interline the sheet one. Scaling on
+     * the dominant size instead (most staves, the 5-line ones) retrieves the 5-line staves in
+     * the first pass, where their lines stop short of the last bar line of the system: that
+     * bar line is missed, measures merge (158 p01) or some parts get one more measure than
+     * the others (228 p18b).
      *
      * @return the main interline scale
      */
     private InterlineScale getInterlineScale ()
     {
-        return new InterlineScale(comboPeak);
+        if ((comboPeak2 == null) || (comboPeak2.main < comboPeak.main)) {
+            return new InterlineScale(comboPeak);
+        } else {
+            return new InterlineScale(comboPeak2);
+        }
     }
 
     //------------------------//
     // getSmallInterlineScale //
     //------------------------//
     /**
-     * Report the scale of the minority interline population, if any.
+     * Report the scale of the smaller interline population, if any.
      *
      * @return the small interline scale, or null
      */
     private InterlineScale getSmallInterlineScale ()
     {
-        return (comboPeak2 != null) ? new InterlineScale(comboPeak2) : null;
+        if (comboPeak2 == null) {
+            return null;
+        }
+
+        return new InterlineScale((comboPeak2.main < comboPeak.main) ? comboPeak2 : comboPeak);
     }
 
     //---------------//
