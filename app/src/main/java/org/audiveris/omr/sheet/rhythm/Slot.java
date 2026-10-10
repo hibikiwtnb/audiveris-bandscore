@@ -159,6 +159,10 @@ public class Slot
             for (Part part : system.getParts()) {
                 final Measure measure = stack.getMeasureAt(part);
 
+                if (measure == null) {
+                    continue;
+                }
+
                 for (Voice voice : measure.getVoices()) {
                     final SlotVoice slotVoice = voice.getSlotInfo(this);
 

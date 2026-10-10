@@ -2555,7 +2555,7 @@ public class PartwiseBuilder
                             // Need a forward before this chord?
                             Rational timeOffset = chord.getTimeOffset();
 
-                            if (timeCounter.compareTo(timeOffset) < 0) {
+                            if ((timeOffset != null) && (timeCounter.compareTo(timeOffset) < 0)) {
                                 insertForward(timeOffset.minus(timeCounter), chord);
                                 timeCounter = timeOffset;
                             }
@@ -3346,7 +3346,7 @@ public class PartwiseBuilder
 
             // Delegate to measures
             for (Measure measure : part.getMeasures()) {
-                if (!measure.getStack().isCautionary()) {
+                if (measure.getStack() != null && !measure.getStack().isCautionary()) {
                     processMeasure(measure);
                 }
             }

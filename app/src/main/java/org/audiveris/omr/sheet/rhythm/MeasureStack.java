@@ -364,9 +364,11 @@ public class MeasureStack
             final int im = system.getStacks().indexOf(this);
 
             for (Part part : system.getParts()) {
-                Measure measure = part.getMeasures().get(im);
-                measure.setStack(this);
-                measures.add(measure);
+                if (im < part.getMeasures().size()) {
+                    Measure measure = part.getMeasures().get(im);
+                    measure.setStack(this);
+                    measures.add(measure);
+                }
             }
 
             // Forward to slots
