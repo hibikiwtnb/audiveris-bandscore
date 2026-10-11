@@ -1,0 +1,11 @@
+# 調號記號的位置（單位：該行譜表的線距），KeyTemplates 用
+# gap：譜號右緣到第 1 個記號中心；spacing：記號中心間距；dy：記號中心離它的線／間（負＝偏上）
+# 量自讀對的調號：004 君のこころ（♯），354（♭）；tools/learn_key_layout.py
+sharp.gap.treble = 1.74
+sharp.gap.bass = 1.63
+sharp.spacing = 1.24
+sharp.dy = 0
+flat.gap.treble = 1.12
+flat.gap.bass = 1.03
+flat.spacing = 1.06
+flat.dy = -0.61

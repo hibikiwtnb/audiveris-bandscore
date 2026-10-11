@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- 本書的鼓譜對應，蓋過 Audiveris app/res/drum-set.xml 的同一位置。 -->
+<!-- 本書的 hi-hat 寫在最上線（-4），一般鼓譜的最上線是 Ride。 -->
+<drum-set>
+  <staff line-count="5">
+    <entry pitch-position="-4" motif="cross" sign="PLAYING_OPEN"   sound="Open_Hi_Hat"/>
+    <entry pitch-position="-4" motif="cross" sign="PLAYING_CLOSED" sound="Closed_Hi_Hat"/>
+    <entry pitch-position="-4" motif="cross"                       sound="Closed_Hi_Hat"/>
+  </staff>
+</drum-set>

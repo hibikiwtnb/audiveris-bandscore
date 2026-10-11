@@ -98,3 +98,8 @@ docs/pdf/build
 dev/flatpak/.flatpak-builder/
 dev/flatpak/gradle/
 __pycache__/
+
+# BandScore skill: the user's work area and machine paths
+skill/songs/
+skill/environment.txt
+__pycache__/

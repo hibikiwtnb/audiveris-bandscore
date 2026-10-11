@@ -1,0 +1,11 @@
+# 調號記號的位置（單位：該行譜表的線距），KeyTemplates 用
+# gap：譜號右緣到第 1 個記號中心；spacing：記號中心間距；dy：記號中心離它的線／間（負＝偏上）
+# 量自讀對的調號：098、038、226、071（♯），140（♭）；tools/learn_key_layout.py
+sharp.gap.treble = 1.43
+sharp.gap.bass = 1.25
+sharp.spacing = 1.19
+sharp.dy = 0
+flat.gap.treble = 1.30
+flat.gap.bass = 1.14
+flat.spacing = 1.03
+flat.dy = -0.55

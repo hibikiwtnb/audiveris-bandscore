@@ -1,0 +1,778 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>乐队总谱读谱改修</title>
+<style>
+:root {
+  --bg: #f7f6f2;
+  --card: #ffffff;
+  --ink: #1c1c1e;
+  --muted: #6e6e73;
+  --line: #e3e1da;
+  --aud: #2456d3;      /* Audiveris-Bandscore */
+  --aud-soft: #e8eefc;
+  --ms: #1d8a5a;       /* MuseScore-Bandscore */
+  --ms-soft: #e3f3ea;
+  --warn: #b5650d;
+  --warn-soft: #fbf0e1;
+  --bad: #b8322a;
+  --sans: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  --mono: "SF Mono", Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: #111; overflow: hidden; }
+body { font-family: var(--sans); color: var(--ink); }
+
+/* 1920x1080 stage scaled to the window */
+#stage {
+  position: absolute; left: 50%; top: 50%;
+  width: 1920px; height: 1080px;
+  transform-origin: center center;
+  background: var(--bg);
+}
+.slide {
+  position: absolute; inset: 0;
+  padding: 96px 128px 88px;
+  display: none; flex-direction: column;
+}
+.slide.on { display: flex; }
+
+.tag {
+  display: inline-block; align-self: flex-start;
+  font-size: 26px; font-weight: 600; letter-spacing: .04em;
+  padding: 8px 20px; border-radius: 999px;
+  background: var(--aud-soft); color: var(--aud);
+}
+.ms .tag { background: var(--ms-soft); color: var(--ms); }
+.lim .tag { background: var(--warn-soft); color: var(--warn); }
+.neutral .tag { background: #ebeae4; color: var(--muted); }
+
+h1 { font-size: 104px; line-height: 1.15; font-weight: 700; letter-spacing: -.01em; }
+h2 { font-size: 64px; line-height: 1.2; font-weight: 700; margin-top: 28px; }
+.lead { font-size: 34px; line-height: 1.5; color: var(--muted); margin-top: 20px; max-width: 1560px; }
+.body { flex: 1; display: flex; flex-direction: column; justify-content: center; margin-top: 40px; min-height: 0; }
+.foot { font-size: 28px; color: var(--muted); margin-top: 28px; }
+.foot b { color: var(--ink); }
+
+/* improvement tables */
+.rows { display: flex; flex-direction: column; gap: 14px; }
+.row {
+  display: grid; grid-template-columns: 330px 1fr auto; gap: 36px; align-items: center;
+  background: var(--card); border: 1px solid var(--line); border-radius: 18px;
+  padding: 22px 32px;
+}
+.row .name { font-size: 34px; font-weight: 700; }
+.row .what { font-size: 29px; line-height: 1.45; }
+.row .what span { display: block; }
+.row .what span + span { margin-top: 4px; }
+.set {
+  font-variant-ligatures: none;
+  font-family: var(--mono); font-size: 22px; white-space: nowrap;
+  padding: 6px 14px; border-radius: 8px; background: var(--aud-soft); color: var(--aud);
+}
+.set.def { font-family: var(--sans); background: #efeee9; color: var(--muted); }
+.ms .set { background: var(--ms-soft); color: var(--ms); }
+.rows.tight .row { padding: 16px 32px; }
+.rows.tight .what { font-size: 27px; }
+
+/* score snippet */
+.snip {
+  background: #fff; border: 1px solid var(--line); border-radius: 18px;
+  padding: 18px 28px; display: flex; align-items: center; gap: 28px; margin-top: 18px;
+}
+.snip img { display: block; max-width: 100%; }
+.snip .cap { font-size: 24px; color: var(--muted); white-space: nowrap; }
+
+/* cover */
+.cover { justify-content: center; }
+.cover h1 { margin-top: 36px; }
+.cover .sub { font-size: 44px; margin-top: 36px; font-weight: 600; }
+.cover .sub .a { color: var(--aud); } .cover .sub .m { color: var(--ms); }
+.pair { display: flex; gap: 28px; margin-top: 80px; }
+.pair div { flex: 1; background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 30px 36px; font-size: 28px; line-height: 1.5; color: var(--muted); }
+.pair b { display: block; font-size: 34px; color: var(--ink); margin-bottom: 6px; }
+.pair .a b { color: var(--aud); } .pair .m b { color: var(--ms); }
+
+/* numbered problem list */
+.probs { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 28px; }
+.prob { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 18px 28px; display: grid; grid-template-columns: 56px 1fr; gap: 6px 16px; }
+.prob i { font-style: normal; grid-row: span 2; width: 52px; height: 52px; border-radius: 50%; background: #f3e3e1; color: var(--bad); font-weight: 700; font-size: 28px; display: grid; place-items: center; }
+.prob b { font-size: 32px; }
+.prob span { font-size: 26px; line-height: 1.45; color: var(--muted); }
+
+/* overview groups */
+.groups { display: grid; grid-template-columns: repeat(5, 1fr); gap: 22px; }
+.grp { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 32px 28px; display: flex; flex-direction: column; }
+.grp .n { font-size: 96px; font-weight: 700; color: var(--aud); line-height: 1; }
+.grp .n small { font-size: 32px; font-weight: 600; margin-left: 6px; }
+.grp b { font-size: 32px; margin-top: 22px; }
+.grp span { font-size: 25px; color: var(--muted); line-height: 1.5; margin-top: 10px; }
+.total { display: flex; gap: 64px; margin-top: 44px; align-items: baseline; }
+.total div { font-size: 30px; color: var(--muted); }
+.total b { font-size: 72px; color: var(--ink); margin-right: 10px; }
+
+/* metrics */
+.metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.met { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 18px 30px; }
+.met .k { font-size: 27px; color: var(--muted); }
+.met .v { display: flex; align-items: baseline; gap: 18px; margin-top: 4px; }
+.met .old { font-size: 38px; color: var(--muted); text-decoration: line-through; text-decoration-thickness: 2px; }
+.met .arrow { font-size: 30px; color: var(--muted); }
+.met .new { font-size: 54px; font-weight: 700; color: var(--aud); }
+.met .note { font-size: 22px; color: var(--muted); margin-top: 6px; }
+
+/* bars */
+.bars { display: flex; flex-direction: column; gap: 30px; }
+.bar { display: grid; grid-template-columns: 220px 1fr; gap: 28px; align-items: center; }
+.bar > b { font-size: 34px; }
+.track { display: flex; flex-direction: column; gap: 10px; }
+.line { display: grid; grid-template-columns: 1fr 260px; gap: 20px; align-items: center; font-size: 26px; }
+.fill { height: 34px; border-radius: 8px; background: #d8d6cf; }
+.fill.p { background: var(--aud); }
+.line span { color: var(--muted); }
+.line span.p { color: var(--aud); font-weight: 700; }
+.legend { display: flex; gap: 40px; font-size: 26px; color: var(--muted); margin-bottom: 26px; }
+.legend i { display: inline-block; width: 26px; height: 18px; border-radius: 4px; margin-right: 10px; vertical-align: -1px; background: #d8d6cf; }
+.legend i.p { background: var(--aud); }
+
+/* decision */
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+.col { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 34px 38px; }
+.col h3 { font-size: 36px; margin-bottom: 18px; }
+.col li { font-size: 29px; line-height: 1.5; margin-left: 1.1em; }
+.col li + li { margin-top: 10px; }
+.col.no h3 { color: var(--muted); }
+.col.yes { border: 3px solid var(--ms); }
+.col.yes h3 { color: var(--ms); }
+.col .verdict { font-size: 24px; font-weight: 700; margin-bottom: 8px; letter-spacing: .05em; }
+.col.no .verdict { color: var(--muted); } .col.yes .verdict { color: var(--ms); }
+
+/* flow */
+.flow { display: flex; align-items: stretch; gap: 0; }
+.step { flex: 1; background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 26px 24px; }
+.step .who { font-size: 22px; font-weight: 700; letter-spacing: .03em; color: var(--muted); }
+.step b { display: block; font-size: 32px; margin-top: 10px; }
+.step span { display: block; font-size: 24px; color: var(--muted); line-height: 1.45; margin-top: 10px; }
+.step.a { border-top: 6px solid var(--aud); } .step.a .who { color: var(--aud); }
+.step.m { border-top: 6px solid var(--ms); } .step.m .who { color: var(--ms); }
+.step.t { border-top: 6px solid #8d8a80; }
+.arr { width: 52px; display: grid; place-items: center; font-size: 36px; color: var(--muted); }
+.agent { margin-top: 30px; border: 2px dashed #b9b6ac; border-radius: 18px; padding: 22px 30px; font-size: 28px; color: var(--muted); }
+.agent b { color: var(--ink); }
+
+/* original vs MuseScore */
+.cmp { display: grid; grid-template-columns: 200px 1fr; gap: 16px 28px; align-items: center; background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 22px 30px; }
+.cmp + .cmp { margin-top: 18px; }
+.cmp .lab { font-size: 25px; font-weight: 700; color: var(--muted); }
+.cmp .lab.ms { color: var(--ms); }
+.cmp img { display: block; max-width: 100%; justify-self: start; }
+.cmp .hd { grid-column: 1 / -1; font-size: 28px; font-weight: 700; }
+.cmps2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.cmps2 .cmp + .cmp { margin-top: 0; }
+.cmps2 .cmp { grid-template-columns: 1fr; }
+
+/* lyrics figure */
+.fig { display: grid; grid-template-columns: auto 1fr; gap: 48px; align-items: center; }
+.fig img { height: 690px; border-radius: 14px; border: 1px solid var(--line); background: #fff; }
+.key { display: flex; flex-direction: column; gap: 26px; }
+.key div { font-size: 28px; line-height: 1.5; color: var(--muted); }
+.key b { display: block; font-size: 34px; color: var(--ink); margin-bottom: 4px; }
+.key i { font-style: normal; display: inline-block; width: 40px; height: 26px; border-radius: 4px; vertical-align: -3px; margin-right: 12px; }
+.key .g { border: 5px solid var(--ms); }
+.key .o { border: 4px dashed #d66e14; }
+
+/* preprocessing */
+.pre { display: grid; grid-template-columns: 1fr auto; gap: 56px; align-items: center; }
+.pre img { height: 760px; border-radius: 14px; border: 1px solid var(--line); }
+.steps { display: flex; flex-direction: column; gap: 14px; }
+.stp { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 18px 26px; display: grid; grid-template-columns: 52px 1fr; gap: 4px 16px; }
+.stp i { font-style: normal; grid-row: span 2; width: 48px; height: 48px; border-radius: 50%; background: #ebeae4; color: var(--ink); font-weight: 700; font-size: 26px; display: grid; place-items: center; }
+.stp b { font-size: 31px; }
+.stp span { font-size: 25px; color: var(--muted); line-height: 1.45; }
+.cmpbars { display: flex; flex-direction: column; gap: 16px; }
+.cb { display: grid; grid-template-columns: 240px 1fr 200px; gap: 24px; align-items: center; font-size: 28px; }
+.cb .f { height: 40px; border-radius: 8px; background: #d8d6cf; }
+.cb .f.p { background: var(--aud); }
+.cb b { font-size: 34px; text-align: right; white-space: nowrap; }
+.cb b small { font-size: 24px; font-weight: 600; color: var(--muted); }
+.panel { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 30px 36px; }
+.panel h3 { font-size: 32px; margin-bottom: 8px; }
+.panel .sub { font-size: 25px; color: var(--muted); margin-bottom: 24px; }
+.code { font-family: var(--mono); font-variant-ligatures: none; font-size: 23px; line-height: 1.6; background: #f3f2ee; border-radius: 12px; padding: 18px 22px; white-space: pre-wrap; }
+.code .hl { color: var(--aud); font-weight: 700; }
+.down { text-align: center; font-size: 30px; color: var(--muted); margin: 12px 0; }
+
+/* prompt */
+.prompt { background: #1f1f22; color: #f2f2f0; border-radius: 20px; padding: 40px 48px; font-size: 38px; line-height: 1.6; }
+.prompt .ph { color: #ffcf7a; }
+.needs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-top: 36px; }
+.needs div { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 24px 30px; font-size: 27px; color: var(--muted); line-height: 1.45; }
+.needs b { display: block; font-size: 32px; color: var(--ink); margin-bottom: 6px; }
+
+/* stat row */
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; }
+.stat { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 30px; }
+.stat b { display: block; font-size: 84px; line-height: 1; }
+.stat span { display: block; font-size: 28px; color: var(--muted); margin-top: 14px; }
+
+/* limits */
+.lims { display: flex; flex-direction: column; gap: 16px; }
+.limrow { background: var(--card); border: 1px solid var(--line); border-left: 8px solid var(--warn); border-radius: 14px; padding: 22px 32px; display: grid; grid-template-columns: 420px 1fr; gap: 30px; align-items: center; }
+.limrow b { font-size: 32px; }
+.limrow span { font-size: 28px; color: var(--muted); line-height: 1.45; }
+
+/* end */
+.links { display: flex; flex-direction: column; gap: 22px; margin-top: 60px; }
+.link { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 28px 36px; display: grid; grid-template-columns: 420px 1fr; align-items: center; }
+.link b { font-size: 36px; }
+.link span { font-family: var(--mono); font-size: 32px; }
+.link.a b { color: var(--aud); } .link.m b { color: var(--ms); }
+
+/* chrome */
+#chrome { position: fixed; left: 0; right: 0; bottom: 0; height: 6px; background: rgba(255,255,255,.08); }
+#bar { height: 100%; background: var(--aud); width: 0; transition: width .2s; }
+#count { position: fixed; right: 18px; bottom: 16px; font: 14px var(--sans); color: #999; }
+body.clean #chrome, body.clean #count { display: none; }
+</style>
+</head>
+<body>
+<div id="stage">
+
+<!-- 01 封面 -->
+<section class="slide cover">
+  <span class="tag">开源 · 乐队总谱读谱</span>
+  <h1>把乐队总谱 PDF<br>变成能播放的乐谱</h1>
+  <p class="sub"><span class="a">Audiveris-Bandscore</span> ＋ <span class="m">MuseScore-Bandscore</span></p>
+  <div class="pair">
+    <div class="a"><b>Audiveris-Bandscore</b>读谱：改修开源光学读谱软件 Audiveris，专门针对日式乐队总谱、键盘谱</div>
+    <div class="m"><b>MuseScore-Bandscore</b>播放：改修 MuseScore 3，让读出来的乐谱按原谱的反复、2x 正确播放</div>
+  </div>
+</section>
+
+<!-- 02 原版的问题 -->
+<section class="slide neutral">
+  <span class="tag">背景</span>
+  <h2>原版 Audiveris 读乐队谱，会卡在这几处</h2>
+  <p class="lead">Audiveris 读古典谱效果很好；换成日式乐队谱、键盘谱，就会反复遇到同一批问题。</p>
+  <div class="body">
+    <div class="probs">
+      <div class="prob"><i>1</i><b>声部错位</b><span>每行只印有演奏的乐器，乐器名又常读错，各行、各页对不上同一个声部</span></div>
+      <div class="prob"><i>2</i><b>拍号丢失</b><span>逐页识别时，第 2 页起开头没印拍号，整页没法检查时值</span></div>
+      <div class="prob"><i>3</i><b>一个错误污染整小节</b><span>一个声部多读或漏读一个音，其他声部的整小节休止符跟着变长变短</span></div>
+      <div class="prob"><i>4</i><b>鬼休止符声部</b><span>有音的谱表上多出只有休止符的声部，播放光标乱跑</span></div>
+      <div class="prob"><i>5</i><b>文字读不准</b><span>和弦名、排练记号识别率低；pizz. 之类的字被当成歌词</span></div>
+      <div class="prob"><i>6</i><b>结构误判</b><span>演奏法延续线被当成 1、2 房子；% 被展开成 8 拍的小节</span></div>
+      <div class="prob"><i>7</i><b>崩溃</b><span>某些页识别或导出时报错，整页没有输出</span></div>
+      <div class="prob" style="background:transparent;border-style:dashed"><i style="background:var(--aud-soft);color:var(--aud)">→</i><b>做法</b><span>能在源头修的，就改 Audiveris 本身，不靠事后修补导出的文件</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- 02d 页面分区 OCR -->
+<section class="slide neutral">
+  <span class="tag">前处理 · 页面分区 OCR</span>
+  <h2>先读页边的字，不看图也知道有哪些声部</h2>
+  <div class="body">
+    <div class="pre" style="grid-template-columns:auto 1fr">
+      <img src="img/pre_regions.png" alt="《夏色》第 1 页的 A、B、C 区" style="height:690px">
+      <div>
+        <div class="panel"><h3>OCR 只读谱表外面的三个区</h3><div class="sub">A 曲名、作词作曲 · B 乐器名 · C 页码；同时数出每行谱表有几条线（以下为整理后的节选）</div>
+          <div class="code">Vocal          5 线
+E.Guitar I     5 线 + <span class="hl">6 线</span>   → TAB
+E.Bass         5 线 + <span class="hl">4 线</span>   → 贝斯 TAB
+Percussion     <span class="hl">1 线</span>         → 一线谱
+……
+疑点：无</div>
+          <div class="down">↓</div>
+          <div class="code">Vocal|Vo.:1; Chorus|Cho.:1; E.Guitar I|E.G. I:2; …; Percussion|Perc.:1</div>
+        </div>
+        <p class="foot">读出的是文字，所以没有看图能力的模型也能写出声部提示（partsHint）；几秒钟就好，有疑点时才去看图。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 02b 前处理 -->
+<section class="slide neutral">
+  <span class="tag">前处理 · 送进读谱软件之前</span>
+  <h2>先把图准备好，再交给 Audiveris</h2>
+  <div class="body">
+    <div class="pre">
+      <div class="steps">
+        <div class="stp"><i>1</i><b>取出原图</b><span>直接取出 PDF 里嵌的原图，不重新转换，清晰度不打折</span></div>
+        <div class="stp"><i>2</i><b>裁掉标题和页边</b><span>第一页的大标题、页边空白裁掉；贴着乐谱的速度、排练记号、和弦名留下</span></div>
+        <div class="stp"><i>3</i><b>页首曲名涂白</b><span>第 2 页起每页重复印的曲名涂白，不让它混进乐谱里的字</span></div>
+        <div class="stp"><i>4</i><b>切成上下半页</b><span>在两行乐谱之间最宽的空白处切开；只有一行的页不切</span></div>
+        <div class="stp"><i>5</i><b>每半页放大 2 倍</b><span>每个符号分到更多像素；控制在 Audiveris 单张 20MP 的上限以内</span></div>
+      </div>
+      <img src="img/pre_split.png" alt="《夏色》第 2 页：页首涂白、切成上下半页">
+    </div>
+  </div>
+</section>
+
+<!-- 02c 前处理实测 -->
+<section class="slide neutral">
+  <span class="tag">前处理 · 实测</span>
+  <h2>切半页、放大 2 倍：读错的小节变少</h2>
+  <p class="lead">Audiveris 同一张图跑几次结果都一样，所以差别全来自输入。用多页、用不靠人判断的指标来比：小节里各声部的时值和拍号对不上，就算读错。</p>
+  <div class="body">
+    <div class="cols">
+      <div class="panel"><h3>整页 vs 半页</h3><div class="sub">《夏色》全曲 16 页，时值对不上的声部小节</div>
+        <div class="cmpbars">
+          <div class="cb"><span>整页</span><div class="f" style="width:100%"></div><b>308 <small>(22%)</small></b></div>
+          <div class="cb"><span>半页、放大 2 倍</span><div class="f p" style="width:77%"></div><b>238 <small>(17%)</small></b></div>
+        </div>
+        <p class="foot" style="font-size:24px">代价：整首处理时间 14.8 分钟 → 19.8 分钟</p></div>
+      <div class="panel"><h3>放大几倍、要不要锐化</h3><div class="sub">《夏色》第 2～6 页，10 个半页、约 440 小节里读错的小节</div>
+        <div class="cmpbars">
+          <div class="cb"><span>2 倍</span><div class="f p" style="width:78%"></div><b>76 <small>(17%)</small></b></div>
+          <div class="cb"><span>约 2.5 倍</span><div class="f" style="width:96%"></div><b>94 <small>(21%)</small></b></div>
+          <div class="cb"><span>2 倍＋锐化</span><div class="f" style="width:100%"></div><b>98 <small>(22%)</small></b></div>
+        </div>
+        <p class="foot" style="font-size:24px">放大不是越大越好：2 倍更准，每个半页约 25 秒，2.5 倍要 41 秒</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- 03 改了多少 -->
+<section class="slide">
+  <span class="tag">Audiveris-Bandscore · 总览</span>
+  <h2>改了什么：5 大类、38 项改进</h2>
+  <p class="lead">输入提示类的功能要自己打开，不设就和原版一样；识别、导出、稳定性的修正默认生效。</p>
+  <div class="body">
+    <div class="groups">
+      <div class="grp"><div class="n">5<small>项</small></div><b>声部与歌词</b><span>每行谱表对到正确的声部；歌词只认人声下方</span></div>
+      <div class="grp"><div class="n">8<small>项</small></div><b>文字与和弦名</b><span>换用 PP-OCR；排练记号、♭、add9</span></div>
+      <div class="grp"><div class="n">10<small>项</small></div><b>鼓与吉他</b><span>鼓的叉头、一线谱；吉他斜线、capo、降音调弦</span></div>
+      <div class="grp"><div class="n">13<small>项</small></div><b>调号、节奏与符号</b><span>调号统一；% 小节反复；2x 第二遍音符</span></div>
+      <div class="grp"><div class="n">2<small>项</small></div><b>稳定性与速度</b><span>崩溃修正；GPU 跑 OCR</span></div>
+    </div>
+    <div class="total">
+      <div><b>38</b>项改进</div>
+      <div><b>78</b>个补丁</div>
+      <div>基于上游 Audiveris 5.11 / 5.12</div>
+    </div>
+  </div>
+</section>
+
+<!-- 04 整体效果：结构 -->
+<section class="slide">
+  <span class="tag">整体效果 ① 乐谱结构</span>
+  <h2>同一批图片，原版 vs 改修版</h2>
+  <p class="lead">21 页、5 个声部的键盘乐团谱（钢琴大谱表＋弦乐、合成器各两部），两边都不做后处理。</p>
+  <div class="body">
+    <div class="metrics">
+      <div class="met"><div class="k">声部数量出错的页</div><div class="v"><span class="old">10 / 21</span><span class="arrow">→</span><span class="new">0</span></div></div>
+      <div class="met"><div class="k">声部总数（正确答案 105）</div><div class="v"><span class="old">139</span><span class="arrow">→</span><span class="new">105</span></div></div>
+      <div class="met"><div class="k">小节时值出错的比例</div><div class="v"><span class="old">23%</span><span class="arrow">→</span><span class="new">6%</span></div><div class="note">391 / 1633 → 109 / 1755 小节</div></div>
+      <div class="met"><div class="k">被其他声部污染的整小节休止符</div><div class="v"><span class="old">261</span><span class="arrow">→</span><span class="new">16</span></div></div>
+      <div class="met"><div class="k">鬼休止符小节</div><div class="v"><span class="old">24</span><span class="arrow">→</span><span class="new">0</span></div><div class="note">5140 个音符全部保留</div></div>
+      <div class="met"><div class="k">崩溃的页</div><div class="v"><span class="old">2</span><span class="arrow">→</span><span class="new">0</span></div></div>
+      <div class="met"><div class="k">读出的和弦名</div><div class="v"><span class="old">96</span><span class="arrow">→</span><span class="new">227</span></div></div>
+      <div class="met"><div class="k">误判的杂讯文字</div><div class="v"><span class="old">48</span><span class="arrow">→</span><span class="new">10</span></div></div>
+      <div class="met"><div class="k">排练记号</div><div class="v"><span class="old">约 3 个对</span><span class="arrow">→</span><span class="new">7 / 7</span></div><div class="note">原版读成 Al、El、重复的 D1</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 05 整体效果：文字 -->
+<section class="slide">
+  <span class="tag">整体效果 ② 文字识别</span>
+  <h2>文字识别：Tesseract → PaddleOCR</h2>
+  <p class="lead">6 页乐团谱、键盘谱人工标注答案，送给两种 OCR 的是同一批图像。</p>
+  <div class="body">
+    <div class="legend"><span><i></i>Tesseract（原版）</span><span><i class="p"></i>PaddleOCR（改修版）</span></div>
+    <div class="bars">
+      <div class="bar"><b>和弦名</b><div class="track">
+        <div class="line"><div class="fill" style="width:59%"></div><span>54 / 91（59%）</span></div>
+        <div class="line"><div class="fill p" style="width:90%"></div><span class="p">82 / 91（90%）</span></div></div></div>
+      <div class="bar"><b>乐器名</b><div class="track">
+        <div class="line"><div class="fill" style="width:37%"></div><span>31 / 84（37%）</span></div>
+        <div class="line"><div class="fill p" style="width:76%"></div><span class="p">64 / 84（76%）</span></div></div></div>
+      <div class="bar"><b>演奏指示</b><div class="track">
+        <div class="line"><div class="fill" style="width:54%"></div><span>20 / 37（54%）</span></div>
+        <div class="line"><div class="fill p" style="width:78%"></div><span class="p">29 / 37（78%）</span></div></div></div>
+      <div class="bar"><b>排练记号</b><div class="track">
+        <div class="line"><div class="fill" style="width:14%"></div><span>1 / 7</span></div>
+        <div class="line"><div class="fill p" style="width:100%"></div><span class="p">7 / 7</span></div></div></div>
+    </div>
+    <p class="foot">代价是速度：每页约 1 秒 → 约 12 秒（CPU）。用 GPU 跑 OCR 时每页约 3 秒。</p>
+  </div>
+</section>
+
+<!-- 06 声部与歌词 -->
+<section class="slide">
+  <span class="tag">Audiveris-Bandscore · 声部与歌词</span>
+  <h2>每行谱表对到正确的声部</h2>
+  <div class="body">
+    <div class="rows">
+      <div class="row"><div class="name">声部对应</div><div class="what"><span>每行只印部分乐器的乐团谱，也能把每行谱表对到正确的声部</span><span>乐器名被读错时，声部也不再对不上</span></div><div class="set">partsHint</div></div>
+      <div class="row"><div class="name">TAB 声部保留</div><div class="what"><span>TAB 没认出、或被拆成独立声部时，吉他的谱表数仍然正确</span></div><div class="set">:tab</div></div>
+      <div class="row"><div class="name">指定音色</div><div class="what"><span>可以给每个声部指定导出的 GM 音色，电吉他不再变成钢琴</span></div><div class="set">:gm</div></div>
+      <div class="row"><div class="name">歌词位置</div><div class="what"><span>只有人声下方的字才算歌词，pizz.、Woodwind 不再挂到音符上</span></div><div class="set">:lyrics</div></div>
+      <div class="row"><div class="name">歌词误认</div><div class="what"><span>歌词里的假名、标点不再被认成重音、断奏记号</span></div><div class="set def">默认</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 06b 歌词实例 -->
+<section class="slide">
+  <span class="tag">Audiveris-Bandscore · 歌词</span>
+  <h2>只有人声下方的字，才算歌词</h2>
+  <div class="body">
+    <div class="fig">
+      <img src="img/lyrics_annot.png" alt="夏色えがおで1,2,Jump! 第 1 页的识别结果">
+      <div class="key">
+        <div><b><i class="g"></i>识别成歌词</b>Vocal 下方的 Sum-mer wing，挂到 Vocal 的音符上</div>
+        <div><b><i class="o"></i>不会被识别成歌词</b>和弦名、速度、排练记号、音色名 (Bell)、TAB 的数字</div>
+        <div>原版会把乐器谱表下方的字（pizz.、Woodwind、音色名）也当成歌词，挂到音符上。</div>
+        <div style="font-size:24px">谱例：《夏色えがおで1,2,Jump!》第 1 页，实际识别结果</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 07 文字 -->
+<section class="slide">
+  <span class="tag">Audiveris-Bandscore · 文字</span>
+  <h2>谱面上的字：认得准，也放对地方</h2>
+  <div class="body">
+    <div class="rows">
+      <div class="row"><div class="name">识别精度</div><div class="what"><span>改用 PP-OCR；日文歌词用歌词专用模型逐音节识别</span><span>歌词下方的延长线不再读成字；OCR 服务可以放在另一台电脑</span></div><div class="set def">默认</div></div>
+      <div class="row"><div class="name">文字归属</div><div class="what"><span>谱表间的 D.S.、2x、音色名挂到所在小节，不再被当成整页标题</span><span>TAB 的品格数字不再被当成文字导出</span></div><div class="set def">默认</div></div>
+      <div class="row"><div class="name">字号</div><div class="what"><span>谱表中间、标题、和弦名不再出现超大字</span></div><div class="set def">默认</div></div>
+      <div class="row"><div class="name">排练记号</div><div class="what"><span>方框排练记号正确识别，不再读成 Al、El 或和弦名；不再归到前一小节</span></div><div class="set def">默认</div></div>
+      <div class="row"><div class="name">滑音</div><div class="what"><span>gliss. 和吉他的 S 导出成滑音线，MuseScore 会播放</span></div><div class="set def">默认</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 08 和弦名 -->
+<section class="slide">
+  <span class="tag">Audiveris-Bandscore · 和弦名</span>
+  <h2>和弦名：读全、对准拍点</h2>
+  <div class="body">
+    <div class="rows">
+      <div class="row"><div class="name">识别</div><div class="what"><span>支持 add2、add9、add11 等加音和弦</span><span>中间有空隙的和弦名（E sus4）不再拆成两段</span><span>小字的 ♭ 用这本书的模板识别，OCR 读丢的 ♭ 也能补回</span></div><div class="set">openingFifths</div></div>
+      <div class="row"><div class="name">位置</div><div class="what"><span>长音上方的几个和弦名对到各自的拍点，不再全部叠在长音开头</span></div><div class="set def">默认</div></div>
+      <div class="row"><div class="name">导出</div><div class="what"><span>6(9) 和弦在 MuseScore 里不再显示成 69()</span></div><div class="set def">默认</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 09 鼓 -->
+<section class="slide">
+  <span class="tag">Audiveris-Bandscore · 鼓与打击乐</span>
+  <h2>鼓组：叉头找得到，音色对得上</h2>
+  <div class="body">
+    <div class="rows tight">
+      <div class="row"><div class="name">鼓谱表导出</div><div class="what"><span>不管印的是什么谱号（乐队谱的鼓常用低音谱号），都导出成打击乐谱号和鼓的音色</span></div><div class="set">:drums</div></div>
+      <div class="row"><div class="name">叉头识别</div><div class="what"><span>hi-hat、crash 的 × 按鼓组位置找；可以用这本书做的模板找，印刷深浅不影响</span><span>被谱线穿过、踩在加线上的叉头也找得到</span></div><div class="set">templateDir</div></div>
+      <div class="row"><div class="name">本书的鼓谱写法</div><div class="what"><span>写法和一般鼓谱不同时（例如 hi-hat 写在最上线），可以用自己的对应表</span></div><div class="set">templateDir</div></div>
+      <div class="row"><div class="name">一线谱</div><div class="what"><span>和五线谱混在一起的单线打击乐谱表，以及线上的叉头，都能识别</span></div><div class="set">:oneline</div></div>
+      <div class="row"><div class="name">开合记号 / 音色编号</div><div class="what"><span>hi-hat 上方的 +、o 不再当成文字；所有鼓音色差一号的问题已修正</span></div><div class="set def">默认</div></div>
+    </div>
+    <div class="snip"><img src="img/el_drum_cross.png" alt="鼓谱叉头识别" style="height:100px"><span class="cap">红框：模板找到的叉头</span></div>
+  </div>
+</section>
+
+<!-- 10 吉他 -->
+<section class="slide">
+  <span class="tag">Audiveris-Bandscore · 吉他与贝斯</span>
+  <h2>吉他、贝斯：斜线、capo、降音调弦</h2>
+  <div class="body">
+    <div class="rows tight">
+      <div class="row"><div class="name">斜线符头</div><div class="what"><span>识别吉他谱的斜线（照这个节奏再弹前一个和弦），导出成斜线符头</span></div><div class="set">templateDir</div></div>
+      <div class="row"><div class="name">capo</div><div class="what"><span>夹 capo 的吉他保留自己写的调号，不被其他声部的调号盖掉</span></div><div class="set">:capo</div></div>
+      <div class="row"><div class="name">降音调弦</div><div class="what"><span>降半音调弦的吉他、贝斯保留自己的调号（歌写 A♭、吉他写 A）</span></div><div class="set">:down</div></div>
+      <div class="row"><div class="name">谱表线距</div><div class="what"><span>TAB 比五线谱宽时，五线谱不再被当成小谱表，加线上的音不再整串漏掉</span></div><div class="set def">默认</div></div>
+    </div>
+    <div class="cmp" style="margin-top:18px">
+      <div class="lab">原谱</div><img src="img/orig_slash.png" alt="原谱：吉他斜线" style="height:118px">
+      <div class="lab ms">MuseScore-Bandscore</div><img src="img/ms_slash.png" alt="MuseScore：斜线符头" style="height:84px">
+    </div>
+    <p class="foot">TAB 的品格数字目前不读：吉他、贝斯的音高从上方五线谱读。谱例：《夏色》E.Guitar I 第 7 小节。</p>
+  </div>
+</section>
+
+<!-- 11 调号 -->
+<section class="slide">
+  <span class="tag">Audiveris-Bandscore · 调号</span>
+  <h2>调号：读得全，各声部一致</h2>
+  <div class="body">
+    <div class="rows">
+      <div class="row"><div class="name">调号识别</div><div class="what"><span>印得很淡的 ♭ 被谱线切断时，不再只读到一两个</span></div><div class="set def">默认</div></div>
+      <div class="row"><div class="name">调号模板</div><div class="what"><span>有这本书的 ♯、♭ 模板时，在固定位置逐个比对，7 个位置一次看完再判断</span></div><div class="set">templateDir</div></div>
+      <div class="row"><div class="name">各谱表统一</div><div class="what"><span>同一小节所有谱表用同一个调号，漏认的谱表不再按 C 大调输出</span><span>小号、萨克斯、圆号等移调乐器，按声部名称换算自己的调号</span><span>行中的转调不再拖到下一行才生效</span></div><div class="set def">默认</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 12 小节与节奏 -->
+<section class="slide">
+  <span class="tag">Audiveris-Bandscore · 小节与节奏</span>
+  <h2>每个小节的时值都对得上</h2>
+  <div class="body">
+    <div class="rows">
+      <div class="row"><div class="name">默认拍号</div><div class="what"><span>页首没印拍号时，用指定的拍号，逐页识别也能检查时值</span></div><div class="set">defaultTimeSignature</div></div>
+      <div class="row"><div class="name">连音</div><div class="what"><span>符头不再被误认成三连音记号</span></div><div class="set def">默认</div></div>
+      <div class="row"><div class="name">整小节休止符</div><div class="what"><span>一个声部读错，其他声部的整小节休止符不再跟着变长变短</span></div><div class="set def">默认</div></div>
+      <div class="row"><div class="name">空谱表</div><div class="what"><span>一个小节里什么都没有的谱表，补上整小节休止符</span></div><div class="set def">默认</div></div>
+      <div class="row"><div class="name">多余的休止符声部</div><div class="what"><span>丢掉有音谱表上只有休止符的声部，播放光标、声部上下顺序不再乱</span></div><div class="set def">默认</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 13 % 小节反复 -->
+<section class="slide">
+  <span class="tag">Audiveris-Bandscore · 乐队谱常见记号 ①</span>
+  <h2>% 小节反复：所有乐器通用</h2>
+  <div class="body">
+    <div class="rows">
+      <div class="row"><div class="name">% 小节反复</div><div class="what"><span>五线谱、一线谱都认得出；只出现在部分谱表的 % 不再展开成 8 拍的小节</span><span>写入重复几小节，MuseScore-Bandscore 显示成 % 并照反复播放</span></div><div class="set def">默认</div></div>
+    </div>
+    <div class="cmps2" style="margin-top:22px">
+      <div class="cmp"><div class="hd">五线谱（吉他）</div>
+        <div class="lab">原谱</div><img src="img/orig_rep5.png" alt="原谱：吉他五线谱的 %" style="height:150px">
+        <div class="lab ms">MuseScore-Bandscore</div><img src="img/ms_rep5.png" alt="MuseScore：吉他五线谱的 %" style="height:150px"></div>
+      <div class="cmp"><div class="hd">一线谱（打击乐）</div>
+        <div class="lab">原谱</div><img src="img/orig_rep1.png" alt="原谱：一线谱的 %" style="height:120px">
+        <div class="lab ms">MuseScore-Bandscore</div><img src="img/ms_rep1.png" alt="MuseScore：一线谱的 %" style="height:120px"></div>
+    </div>
+    <p class="foot">谱例：《想いよひとつになれ》A.Guitar 第 21 小节；《夏色》Percussion 第 7 小节。</p>
+  </div>
+</section>
+
+<!-- 13b 一线谱 -->
+<section class="slide">
+  <span class="tag">Audiveris-Bandscore · 乐队谱常见记号 ②</span>
+  <h2>打击乐一线谱：乐队谱里也认得出</h2>
+  <p class="lead">乐队谱的 Perc. 声部常常只画一条线，夹在一整页五线谱中间。原版的一线谱开关是整本生效的，不是为这种混排设计的。</p>
+  <div class="body">
+    <div class="rows">
+      <div class="row"><div class="name">一线谱识别</div><div class="what"><span>按 partsHint 在每一行里找出这条单独的线，导出成打击乐声部；线上的叉头用这本书的模板找</span><span>页面轻微弯曲时不会丢掉这一行；五线谱的线不会被误认成一线谱</span></div><div class="set">:oneline</div></div>
+    </div>
+    <div class="cmp" style="margin-top:22px">
+      <div class="lab">原谱</div><img src="img/orig_one.png" alt="原谱：一线谱" style="height:120px">
+      <div class="lab ms">MuseScore-Bandscore</div><img src="img/ms_one.png" alt="MuseScore：一线谱" style="height:72px">
+    </div>
+    <p class="foot">谱例：《夏色》Percussion 第 26 小节（Maracas）。</p>
+  </div>
+</section>
+
+<!-- 13c 2x -->
+<section class="slide">
+  <span class="tag">Audiveris-Bandscore · 乐队谱常见记号 ③</span>
+  <h2>2x：括号里是第二遍才弹的音</h2>
+  <div class="body">
+    <div class="rows">
+      <div class="row"><div class="name">2x 第二遍音符</div><div class="what"><span>括号里标 2x 的第二遍音符，导出成 MusicXML 的 time-only，两遍时值各自正确</span><span>D.S.x 或排不满一小节时，可以选择只保留第一遍</span></div><div class="set def">默认</div></div>
+    </div>
+    <div class="cmp" style="margin-top:22px">
+      <div class="lab">原谱</div><img src="img/orig_2x.png" alt="原谱：2x 括号" style="height:220px">
+      <div class="lab ms">MuseScore-Bandscore</div><img src="img/ms_2x.png" alt="MuseScore：2x 两遍小节" style="height:200px">
+    </div>
+    <p class="foot">谱例：《Snow halation》E.Guitar 第 20 小节。同一小节里并排放两遍，小节数不变。</p>
+  </div>
+</section>
+
+<!-- 14 其他、稳定性、速度 -->
+<section class="slide">
+  <span class="tag">Audiveris-Bandscore · 其他符号、稳定性、速度</span>
+  <h2>少误认、不崩溃、跑得快</h2>
+  <div class="body">
+    <div class="rows tight">
+      <div class="row"><div class="name">休止符误认</div><div class="what"><span>四分休止符不再认成空心符头；文字不再认成二分休止符</span></div><div class="set def">默认</div></div>
+      <div class="row"><div class="name">演奏记号归属</div><div class="what"><span>重音、断奏不再连到远处别的声部的音符</span></div><div class="set def">默认</div></div>
+      <div class="row"><div class="name">房子误认</div><div class="what"><span>可以关闭房子检测，— pizz. —↓ 这类延续线不再变成 1、2 房子</span></div><div class="set">endings</div></div>
+      <div class="row"><div class="name">崩溃修正</div><div class="what"><span>修正 7 类让程序崩溃、整页中止的问题</span></div><div class="set def">默认</div></div>
+      <div class="row"><div class="name">批量加速</div><div class="what"><span>整本处理完才存一次档，速度更快、结果不变</span></div><div class="set def">默认</div></div>
+      <div class="row"><div class="name">OCR 加速</div><div class="what"><span>OCR 可以用 GPU 跑，每页约 50 秒 → 约 3 秒，结果和 CPU 完全相同</span></div><div class="set">--device</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 15 为什么改 MuseScore -->
+<section class="slide ms">
+  <span class="tag">MuseScore-Bandscore · 为什么还要改播放端</span>
+  <h2>2x 读出来了，MuseScore 却放不出来</h2>
+  <p class="lead">日式乐队谱常在反复段的同一小节里，用括号写第二遍才弹的音。官方 MuseScore 没有“同一小节、两遍不同内容”的写法。</p>
+  <div class="body">
+    <div class="cols">
+      <div class="col no"><div class="verdict">方案 A · 没有采用</div><h3>后处理拆成 1 房 / 2 房</h3><ul>
+        <li>小节数变多，和原谱的小节号对不上，排练时没法对照</li>
+        <li>其他声部的音要跟着复制一遍，容易出错</li>
+        <li>8～10 行的谱表再加房子线，版面更挤</li></ul></div>
+      <div class="col yes"><div class="verdict">方案 B · 采用</div><h3>改 MuseScore，直接认 2x</h3><ul>
+        <li>同一小节里并排放两遍，第二遍在「2x ( … )」里</li>
+        <li>小节数和原谱完全一样，其他声部不动</li>
+        <li>后处理保持简单</li></ul></div>
+    </div>
+  </div>
+</section>
+
+<!-- 16 MuseScore 反复与分遍 -->
+<section class="slide ms">
+  <span class="tag">MuseScore-Bandscore · 反复与分遍</span>
+  <h2>按原谱的反复结构播放</h2>
+  <div class="body">
+    <div class="rows">
+      <div class="row"><div class="name">2x 两遍小节</div><div class="what"><span>同一小节并排显示两遍，不增加小节</span><span>反复时每一遍只播自己那部分</span></div><div class="set">time-only</div></div>
+      <div class="row"><div class="name">只在某一遍演奏</div><div class="what"><span>“1x tacet”这类只在第 n 遍演奏的音，按遍数播放；反复、D.S.、D.C. 都算一遍</span></div><div class="set">time-only</div></div>
+      <div class="row"><div class="name">编号 Segno / Coda</div><div class="what"><span>D.S.1 跳到 segno1、To Coda 跳到 coda1，多段跳转按原谱走</span></div><div class="set">sound</div></div>
+      <div class="row"><div class="name">2、4 小节的 %</div><div class="what"><span>1、2、4 小节的反复显示成 % 记号，并照反复播放</span><span>原版 MuseScore 3.6 读 MusicXML 时不处理 %</span></div><div class="set">measure-repeat</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 17 MuseScore 读入与显示 -->
+<section class="slide ms">
+  <span class="tag">MuseScore-Bandscore · 读入与显示</span>
+  <h2>打开就是乐队谱该有的样子</h2>
+  <div class="body">
+    <div class="rows">
+      <div class="row"><div class="name">休息的声部照样显示</div><div class="what"><span>乐队谱每行只印有演奏的乐器；原版导入后会把休息的声部整行藏起来</span></div><div class="set def">默认</div></div>
+      <div class="row"><div class="name">和弦名默认不播放</div><div class="what"><span>导入的乐谱不自动播放和弦名，读错的和弦不会刺耳；需要时可以在样式里打开</span></div><div class="set def">默认</div></div>
+      <div class="row"><div class="name">hi-hat 开合</div><div class="what"><span>读入 hi-hat 的 o（开）记号</span></div><div class="set def">默认</div></div>
+      <div class="row"><div class="name">降音调弦的拼法</div><div class="what"><span>降半音调弦的吉他、贝斯，实际音高写成 A♭，不再写成 G♯</span></div><div class="set def">默认</div></div>
+      <div class="row"><div class="name">去掉假报错</div><div class="what"><span>导入时每首几百条假的延音线、谱号报错不再出现</span></div><div class="set def">默认</div></div>
+    </div>
+    <p class="foot">基于 Jojo-Schmitz 维护的 MuseScore 3.7 Evolution，版本名改为 <b>3.8 Bandscore</b>。</p>
+  </div>
+</section>
+
+<!-- 18 流程 -->
+<section class="slide neutral">
+  <span class="tag">整体流程</span>
+  <h2>从 PDF 到能播放的乐谱</h2>
+  <div class="body">
+    <div class="flow">
+      <div class="step t"><div class="who">前处理</div><b>切页</b><span>从 PDF 取出原图，去掉页首标题，放大</span></div>
+      <div class="arr">→</div>
+      <div class="step a"><div class="who">Audiveris-Bandscore</div><b>读谱</b><span>音符、文字、鼓、吉他、调号</span></div>
+      <div class="arr">→</div>
+      <div class="step t"><div class="who">后处理</div><b>合并与修整</b><span>各页拼成一首，统一调号，检查每小节时值</span></div>
+      <div class="arr">→</div>
+      <div class="step t"><div class="who">验收</div><b>检查</b><span>格式检查，用 MuseScore 实际打开一遍</span></div>
+      <div class="arr">→</div>
+      <div class="step m"><div class="who">MuseScore-Bandscore</div><b>播放</b><span>按反复、2x 播放，对照原谱试听</span></div>
+    </div>
+    <div class="agent"><b>每一步都由 AI 照说明文档执行</b>：读报告、发现问题、改提示、重跑。你只需要最后听一遍。</div>
+  </div>
+</section>
+
+<!-- 19 怎么用 -->
+<section class="slide neutral">
+  <span class="tag">怎么用</span>
+  <h2>在 AI 对话框里说一句话</h2>
+  <div class="body">
+    <div class="prompt">读 github.com/hibikiwtnb/audiveris-bandscore 的说明，帮我把这份乐队总谱转成 MuseScore 能播放的乐谱：<span class="ph">&lt;PDF 路径&gt;</span></div>
+    <div class="needs">
+      <div><b>能上 GitHub 的网络</b>AI 会从 GitHub 取得工具</div>
+      <div><b>能执行命令的 AI 工具</b>模型不限</div>
+      <div><b>你自己的乐谱 PDF</b>用自己买的谱，在自己的电脑上转</div>
+    </div>
+  </div>
+</section>
+
+<!-- 20 实测 -->
+<section class="slide neutral">
+  <span class="tag">实测一首</span>
+  <h2>《夏色えがおで1,2,Jump!》乐队总谱</h2>
+  <div class="body">
+    <div class="stats">
+      <div class="stat"><b>16</b><span>页</span></div>
+      <div class="stat"><b>10</b><span>个声部（13 行谱表）</span></div>
+      <div class="stat"><b>128</b><span>个小节</span></div>
+      <div class="stat"><b>6,584</b><span>个音符</span></div>
+    </div>
+    <div class="stats" style="grid-template-columns:repeat(2,1fr);margin-top:22px">
+      <div class="stat"><b>约 21 分钟</b><span>读谱＋后处理（OCR 用 GPU）</span></div>
+      <div class="stat"><b>0</b><span>格式错误；MuseScore 打开无报错</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- 21 还做不到 -->
+<section class="slide lim">
+  <span class="tag">目前还做不到</span>
+  <h2>这些还要靠你自己听、自己改</h2>
+  <div class="body">
+    <div class="lims">
+      <div class="limrow"><b>TAB 的品格数字</b><span>目前不读；吉他、贝斯的音高从五线谱读</span></div>
+      <div class="limrow"><b>少数鼓记号</b><span>圆圈叉 ⊗ 等还没有模板，会漏掉</span></div>
+      <div class="limrow"><b>漏掉的音</b><span>读谱时漏掉的音不会自动补回，只能对照原谱找出来</span></div>
+      <div class="limrow"><b>复杂的房子</b><span>“1.3.” 这类房子编号偶尔读错，反复顺序可能不对</span></div>
+      <div class="limrow"><b>最后一步</b><span>转完要自己听一遍、对照原谱确认</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- 22a 一起改进 -->
+<section class="slide neutral">
+  <span class="tag">一起改进</span>
+  <h2>发现问题、想加功能？让 AI 帮你提交</h2>
+  <p class="lead">项目以 AGPL-3.0 开源。欢迎修正和改进建议，包括 TAB 品格数字识别这类还没做的功能。</p>
+  <div class="body">
+    <div class="prompt">我想改进 audiveris-bandscore：<span class="ph">&lt;遇到的问题（哪首曲、第几页、第几小节、哪里不对），或想加的功能&gt;</span>。请读 github.com/hibikiwtnb/audiveris-bandscore 的贡献说明，找出原因或做法；能改就改好，向这个仓库提交一个 Pull Request，写清楚改了什么、怎么验证的。</div>
+    <div class="needs">
+      <div><b>GitHub 账号</b>AI 用你的账号提交 Issue 或 Pull Request</div>
+      <div><b>写清楚问题或想法</b>读错的：页码、小节号、声部、原谱上应该是什么；新功能：想让它做到什么</div>
+      <div><b>不要附整页乐谱</b>市售乐谱只附出问题的小片段</div>
+    </div>
+  </div>
+</section>
+
+<!-- 22 结尾 -->
+<section class="slide cover">
+  <span class="tag neutral" style="background:#ebeae4;color:var(--muted)">开源</span>
+  <h1 style="font-size:88px">两个都在 GitHub 上</h1>
+  <div class="links">
+    <div class="link a"><b>Audiveris-Bandscore</b><span>github.com/hibikiwtnb/audiveris-bandscore</span></div>
+    <div class="link m"><b>MuseScore-Bandscore</b><span>github.com/hibikiwtnb/MuseScore</span></div>
+  </div>
+  <p class="foot" style="margin-top:48px">感谢上游 Audiveris、MuseScore，以及 Jojo-Schmitz 维护的 MuseScore 3.x。授权沿用上游：AGPL-3.0 / GPL-2.0。</p>
+</section>
+
+</div>
+<div id="chrome"><div id="bar"></div></div>
+<div id="count"></div>
+
+<script>
+(function () {
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var stage = document.getElementById('stage');
+  var i = 0;
+
+  function fit() {
+    var s = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+    stage.style.transform = 'translate(-50%, -50%) scale(' + s + ')';
+  }
+  function show(n) {
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach(function (el, k) { el.classList.toggle('on', k === i); });
+    document.getElementById('bar').style.width = ((i + 1) / slides.length * 100) + '%';
+    document.getElementById('count').textContent = (i + 1) + ' / ' + slides.length;
+    if (location.hash !== '#' + (i + 1)) history.replaceState(null, '', '#' + (i + 1));
+  }
+  document.addEventListener('keydown', function (e) {
+    var k = e.key;
+    if (k === 'ArrowRight' || k === 'PageDown' || k === ' ' || k === 'Enter') { show(i + 1); e.preventDefault(); }
+    else if (k === 'ArrowLeft' || k === 'PageUp' || k === 'Backspace') { show(i - 1); e.preventDefault(); }
+    else if (k === 'Home') show(0);
+    else if (k === 'End') show(slides.length - 1);
+    else if (k === 'f' || k === 'F') {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else document.documentElement.requestFullscreen();
+    }
+    else if (k === 'h' || k === 'H') document.body.classList.toggle('clean');
+  });
+  window.addEventListener('resize', fit);
+  fit();
+  show((parseInt(location.hash.slice(1), 10) || 1) - 1);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+# audiveris-bandscore skill — dependencies
+# pip install -r requirements.txt
+Pillow>=10.0.0
+numpy>=1.24.0
+
+# System tools (not installed by pip):
+#   poppler (pdfimages) | JDK 25 | audiveris-bandscore (github.com/hibikiwtnb/audiveris-bandscore, branch bandscore)
+#   MuseScore-Bandscore (3.x 專用改版 fork: github.com/hibikiwtnb/MuseScore，不用 4) | PaddleOCR in its own venv (for page_regions.py, page_ocr.py and the OCR server of Audiveris; pip install paddleocr there)
+
+# ---- environment.txt template --------------------------------------------------------------
+# environment.txt (repo root, not in git) holds this machine's paths.  The first agent or person
+# to run the tools copies the lines below into environment.txt and fills them in.  Tools read only
+# this file: a missing file or empty required key stops the run, nothing is guessed.
+#
+# JAVA_HOME=               required by run_audiveris.py        (JDK 25 home)
+# AUDIVERIS_BIN=           required by run_audiveris.py        (app/build/install/app/bin/Audiveris[.bat])
+# WORK_DIR=                required by run_audiveris.py        (scratch dir whose path has no user name, e.g. /tmp/audiveris_run)
+# MUSESCORE_BIN=           required by verify_musescore.py     (mscore)
+# PADDLE_OCR_SERVER=       OCR server of Audiveris             (audiveris-bandscore/dev/paddleocr/paddle_ocr_server.py)
+# PADDLE_OCR_URL=          required by run_audiveris.py        (URL of the running OCR server, e.g. http://127.0.0.1:8868 or a LAN machine)
+# PADDLE_OCR_CANDIDATES=   optional: ocr_pick.py               (OCR servers in order of preference, comma separated; default 127.0.0.1:8868)
+# OCR_PYTHON=              page_regions.py, page_ocr.py, OCR server (python of the paddleocr venv)
+# PDF_DIR=                 optional: local folder holding your score PDFs

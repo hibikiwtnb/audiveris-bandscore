@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE catalog PUBLIC "-//OASIS//DTD Entity Resolution XML Catalog V1.0//EN" "http://www.oasis-open.org/committees/entity/release/1.0/catalog.dtd">
+<catalog xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog">
+  <system systemId="-//Recordare//ELEMENTS MusicXML 3.1 Common//EN" uri="common.mod"/>
+  <system systemId="-//Recordare//ELEMENTS MusicXML 3.1 Layout//EN" uri="layout.mod"/>
+  <system systemId="-//Recordare//ELEMENTS MusicXML 3.1 Identity//EN" uri="identity.mod"/>
+  <system systemId="-//Recordare//ELEMENTS MusicXML 3.1 Attributes//EN" uri="attributes.mod"/>
+  <system systemId="-//Recordare//ELEMENTS MusicXML 3.1 Link//EN" uri="link.mod"/>
+  <system systemId="-//Recordare//ELEMENTS MusicXML 3.1 Note//EN" uri="note.mod"/>
+  <system systemId="-//Recordare//ELEMENTS MusicXML 3.1 Barline//EN" uri="barline.mod"/>
+  <system systemId="-//Recordare//ELEMENTS MusicXML 3.1 Direction//EN" uri="direction.mod"/>
+  <system systemId="-//Recordare//ELEMENTS MusicXML 3.1 Score//EN" uri="score.mod"/>
+</catalog>
