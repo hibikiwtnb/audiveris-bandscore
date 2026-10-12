@@ -23,6 +23,7 @@ package org.audiveris.omr.sheet.note;
 
 import org.audiveris.omr.glyph.Glyph;
 import org.audiveris.omr.glyph.Shape;
+import org.audiveris.omr.math.GeoUtil;
 import org.audiveris.omr.glyph.ShapeSet.HeadMotif;
 import static org.audiveris.omr.image.PixelSource.BACKGROUND;
 import static org.audiveris.omr.run.Orientation.VERTICAL;
@@ -698,6 +699,13 @@ public class CrossTemplate
                     yMin,
                     xMax - xMin + 1,
                     yMax - yMin + 1);
+
+            // The pitch is read from the ink of the head, not from the template center: a template
+            // whose center is a few pixels off its cross (as measured when learned) put crosses
+            // on the next pitch up (hi-hat read as crash, crash as splash)
+            if (shape != Shape.NOTEHEAD_SLASH) {
+                pitch = (int) Math.round(staff.pitchPositionOf(GeoUtil.center2D(bounds)));
+            }
 
             for (int i = 0; i < wdx.length; i++) {
                 final int px = x + wdx[i];
