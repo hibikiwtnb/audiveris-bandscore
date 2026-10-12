@@ -6,7 +6,7 @@
 - 基底：上游 Audiveris **5.12.0**（`598d16410`），改動見第 2 節
 - 分支：`bandscore`（預設分支）
 - 授權：與上游相同，[AGPL-3.0](LICENSE)
-- **AI 轉譜流程**：[`skill/`](skill/README.md) 是給 AI agent 的作業手冊和工具，把樂隊總譜 PDF 一路轉成可播放的 MusicXML；圖解說明書在 [`skill/docs/guide/`](skill/docs/guide/index.html)
+- **AI 轉譜流程**：[`skill/`](skill/README.md) 是給 AI agent 的作業手冊和工具，把樂隊總譜 PDF 一路轉成可播放的 MusicXML；圖解說明書可以[線上閱讀](https://hibikiwtnb.github.io/audiveris-bandscore/)（原始檔在 [`skill/docs/guide/`](skill/docs/guide/index.html)）
 - 回報問題、提議改進：[CONTRIBUTING.md](CONTRIBUTING.md)
 
 ---

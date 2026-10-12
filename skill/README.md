@@ -2,7 +2,7 @@
 
 把樂團譜／鍵盤譜 PDF 轉成可在 MuseScore 正確播放的 MusicXML。這是一份給 AI agent 的作業手冊（[SKILL.md](SKILL.md)）加一組 Python 工具：前處理頁面、呼叫本 repo 的 Audiveris-Bandscore 讀譜、後處理與驗收。
 
-- 圖解說明書：[docs/guide/index.html](docs/guide/index.html)（下載後用瀏覽器開；← → 翻頁，F 全螢幕）
+- 圖解說明書：[線上閱讀](https://hibikiwtnb.github.io/audiveris-bandscore/)（← → 翻頁，F 全螢幕，點圖放大）；原始檔在 [docs/guide/](docs/guide/index.html)
 - 跑一首曲子：[SKILL.md](SKILL.md)
 - 開發規則：[DEVELOPMENT.md](DEVELOPMENT.md)
 - 檔案格式、教訓、已知缺口：[docs/](docs/)

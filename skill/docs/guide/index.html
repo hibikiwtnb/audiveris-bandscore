@@ -204,6 +204,22 @@ h2 { font-size: 64px; line-height: 1.2; font-weight: 700; margin-top: 28px; }
 .code .hl { color: var(--aud); font-weight: 700; }
 .down { text-align: center; font-size: 30px; color: var(--muted); margin: 12px 0; }
 
+/* original vs ours */
+.vs { display: grid; gap: 28px; align-items: start; }
+.vs figure { margin: 0; }
+.vs figcaption { font-size: 25px; font-weight: 700; margin-bottom: 10px; }
+.vs figcaption.up { color: var(--bad); } .vs figcaption.ours { color: var(--aud); } .vs figcaption.org { color: var(--muted); }
+.vs img { display: block; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.vs figure.mine img { border: 4px solid var(--aud); }
+.bugs { display: flex; flex-direction: column; gap: 12px; margin-top: 44px; }
+.bugs div { background: #fbeceb; border-left: 6px solid var(--bad); border-radius: 10px; padding: 14px 18px; font-size: 25px; line-height: 1.4; }
+.bugrow { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; align-items: center; }
+.bugrow span { font-size: 24px; font-weight: 700; color: var(--bad); }
+.bugrow div { background: #fbeceb; border-left: 5px solid var(--bad); border-radius: 8px; padding: 8px 14px; font-size: 22px; }
+.crash { background: #fbeceb; border: 3px solid var(--bad); border-radius: 18px; padding: 36px 32px; color: var(--bad); }
+.crash b { display: block; font-size: 40px; margin-bottom: 14px; }
+.crash span { font-size: 26px; line-height: 1.5; color: var(--ink); }
+
 /* prompt */
 .prompt { background: #1f1f22; color: #f2f2f0; border-radius: 20px; padding: 40px 48px; font-size: 38px; line-height: 1.6; }
 .prompt .ph { color: #ffcf7a; }
@@ -229,6 +245,12 @@ h2 { font-size: 64px; line-height: 1.2; font-weight: 700; margin-top: 28px; }
 .link b { font-size: 36px; }
 .link span { font-family: var(--mono); font-size: 32px; }
 .link.a b { color: var(--aud); } .link.m b { color: var(--ms); }
+
+/* click to zoom */
+.slide img { cursor: zoom-in; }
+#zoom { position: fixed; inset: 0; background: rgba(20,20,22,.92); display: none; align-items: center; justify-content: center; z-index: 10; cursor: zoom-out; }
+#zoom.on { display: flex; }
+#zoom img { max-width: 96vw; max-height: 94vh; background: #fff; border-radius: 6px; box-shadow: 0 10px 40px rgba(0,0,0,.5); }
 
 /* chrome */
 #chrome { position: fixed; left: 0; right: 0; bottom: 0; height: 6px; background: rgba(255,255,255,.08); }
@@ -266,6 +288,36 @@ body.clean #chrome, body.clean #count { display: none; }
       <div class="prob"><i>6</i><b>结构误判</b><span>演奏法延续线被当成 1、2 房子；% 被展开成 8 拍的小节</span></div>
       <div class="prob"><i>7</i><b>崩溃</b><span>某些页识别或导出时报错，整页没有输出</span></div>
       <div class="prob" style="background:transparent;border-style:dashed"><i style="background:var(--aud-soft);color:var(--aud)">→</i><b>做法</b><span>能在源头修的，就改 Audiveris 本身，不靠事后修补导出的文件</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- 02x 实测对比 -->
+<section class="slide neutral">
+  <span class="tag">实测对比 ①</span>
+  <h2>同一页乐队谱：原版 Audiveris vs Audiveris-Bandscore</h2>
+  <div class="body" style="justify-content:flex-start;margin-top:28px">
+    <div class="vs" style="grid-template-columns:auto auto auto">
+      <figure><figcaption class="org">原谱 PDF（第 2 页上半）</figcaption><img src="img/cmp_orig_natsuiro.png" alt="原谱" style="height:420px"></figure>
+      <figure><figcaption class="up">原版 Audiveris 5.12</figcaption><img src="img/cmp_up_natsuiro.png" alt="原版的识别结果" style="height:420px"></figure>
+      <figure class="mine"><figcaption class="ours">Audiveris-Bandscore（本项目）</figcaption><img src="img/cmp_ours_natsuiro.png" alt="Audiveris-Bandscore 的识别结果" style="height:420px"></figure>
+    </div>
+    <div class="bugrow">
+      <span>原版：</span><div>吉他的 TAB 拆成假声部，名字变成 Voice</div><div>吉他斜线全部丢失</div><div>鼓的叉头没了；打击乐一线谱整行消失</div><div>多出一个假的 1 房</div><div>和弦名只读出 1 个，标题读成「3b」</div>
+    </div>
+    <p class="foot" style="margin-top:14px">《夏色》第 6～9 小节。两边读同一张图（前处理之后），都在 MuseScore 里打开；原版不能接收声部提示。直接读 PDF 原图时，原版会判断分辨率太低，整页不处理。</p>
+  </div>
+</section>
+
+<!-- 02y 实测对比 -->
+<section class="slide neutral">
+  <span class="tag">实测对比 ②</span>
+  <h2>《想いよひとつになれ》第 7 页：原版读到一半就崩溃</h2>
+  <div class="body" style="justify-content:flex-start;margin-top:36px">
+    <div class="vs" style="grid-template-columns:auto 1fr auto">
+      <figure><figcaption class="org">原谱（上半页）</figcaption><img src="img/cmp_orig_omoi.png" alt="原谱" style="width:560px"></figure>
+      <div class="crash" style="margin-top:44px"><b>原版 Audiveris 5.12</b><span>处理到一半报错（NegativeArraySizeException），整页没有输出。读的是和右边 Audiveris-Bandscore 同一张图。</span></div>
+      <figure class="mine"><figcaption class="ours">Audiveris-Bandscore（本项目）</figcaption><img src="img/cmp_ours_omoi.png" alt="Audiveris-Bandscore 的识别结果" style="height:640px"></figure>
     </div>
   </div>
 </section>
@@ -545,26 +597,9 @@ Percussion     <span class="hl">1 线</span>         → 一线谱
   </div>
 </section>
 
-<!-- 13b 一线谱 -->
-<section class="slide">
-  <span class="tag">Audiveris-Bandscore · 乐队谱常见记号 ②</span>
-  <h2>打击乐一线谱：乐队谱里也认得出</h2>
-  <p class="lead">乐队谱的 Perc. 声部常常只画一条线，夹在一整页五线谱中间。原版的一线谱开关是整本生效的，不是为这种混排设计的。</p>
-  <div class="body">
-    <div class="rows">
-      <div class="row"><div class="name">一线谱识别</div><div class="what"><span>按 partsHint 在每一行里找出这条单独的线，导出成打击乐声部；线上的叉头用这本书的模板找</span><span>页面轻微弯曲时不会丢掉这一行；五线谱的线不会被误认成一线谱</span></div><div class="set">:oneline</div></div>
-    </div>
-    <div class="cmp" style="margin-top:22px">
-      <div class="lab">原谱</div><img src="img/orig_one.png" alt="原谱：一线谱" style="height:120px">
-      <div class="lab ms">MuseScore-Bandscore</div><img src="img/ms_one.png" alt="MuseScore：一线谱" style="height:72px">
-    </div>
-    <p class="foot">谱例：《夏色》Percussion 第 26 小节（Maracas）。</p>
-  </div>
-</section>
-
 <!-- 13c 2x -->
 <section class="slide">
-  <span class="tag">Audiveris-Bandscore · 乐队谱常见记号 ③</span>
+  <span class="tag">Audiveris-Bandscore · 乐队谱常见记号 ②</span>
   <h2>2x：括号里是第二遍才弹的音</h2>
   <div class="body">
     <div class="rows">
@@ -680,16 +715,16 @@ Percussion     <span class="hl">1 线</span>         → 一线谱
 <!-- 20 实测 -->
 <section class="slide neutral">
   <span class="tag">实测一首</span>
-  <h2>《夏色えがおで1,2,Jump!》乐队总谱</h2>
+  <h2>《僕らは今のなかで》乐队总谱</h2>
   <div class="body">
     <div class="stats">
-      <div class="stat"><b>16</b><span>页</span></div>
-      <div class="stat"><b>10</b><span>个声部（13 行谱表）</span></div>
-      <div class="stat"><b>128</b><span>个小节</span></div>
-      <div class="stat"><b>6,584</b><span>个音符</span></div>
+      <div class="stat"><b>19</b><span>页</span></div>
+      <div class="stat"><b>8</b><span>个声部（12 行谱表）</span></div>
+      <div class="stat"><b>137</b><span>个小节</span></div>
+      <div class="stat"><b>4,692</b><span>个音符</span></div>
     </div>
     <div class="stats" style="grid-template-columns:repeat(2,1fr);margin-top:22px">
-      <div class="stat"><b>约 21 分钟</b><span>读谱＋后处理（OCR 用 GPU）</span></div>
+      <div class="stat"><b>约 23 分钟</b><span>读谱＋后处理（OCR 用 GPU）</span></div>
       <div class="stat"><b>0</b><span>格式错误；MuseScore 打开无报错</span></div>
     </div>
   </div>
@@ -739,6 +774,7 @@ Percussion     <span class="hl">1 线</span>         → 一线谱
 </div>
 <div id="chrome"><div id="bar"></div></div>
 <div id="count"></div>
+<div id="zoom"><img alt=""></div>
 
 <script>
 (function () {
@@ -757,8 +793,14 @@ Percussion     <span class="hl">1 线</span>         → 一线谱
     document.getElementById('count').textContent = (i + 1) + ' / ' + slides.length;
     if (location.hash !== '#' + (i + 1)) history.replaceState(null, '', '#' + (i + 1));
   }
+  var zoom = document.getElementById('zoom'), zimg = zoom.querySelector('img');
+  stage.addEventListener('click', function (e) {
+    if (e.target.tagName === 'IMG') { zimg.src = e.target.src; zoom.classList.add('on'); }
+  });
+  zoom.addEventListener('click', function () { zoom.classList.remove('on'); });
   document.addEventListener('keydown', function (e) {
     var k = e.key;
+    if (zoom.classList.contains('on')) { if (k === 'Escape' || k === ' ' || k === 'Enter') { zoom.classList.remove('on'); e.preventDefault(); } return; }
     if (k === 'ArrowRight' || k === 'PageDown' || k === ' ' || k === 'Enter') { show(i + 1); e.preventDefault(); }
     else if (k === 'ArrowLeft' || k === 'PageUp' || k === 'Backspace') { show(i - 1); e.preventDefault(); }
     else if (k === 'Home') show(0);
