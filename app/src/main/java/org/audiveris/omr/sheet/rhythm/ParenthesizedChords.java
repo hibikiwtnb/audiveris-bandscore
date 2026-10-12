@@ -80,7 +80,9 @@ import java.util.regex.Pattern;
  * Band scores write "( ) = 2x" over the first pair only: in a measure where a voice is about
  * twice the measure length, a pair without a text takes the pass of the closest later-pass text
  * of its staff (the last one before it first), else the second pass; when the closest definition
- * gives the parentheses another meaning ("( ) = Brass"), the pair is left alone.
+ * gives the parentheses another meaning ("( ) = Brass"), the pair is left alone. The same goes
+ * for a pair whose chords fill the measure while the other chords of its staff fill it too: the
+ * rhythm leaves such parenthesized chords with no time offset, so no voice length tells it.
  * Its chords are used only when every voice they belong to then gets the measure length exactly,
  * or nothing is left in it; otherwise the measure is kept as it is.
  * <p>
@@ -443,8 +445,34 @@ public class ParenthesizedChords
                     }
                 }
 
+                final Set<AbstractChordInter> inside = new LinkedHashSet<>();
+                final Set<AbstractChordInter> outside = new LinkedHashSet<>();
+
+                for (AbstractChordInter chord : chords) {
+                    final int x = chord.getCenter().x;
+
+                    if (!chord.isRemoved() && chord.getStaves().contains(staff)
+                            && (chord.getPass() == 0)) {
+                        if ((x > xOpen) && (x < xClose)) {
+                            inside.add(chord);
+                        } else {
+                            outside.add(chord);
+                        }
+                    }
+                }
+
+                if (inside.isEmpty()) {
+                    continue;
+                }
+
+                // Two measures side by side on the staff: the chords between the parentheses
+                // fill the measure, and so do the other chords of the staff. The rhythm cannot
+                // place such parenthesized chords, they are left on voices of no time offset.
+                final boolean sideBySide = (laterPassVoices(inside, expected) != null)
+                        && (laterPassVoices(outside, expected) != null);
+
                 if (pass == null) {
-                    if (!doubled) {
+                    if (!doubled && !sideBySide) {
                         continue;
                     }
 
@@ -458,22 +486,7 @@ public class ParenthesizedChords
                     continue; // parentheses of another meaning ("( ) = Brass")
                 }
 
-                final Set<AbstractChordInter> inside = new LinkedHashSet<>();
-
-                for (AbstractChordInter chord : chords) {
-                    final int x = chord.getCenter().x;
-
-                    if (!chord.isRemoved() && chord.getStaves().contains(staff) && (x > xOpen)
-                            && (x < xClose)) {
-                        inside.add(chord);
-                    }
-                }
-
-                if (inside.isEmpty()) {
-                    continue;
-                }
-
-                if (fits(inside, expected)) {
+                if (sideBySide || fits(inside, expected)) {
                     if ((pass >= 2) && constants.markLaterPasses.isSet()
                             && (laterPassVoices(inside, expected) != null)) {
                         mark(inside, pass);
