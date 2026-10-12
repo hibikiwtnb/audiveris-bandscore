@@ -77,12 +77,12 @@ import java.util.regex.Pattern;
  * together, the measure gets too long. When a voice of the measure has a wrong length, the
  * parentheses of each staff are looked for on the staff-free image (those of a text, like
  * "(Synth.)", do not count), and a pair is used only when a later-pass text lies above it.
- * Band scores write "( ) = 2x" over the first pair only: in a measure where a voice is about
- * twice the measure length, a pair without a text takes the pass of the closest later-pass text
- * of its staff (the last one before it first), else the second pass; when the closest definition
- * gives the parentheses another meaning ("( ) = Brass"), the pair is left alone. The same goes
- * for a pair whose chords fill the measure while the other chords of its staff fill it too: the
- * rhythm leaves such parenthesized chords with no time offset, so no voice length tells it.
+ * Band scores write "( ) = 2x" over the first pair only. A pair without a text, in a measure
+ * where a voice is about twice the measure length, or whose chords fill the measure while the
+ * other chords of its staff fill it too (the rhythm leaves such chords with no time offset, so no
+ * voice length tells it), takes the pass of the closest later-pass text of its staff (the last
+ * one before it first), else the second pass. When the closest definition gives the parentheses
+ * another meaning ("( ) = Brass", "(Brass)"), the pair is left alone.
  * Its chords are used only when every voice they belong to then gets the measure length exactly,
  * or nothing is left in it; otherwise the measure is kept as it is.
  * <p>
@@ -103,6 +103,9 @@ public class ParenthesizedChords
     /** Later-pass texts: "2x", "3X", "D.S.x", "D.C.x" ("1x" is the first pass). */
     private static final Pattern LATER_PASS = Pattern.compile(
             "(?i)(?<![a-z0-9])([2-9]\\s*[x×]|D\\.?\\s*[SC]\\.?\\s*[x×])(?![a-z])");
+
+    /** A text in parentheses above a pair, like "(Brass)": the instrument of its chords. */
+    private static final Pattern OTHER_MEANING = Pattern.compile("^\\s*\\(.*[A-Za-z].*\\)\\s*$");
 
     /** Maximum number of voices in a later pass. */
     private static final int MAX_PASS_VOICES = 3;
@@ -338,7 +341,7 @@ public class ParenthesizedChords
      * Report the boxes of the later-pass texts just above the staff.
      *
      * @return the pass of each text box (0 for D.S.x or D.C.x, -1 for another definition of the
-     *         parentheses, such as "( ) = Brass")
+     *         parentheses, such as "( ) = Brass" or "(Brass)")
      */
     private Map<Rectangle, Integer> laterPassBoxes (Staff staff,
                                                     List<SentenceInter> sentences)
@@ -352,11 +355,12 @@ public class ParenthesizedChords
             if (pass < 0) {
                 final String value = sentence.getValue();
 
-                if ((value == null) || !value.contains("=")) {
+                if ((value == null) || !(value.contains("=") || OTHER_MEANING.matcher(value)
+                        .matches())) {
                     continue;
                 }
 
-                pass = -1; // "( ) = Brass": parentheses of another meaning
+                pass = -1; // "( ) = Brass", "(Brass)": parentheses of another meaning
             }
 
             final Rectangle b = sentence.getBounds();
@@ -409,10 +413,6 @@ public class ParenthesizedChords
             }
 
             final Map<Rectangle, Integer> texts = laterPassBoxes(staff, sentences);
-
-            if (texts.isEmpty() && !doubled) {
-                continue;
-            }
 
             final List<int[]> parens = findParentheses(staff, textBoxes);
             final int margin = (int) Math.rint(
@@ -890,8 +890,9 @@ public class ParenthesizedChords
                         + " a later-pass text to be taken as the second pass");
 
         private final Constant.Ratio minHeightRatio = new Constant.Ratio(
-                0.9,
-                "Minimum parenthesis height, as ratio of staff height");
+                0.75,
+                "Minimum parenthesis height, as ratio of staff height (some books draw them"
+                        + " between the first and last lines)");
 
         private final Constant.Ratio maxHeightMargin = new Constant.Ratio(
                 2.5,
@@ -906,7 +907,7 @@ public class ParenthesizedChords
                 "Maximum mean parenthesis thickness (weight / height), in interlines");
 
         private final Constant.Ratio minBow = new Constant.Ratio(
-                0.12,
+                0.08,
                 "Minimum parenthesis bow (middle vs ends), in interlines");
 
         private final Constant.Ratio maxEndShift = new Constant.Ratio(
