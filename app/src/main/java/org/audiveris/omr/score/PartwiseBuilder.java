@@ -1557,6 +1557,19 @@ public class PartwiseBuilder
                         continue;
                     }
 
+                    // OCR reads thin strokes (stems, bar line or tablature pieces) as "S": a
+                    // slide mark must have the shape of the letter, not of a line
+                    if (!gliss) {
+                        final Rectangle b = mark.getBounds();
+                        final double ratio = (double) b.width / Math.max(1, b.height);
+
+                        if ((ratio < constants.minSlideMarkRatio.getValue())
+                                || (ratio > constants.maxSlideMarkRatio.getValue())) {
+                            current.slideMarks.add(mark); // noise: exported neither as slide nor as text
+                            continue;
+                        }
+                    }
+
                     final double x = mark.getBounds().getCenterX();
 
                     for (int i = 0; i < (seq.size() - 1); i++) {
@@ -4603,6 +4616,14 @@ public class PartwiseBuilder
     private static class Constants
             extends ConstantSet
     {
+        private final Constant.Ratio minSlideMarkRatio = new Constant.Ratio(
+                0.4,
+                "Minimum width / height of a slide mark 'S' (thinner: a stroke read as S)");
+
+        private final Constant.Ratio maxSlideMarkRatio = new Constant.Ratio(
+                1.2,
+                "Maximum width / height of a slide mark 'S' (wider: a line read as S)");
+
         private final Constant.Integer maxFontSize = new Constant.Integer(
                 "points",
                 24,
