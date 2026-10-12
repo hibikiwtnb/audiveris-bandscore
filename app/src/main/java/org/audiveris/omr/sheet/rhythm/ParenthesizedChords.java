@@ -77,6 +77,10 @@ import java.util.regex.Pattern;
  * together, the measure gets too long. When a voice of the measure has a wrong length, the
  * parentheses of each staff are looked for on the staff-free image (those of a text, like
  * "(Synth.)", do not count), and a pair is used only when a later-pass text lies above it.
+ * Band scores write "( ) = 2x" over the first pair only: in a measure where a voice is about
+ * twice the measure length, a pair without a text takes the pass of the closest later-pass text
+ * of its staff (the last one before it first), else the second pass; when the closest definition
+ * gives the parentheses another meaning ("( ) = Brass"), the pair is left alone.
  * Its chords are used only when every voice they belong to then gets the measure length exactly,
  * or nothing is left in it; otherwise the measure is kept as it is.
  * <p>
@@ -331,7 +335,8 @@ public class ParenthesizedChords
     /**
      * Report the boxes of the later-pass texts just above the staff.
      *
-     * @return the pass of each text box (0 for D.S.x or D.C.x)
+     * @return the pass of each text box (0 for D.S.x or D.C.x, -1 for another definition of the
+     *         parentheses, such as "( ) = Brass")
      */
     private Map<Rectangle, Integer> laterPassBoxes (Staff staff,
                                                     List<SentenceInter> sentences)
@@ -340,10 +345,16 @@ public class ParenthesizedChords
         final int il = staff.getSpecificInterline();
 
         for (SentenceInter sentence : sentences) {
-            final int pass = passOf(sentence.getValue());
+            int pass = passOf(sentence.getValue());
 
             if (pass < 0) {
-                continue;
+                final String value = sentence.getValue();
+
+                if ((value == null) || !value.contains("=")) {
+                    continue;
+                }
+
+                pass = -1; // "( ) = Brass": parentheses of another meaning
             }
 
             final Rectangle b = sentence.getBounds();
@@ -374,7 +385,8 @@ public class ParenthesizedChords
     //---------//
     // process //
     //---------//
-    private boolean process (Rational expected)
+    private boolean process (Rational expected,
+                             boolean doubled)
     {
         final List<SentenceInter> sentences = new ArrayList<>();
         final List<Rectangle> textBoxes = new ArrayList<>();
@@ -396,7 +408,7 @@ public class ParenthesizedChords
 
             final Map<Rectangle, Integer> texts = laterPassBoxes(staff, sentences);
 
-            if (texts.isEmpty()) {
+            if (texts.isEmpty() && !doubled) {
                 continue;
             }
 
@@ -432,7 +444,18 @@ public class ParenthesizedChords
                 }
 
                 if (pass == null) {
-                    continue;
+                    if (!doubled) {
+                        continue;
+                    }
+
+                    // A measure about twice its length: band scores define "( ) = 2x" once,
+                    // the next pairs of the staff have no text. Take the closest definition
+                    // of the staff (the last one before the pair first), else the second pass.
+                    pass = nearestPass(texts, xOpen);
+                }
+
+                if (pass < 0) {
+                    continue; // parentheses of another meaning ("( ) = Brass")
                 }
 
                 final Set<AbstractChordInter> inside = new LinkedHashSet<>();
@@ -493,6 +516,41 @@ public class ParenthesizedChords
         }
 
         return done;
+    }
+
+    //-------------//
+    // nearestPass //
+    //-------------//
+    /**
+     * Report the pass of the later-pass text closest to a pair without one: the last text
+     * before the pair, else the first one after it, else the second pass. A closest definition
+     * of another meaning ("( ) = Brass") gives -1.
+     *
+     * @param texts the later-pass texts and definitions of the staff, with their pass
+     * @param xOpen abscissa of the opening parenthesis
+     * @return the pass, -1 for none
+     */
+    private static int nearestPass (Map<Rectangle, Integer> texts,
+                                    int xOpen)
+    {
+        Integer before = null;
+        int beforeX = Integer.MIN_VALUE;
+        Integer after = null;
+        int afterX = Integer.MAX_VALUE;
+
+        for (Map.Entry<Rectangle, Integer> entry : texts.entrySet()) {
+            final int x = entry.getKey().x;
+
+            if ((x < xOpen) && (x > beforeX)) {
+                beforeX = x;
+                before = entry.getValue();
+            } else if ((x >= xOpen) && (x < afterX)) {
+                afterX = x;
+                after = entry.getValue();
+            }
+        }
+
+        return (before != null) ? before : ((after != null) ? after : 2);
     }
 
     //------//
@@ -748,8 +806,10 @@ public class ParenthesizedChords
             return false;
         }
 
-        // Only a measure with a voice of wrong length
+        // Only a measure with a voice of wrong length; one about twice the measure length is
+        // taken for a normal pass and a later one written side by side
         boolean wrong = false;
+        boolean doubled = false;
 
         for (Voice voice : measure.getVoices()) {
             if (voice.isMeasureRest()) {
@@ -773,11 +833,19 @@ public class ParenthesizedChords
 
             if ((end == null) || !end.equals(expected)) {
                 wrong = true;
-                break;
+
+                if (end != null) {
+                    final double ratio = end.doubleValue() / expected.doubleValue();
+
+                    if ((ratio >= constants.minDoubledRatio.getValue())
+                            && (ratio <= constants.maxDoubledRatio.getValue())) {
+                        doubled = true;
+                    }
+                }
             }
         }
 
-        return wrong && new ParenthesizedChords(measure).process(expected);
+        return wrong && new ParenthesizedChords(measure).process(expected, doubled);
     }
 
     //~ Inner Classes ------------------------------------------------------------------------------
@@ -797,6 +865,16 @@ public class ParenthesizedChords
                 false,
                 "Should the parenthesized chords of a later pass (2x, D.S.x) be dropped"
                         + " from a measure of wrong length?");
+
+        private final Constant.Ratio minDoubledRatio = new Constant.Ratio(
+                1.5,
+                "Minimum voice length, as ratio of the measure length, for parentheses without"
+                        + " a later-pass text to be taken as the second pass");
+
+        private final Constant.Ratio maxDoubledRatio = new Constant.Ratio(
+                2.5,
+                "Maximum voice length, as ratio of the measure length, for parentheses without"
+                        + " a later-pass text to be taken as the second pass");
 
         private final Constant.Ratio minHeightRatio = new Constant.Ratio(
                 0.9,
