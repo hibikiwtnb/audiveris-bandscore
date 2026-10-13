@@ -727,6 +727,58 @@ public class LineCluster
                                 - outer.getPositionAt(x, Orientation.HORIZONTAL));
     }
 
+    //----------------//
+    // pruneShortEnds //
+    //----------------//
+    /**
+     * Remove top or bottom lines much shorter than the other lines of the cluster.
+     * <p>
+     * Pieces of beams or ledgers aligned with a staff can join its cluster as an outer line
+     * (a 4-line bass tablature with the beams of its rhythm below it, taken for a 5-line staff).
+     * A staff line runs along the whole staff, such pieces do not.
+     *
+     * @param minRatio minimum true length of an outer line, as ratio of the median true length
+     * @return the removed cluster lines (filaments)
+     */
+    public List<StaffFilament> pruneShortEnds (double minRatio)
+    {
+        final List<StaffFilament> removed = new ArrayList<>();
+
+        if (lines.size() < 3) {
+            return removed;
+        }
+
+        final List<Integer> lengths = new ArrayList<>();
+
+        for (StaffFilament line : lines.values()) {
+            lengths.add(line.getTrueLength());
+        }
+
+        lengths.sort(null);
+
+        final double minLength = minRatio * lengths.get(lengths.size() / 2);
+
+        while (lines.size() > 1) {
+            final Integer key;
+
+            if (lines.get(lines.firstKey()).getTrueLength() < minLength) {
+                key = lines.firstKey();
+            } else if (lines.get(lines.lastKey()).getTrueLength() < minLength) {
+                key = lines.lastKey();
+            } else {
+                break;
+            }
+
+            final StaffFilament line = lines.remove(key);
+            logger.debug("{} pruning short line {}", this, line);
+            line.setCluster(null, 0);
+            line.getCombs().clear();
+            removed.add(line);
+        }
+
+        return removed;
+    }
+
     //------//
     // trim //
     //------//
