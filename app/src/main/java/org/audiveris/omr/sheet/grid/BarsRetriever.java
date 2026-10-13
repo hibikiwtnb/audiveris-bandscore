@@ -1785,6 +1785,29 @@ public class BarsRetriever
         return !getConnections(staff, side).isEmpty();
     }
 
+    //-------------------//
+    // isSystemConnected //
+    //-------------------//
+    /**
+     * Check whether every staff of the system is part-connected to the staff below it,
+     * that is whether the barlines run through the whole system.
+     *
+     * @param system the system to check
+     * @return true if so
+     */
+    private boolean isSystemConnected (SystemInfo system)
+    {
+        final List<Staff> staves = system.getStaves();
+
+        for (int i = 0; i < staves.size() - 1; i++) {
+            if (!isPartConnected(staves.get(i), BOTTOM)) {
+                return false;
+            }
+        }
+
+        return staves.size() > 2;
+    }
+
     //------------------//
     // isTrueBraceGroup //
     //------------------//
@@ -1793,6 +1816,10 @@ public class BarsRetriever
      * (such as a piano part).
      * Braced staves represent a single part when the count of braced staves is 2 (to be improved?)
      * and they are internally connected but not connected to external staves.
+     * <p>
+     * In a system whose barlines run through all its staves (band scores), a connection to the
+     * staves above or below tells nothing: the brace alone makes the part (a keyboard on two
+     * staves).
      *
      * @param pg the brace PartGroup to check
      * @return true if check is positive
@@ -1813,9 +1840,10 @@ public class BarsRetriever
 
         final Staff firstStaff = staffManager.getStaff(firstId - 1);
         final Staff lastStaff = staffManager.getStaff(lastId - 1);
+        final boolean throughout = isSystemConnected(firstStaff.getSystem());
 
-        return !isPartConnected(firstStaff, TOP) // Not connected above
-                && !isPartConnected(lastStaff, BOTTOM) // Not connected below
+        return (throughout || (!isPartConnected(firstStaff, TOP) // Not connected above
+                && !isPartConnected(lastStaff, BOTTOM))) // Not connected below
                 && (isPartConnected(firstStaff, BOTTOM) // Either internally connected
                         || // Or accept lack of internal connection
                         sheet.getStub().getProcessingSwitches().getValue(
