@@ -37,6 +37,8 @@ import org.audiveris.omr.sheet.time.BasicTimeColumn;
 import org.audiveris.omr.sheet.time.TimeColumn;
 import org.audiveris.omr.sig.SIGraph;
 import org.audiveris.omr.sig.inter.AbstractChordInter;
+import org.audiveris.omr.score.PartCollation;
+import org.audiveris.omr.sheet.note.NoteHeadsBuilder;
 import org.audiveris.omr.sig.inter.AbstractFlagInter;
 import org.audiveris.omr.sig.inter.AbstractPauseInter;
 import org.audiveris.omr.sig.inter.AbstractTimeInter;
@@ -163,6 +165,9 @@ public class InterFactory
     /** Processing switches. */
     private final ProcessingSwitches switches;
 
+    /** Staves of parts hinted with lyrics (vocal), lazily computed. */
+    private List<Staff> lyricsStaves;
+
     //~ Constructors -------------------------------------------------------------------------------
 
     /**
@@ -194,6 +199,42 @@ public class InterFactory
     }
 
     //~ Methods ------------------------------------------------------------------------------------
+
+    //---------------//
+    // isLyricsStaff //
+    //---------------//
+    /**
+     * Report whether the staff belongs to a part flagged ":lyrics" in the parts hint.
+     * <p>
+     * The vocal staff of a band score has no dynamics and no fermata: what is read there as such
+     * is a lyrics character or a tie between its two voices.
+     *
+     * @param staff the closest staff
+     * @return true if so
+     */
+    private boolean isLyricsStaff (Staff staff)
+    {
+        if (lyricsStaves == null) {
+            lyricsStaves = new ArrayList<>();
+            final List<Boolean> flags = PartCollation.getHintedLyricsStaves();
+
+            if (flags != null) {
+                final int[] slots = NoteHeadsBuilder.staffSlots(system, flags.size());
+
+                if (slots != null) {
+                    final List<Staff> staves = system.getStaves();
+
+                    for (int i = 0; i < staves.size(); i++) {
+                        if (flags.get(slots[i])) {
+                            lyricsStaves.add(staves.get(i));
+                        }
+                    }
+                }
+            }
+        }
+
+        return (staff != null) && lyricsStaves.contains(staff);
+    }
 
     //--------//
     // create //
@@ -424,6 +465,10 @@ public class InterFactory
             // Holds
             case FERMATA:
             case FERMATA_BELOW:
+                if (isLyricsStaff(closestStaff)) {
+                    return null; // A tie between two voices, read as a fermata
+                }
+
                 return FermataInter.createValidAdded(glyph, shape, grade, system);
 
             // Pauses
@@ -449,6 +494,10 @@ public class InterFactory
             case DYNAMICS_FZ:
             case DYNAMICS_SF:
             case DYNAMICS_SFZ:
+                if (isLyricsStaff(closestStaff)) {
+                    return null; // A lyrics character, read as a dynamics
+                }
+
                 return new DynamicsInter(glyph, shape, grade);
 
             // Wedges
