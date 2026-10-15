@@ -168,6 +168,9 @@ public class InterFactory
     /** Staves of parts hinted with lyrics (vocal), lazily computed. */
     private List<Staff> lyricsStaves;
 
+    /** Staves of parts hinted with a tablature (guitar, bass), lazily computed. */
+    private List<Staff> tabStaves;
+
     //~ Constructors -------------------------------------------------------------------------------
 
     /**
@@ -200,40 +203,90 @@ public class InterFactory
 
     //~ Methods ------------------------------------------------------------------------------------
 
-    //---------------//
-    // isLyricsStaff //
-    //---------------//
+    //--------------//
+    // inLyricsArea //
+    //--------------//
     /**
-     * Report whether the staff belongs to a part flagged ":lyrics" in the parts hint.
+     * Report whether the glyph lies on a staff of a part flagged ":lyrics" in the parts hint,
+     * or in the band of its lyrics, down to the next staff.
      * <p>
      * The vocal staff of a band score has no dynamics and no fermata: what is read there as such
-     * is a lyrics character or a tie between its two voices.
+     * is a lyrics character or a tie between its two voices. The lower lyrics line may be closer
+     * to the next staff than to the vocal staff.
      *
+     * @param glyph the evaluated glyph
      * @param staff the closest staff
      * @return true if so
      */
-    private boolean isLyricsStaff (Staff staff)
+    private boolean inLyricsArea (Glyph glyph,
+                                  Staff staff)
     {
         if (lyricsStaves == null) {
-            lyricsStaves = new ArrayList<>();
-            final List<Boolean> flags = PartCollation.getHintedLyricsStaves();
+            lyricsStaves = hintedStaves(PartCollation.getHintedLyricsStaves());
+        }
 
-            if (flags != null) {
-                final int[] slots = NoteHeadsBuilder.staffSlots(system, flags.size());
+        final List<Staff> lyrics = lyricsStaves;
 
-                if (slots != null) {
-                    final List<Staff> staves = system.getStaves();
+        if (lyrics.contains(staff)) {
+            return true;
+        }
 
-                    for (int i = 0; i < staves.size(); i++) {
-                        if (flags.get(slots[i])) {
-                            lyricsStaves.add(staves.get(i));
-                        }
+        final double y = glyph.getCenter2D().getY();
+        final double x = glyph.getCenter2D().getX();
+        final List<Staff> staves = system.getStaves();
+
+        for (Staff s : lyrics) {
+            final int i = staves.indexOf(s);
+
+            if ((i >= 0) && (i + 1 < staves.size()) && (y > s.getLastLine().yAt(x))
+                    && (y < staves.get(i + 1).getFirstLine().yAt(x))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    //--------------//
+    // hintedStaves //
+    //--------------//
+    /**
+     * Report the staves of this system flagged in the provided per-staff hint flags.
+     *
+     * @param flags flags of a complete system, as described by the parts hint, perhaps null
+     * @return the flagged staves, perhaps empty
+     */
+    private List<Staff> hintedStaves (List<Boolean> flags)
+    {
+        final List<Staff> list = new ArrayList<>();
+
+        if (flags != null) {
+            final int[] slots = NoteHeadsBuilder.staffSlots(system, flags.size());
+
+            if (slots != null) {
+                final List<Staff> staves = system.getStaves();
+
+                for (int i = 0; i < staves.size(); i++) {
+                    if (flags.get(slots[i])) {
+                        list.add(staves.get(i));
                     }
                 }
             }
         }
 
-        return (staff != null) && lyricsStaves.contains(staff);
+        return list;
+    }
+
+    //-----------//
+    // tabStaves //
+    //-----------//
+    private List<Staff> tabStaves ()
+    {
+        if (tabStaves == null) {
+            tabStaves = hintedStaves(PartCollation.getHintedTabStaves());
+        }
+
+        return tabStaves;
     }
 
     //--------//
@@ -465,7 +518,7 @@ public class InterFactory
             // Holds
             case FERMATA:
             case FERMATA_BELOW:
-                if (isLyricsStaff(closestStaff)) {
+                if (inLyricsArea(glyph, closestStaff)) {
                     return null; // A tie between two voices, read as a fermata
                 }
 
@@ -494,8 +547,12 @@ public class InterFactory
             case DYNAMICS_FZ:
             case DYNAMICS_SF:
             case DYNAMICS_SFZ:
-                if (isLyricsStaff(closestStaff)) {
+                if (inLyricsArea(glyph, closestStaff)) {
                     return null; // A lyrics character, read as a dynamics
+                }
+
+                if (tabStaves().contains(closestStaff)) {
+                    return null; // "P" of a pull-off (guitar, bass), read as a dynamics
                 }
 
                 return new DynamicsInter(glyph, shape, grade);

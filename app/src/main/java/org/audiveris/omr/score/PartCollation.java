@@ -890,6 +890,49 @@ public class PartCollation
         }
     }
 
+    //--------------------//
+    // getHintedTabStaves //
+    //--------------------//
+    /**
+     * Report, for each staff of a complete system (top down, as described by the parts hint),
+     * whether it belongs to a part with a tablature (":tab" or ":tab4"), a guitar or a bass:
+     * the standard staff as well as the tablature.
+     *
+     * @return the per-staff flags, or null if no hint or no part has a tablature
+     */
+    public static List<Boolean> getHintedTabStaves ()
+    {
+        final String str = constants.partsHint.getValue();
+
+        if ((str == null) || str.isBlank()) {
+            return null;
+        }
+
+        try {
+            final List<Boolean> flags = new ArrayList<>();
+            boolean any = false;
+
+            for (String token : str.split(";")) {
+                token = token.trim();
+
+                if (token.isEmpty()) {
+                    continue;
+                }
+
+                final HintEntry entry = HintEntry.parse(token);
+                any |= (entry.tabLines > 0);
+
+                for (int i = 0; i < entry.staffCount; i++) {
+                    flags.add(entry.tabLines > 0);
+                }
+            }
+
+            return any ? flags : null;
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
     //----------//
     // dispatch //
     //----------//
