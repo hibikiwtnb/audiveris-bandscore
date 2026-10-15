@@ -845,6 +845,49 @@ public class PartCollation
                 : logicals.stream().mapToInt(LogicalPart::getStaffCount).sum();
     }
 
+    //---------------------//
+    // getHintedTab4Staves //
+    //---------------------//
+    /**
+     * Report, for each staff of a complete system (top down, as described by the parts hint),
+     * whether it is a 4-line tablature (":tab4"), which GRID does not find as a staff.
+     *
+     * @return the per-staff flags, or null if no hint or no 4-line tablature
+     */
+    public static List<Boolean> getHintedTab4Staves ()
+    {
+        final String str = constants.partsHint.getValue();
+
+        if ((str == null) || str.isBlank()) {
+            return null;
+        }
+
+        try {
+            final List<Boolean> flags = new ArrayList<>();
+            boolean any = false;
+
+            for (String token : str.split(";")) {
+                token = token.trim();
+
+                if (token.isEmpty()) {
+                    continue;
+                }
+
+                final HintEntry entry = HintEntry.parse(token);
+                final boolean tab4 = entry.tabLines == 4;
+                any |= tab4;
+
+                for (int i = 0; i < entry.staffCount; i++) {
+                    flags.add(tab4 && (i == entry.staffCount - 1));
+                }
+            }
+
+            return any ? flags : null;
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
     //----------------------//
     // getHintedGrandStaves //
     //----------------------//
