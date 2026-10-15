@@ -124,6 +124,25 @@ public class LineCluster
 
     //~ Methods ------------------------------------------------------------------------------------
 
+    //--------------//
+    // addOuterLine //
+    //--------------//
+    /**
+     * Add a filament as a new line, just above the first line or just below the last one.
+     *
+     * @param filament the filament to add
+     * @param above    true for above the first line, false for below the last line
+     */
+    public void addOuterLine (StaffFilament filament,
+                              boolean above)
+    {
+        final int pos = above ? (lines.firstKey() - 1) : (lines.lastKey() + 1);
+        lines.put(pos, filament);
+        filament.setCluster(this, pos);
+        invalidateCache();
+        renumberLines();
+    }
+
     //---------//
     // destroy //
     //---------//

@@ -532,6 +532,80 @@ public class ClustersRetriever
         return clusters;
     }
 
+    //-----------------//
+    // completeCluster //
+    //-----------------//
+    /**
+     * Try to complete a cluster that lacks one line, with a long filament left over about one
+     * interline above its first line or below its last line.
+     * <p>
+     * A staff line may be broken (e.g. the lower lines of a piano bass staff, with stems and
+     * slurs across them): its long piece is not part of any comb, and the cluster expansion only
+     * adds filaments to the lines already there. The piece must be long enough to be a staff
+     * line, not a beam or a ledger.
+     *
+     * @param cluster the cluster with one line missing
+     * @return true if completed
+     */
+    private boolean completeCluster (LineCluster cluster)
+    {
+        final double slope = sheet.getSkew().getSlope();
+        final double minLength = constants.minClusterLineLengthRatio.getValue()
+                * cluster.getTrueLength();
+        final Rectangle box = cluster.getBounds();
+        StaffFilament best = null;
+        boolean bestAbove = false;
+        double bestDiff = Double.MAX_VALUE;
+
+        for (StaffFilament fil : allFilaments) {
+            fil = (StaffFilament) fil.getAncestor();
+
+            if ((fil.getCluster() != null) || (fil.getTrueLength() < minLength)) {
+                continue;
+            }
+
+            final Rectangle filBox = fil.getBounds();
+
+            if (GeoUtil.xOverlap(filBox, box) <= 0) {
+                continue;
+            }
+
+            final int x = filBox.x + (filBox.width / 2);
+            final double y = fil.getPositionAt(x, HORIZONTAL);
+            final List<Point2D> points = cluster.getPointsAt(x, params.maxExpandDx, slope);
+            final Point2D first = points.get(0);
+            final Point2D last = points.get(points.size() - 1);
+
+            if ((first == null) || (last == null)) {
+                continue;
+            }
+
+            // Lines may be unevenly spaced (print or scan distortion): the next line is the one
+            // nearest to an interline away, within half an interline
+            final double interline = (last.getY() - first.getY()) / (points.size() - 1);
+            final double above = (first.getY() - y) / interline;
+            final double below = (y - last.getY()) / interline;
+
+            for (boolean up : new boolean[]{true, false}) {
+                final double diff = Math.abs((up ? above : below) - 1);
+
+                if ((diff <= 0.5) && (diff < bestDiff)) {
+                    best = fil;
+                    bestAbove = up;
+                    bestDiff = diff;
+                }
+            }
+        }
+
+        if (best == null) {
+            return false;
+        }
+
+        cluster.addOuterLine(best, bestAbove);
+
+        return true;
+    }
+
     //-----------------------------//
     // destroyInconsistentClusters //
     //-----------------------------//
@@ -565,6 +639,12 @@ public class ClustersRetriever
             final int size = cluster.getSize();
 
             if (!combSizes.contains(size)) {
+                if ((size >= 3) && combSizes.contains(size + 1) && completeCluster(cluster)) {
+                    logger.info("{} completed with an outer line", cluster);
+
+                    continue;
+                }
+
                 logger.debug("Destroying non desired size {}", cluster);
                 cluster.destroy();
                 it.remove();
