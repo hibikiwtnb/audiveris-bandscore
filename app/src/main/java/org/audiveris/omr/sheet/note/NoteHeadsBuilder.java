@@ -1693,7 +1693,9 @@ public class NoteHeadsBuilder
         Integer last = null;
 
         for (int d : lines) {
-            if ((last != null) && (d - last > 2 * il)) {
+            // A line hidden by the rhythm (slashes, beams) of a tablature leaves a gap of two
+            // spacings: staves are further apart than three
+            if ((last != null) && (d - last > 3 * il)) {
                 if (run >= 4) {
                     groups++;
                 }
