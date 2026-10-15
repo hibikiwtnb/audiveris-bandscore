@@ -1501,6 +1501,56 @@ public class NoteHeadsBuilder
     /**
      * Report the rank, in the hinted complete system, of each staff found in the system.
      * <p>
+     * A 4-line tablature (":tab4") makes no 5-line cluster, GRID never finds it as a staff.
+     * Such tablatures are thus left out of the hinted system, the other staves are placed by
+     * the room they leave (see {@link #roomSlots}), and the tablature ranks are then skipped.
+     * A tablature sits close to its staff, it would not leave the room of a typical staff.
+     *
+     * @param system   the system at hand
+     * @param expected the staff count of the hinted complete system
+     * @return the ranks, or null if no consistent placement
+     */
+    public static int[] staffSlots (SystemInfo system,
+                                    int expected)
+    {
+        final List<Boolean> tab4 = PartCollation.getHintedTab4Staves();
+        final int n = system.getStaves().size();
+
+        if ((tab4 == null) || (tab4.size() != expected)) {
+            return roomSlots(system, expected);
+        }
+
+        final List<Integer> others = new ArrayList<>();
+
+        for (int r = 0; r < expected; r++) {
+            if (!tab4.get(r)) {
+                others.add(r);
+            }
+        }
+
+        if (n > others.size()) {
+            return roomSlots(system, expected);
+        }
+
+        final int[] slots = roomSlots(system, others.size());
+
+        if (slots == null) {
+            return null;
+        }
+
+        for (int i = 0; i < n; i++) {
+            slots[i] = others.get(slots[i]);
+        }
+
+        return slots;
+    }
+
+    //-----------//
+    // roomSlots //
+    //-----------//
+    /**
+     * Report the rank, in the hinted complete system, of each staff found in the system.
+     * <p>
      * As a reader would: with as many staves as expected, ranks are just the order. With fewer,
      * a missed staff leaves room: an unusually large gap between two staves found, or the
      * system start line going on above the first staff or below the last one. Each missing
@@ -1510,8 +1560,8 @@ public class NoteHeadsBuilder
      * @param expected the staff count of the hinted complete system
      * @return the ranks, or null if no consistent placement
      */
-    public static int[] staffSlots (SystemInfo system,
-                                     int expected)
+    private static int[] roomSlots (SystemInfo system,
+                                    int expected)
     {
         final List<Staff> staves = system.getStaves();
         final int n = staves.size();
@@ -1563,20 +1613,6 @@ public class NoteHeadsBuilder
             room[i] = gaps[i - 1] - typical;
         }
 
-        final int[] tab4 = tab4Slots(n, expected, room, typical);
-
-        if (tab4 != null) {
-            logger.info(
-                    "System#{}: {} staves found for {} in parts hint, 4-line tablatures missed,"
-                            + " ranks {}",
-                    system.getId(),
-                    n,
-                    expected,
-                    Arrays.toString(tab4));
-
-            return tab4;
-        }
-
         final int[] missing = new int[n + 1];
 
         for (int k = 0; k < expected - n; k++) {
@@ -1609,59 +1645,6 @@ public class NoteHeadsBuilder
                 n,
                 expected,
                 Arrays.toString(slots));
-
-        return slots;
-    }
-
-    //-----------//
-    // tab4Slots //
-    //-----------//
-    /**
-     * Report the staff ranks when the staves missed are exactly the 4-line tablatures of the
-     * parts hint, which GRID does not find as staves (4 lines make no 5-line cluster).
-     * <p>
-     * Such a tablature sits close to its standard staff, it needs less room than a typical staff
-     * spacing: some room is still required where each of them is put back.
-     *
-     * @param n        the staff count found
-     * @param expected the staff count of the hinted complete system
-     * @param room     the room left above the first staff, between staves, below the last
-     * @param typical  the typical staff spacing
-     * @return the ranks, or null if the missing staves are not just the 4-line tablatures
-     */
-    private static int[] tab4Slots (int n,
-                                    int expected,
-                                    double[] room,
-                                    double typical)
-    {
-        final List<Boolean> flags = PartCollation.getHintedTab4Staves();
-
-        if ((flags == null) || (flags.size() != expected)
-                || (flags.stream().filter(b -> b).count() != expected - n)) {
-            return null;
-        }
-
-        final int[] slots = new int[n];
-        int rank = 0;
-
-        for (int i = 0; i < n; i++) {
-            while (flags.get(rank)) {
-                rank++;
-            }
-
-            slots[i] = rank++;
-        }
-
-        final double minRoom = constants.minTab4Room.getValue() * typical;
-
-        for (int i = 0; i <= n; i++) {
-            final int above = (i == 0) ? -1 : slots[i - 1];
-            final int below = (i == n) ? expected : slots[i];
-
-            if ((below - above > 1) && (room[i] < minRoom)) {
-                return null;
-            }
-        }
 
         return slots;
     }
@@ -1844,11 +1827,6 @@ public class NoteHeadsBuilder
                 "Folder of the book's symbol templates (cross.png, cross_line.png, slash.png)"
                         + " and drum-set.xml overrides,"
                         + " empty for none");
-
-        private final Constant.Ratio minTab4Room = new Constant.Ratio(
-                0.2,
-                "Minimum room (ratio of the typical staff spacing) where a missed 4-line"
-                        + " tablature is put back");
 
         private final Constant.Ratio crossMinGrade = new Constant.Ratio(
                 0.8,
