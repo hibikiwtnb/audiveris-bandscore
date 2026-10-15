@@ -845,6 +845,56 @@ public class PartCollation
                 : logicals.stream().mapToInt(LogicalPart::getStaffCount).sum();
     }
 
+    //----------------------//
+    // getHintedGrandStaves //
+    //----------------------//
+    /**
+     * Report, for each staff of a complete system (top down, as described by the parts hint),
+     * the index of its hinted part when this part has several staves and neither tablature
+     * nor drums (a keyboard grand staff, e.g. "E.Piano:2"), or -1.
+     * <p>
+     * Such staves form one part even when GRID found no brace in front of them.
+     *
+     * @return the per-staff part indices, or null if no hint or no such part
+     */
+    public static List<Integer> getHintedGrandStaves ()
+    {
+        final String str = constants.partsHint.getValue();
+
+        if ((str == null) || str.isBlank()) {
+            return null;
+        }
+
+        try {
+            final List<Integer> owners = new ArrayList<>();
+            boolean any = false;
+            int index = 0;
+
+            for (String token : str.split(";")) {
+                token = token.trim();
+
+                if (token.isEmpty()) {
+                    continue;
+                }
+
+                final HintEntry entry = HintEntry.parse(token);
+                final boolean grand = (entry.staffCount > 1) && (entry.tabLines == 0)
+                        && !entry.drums;
+                any |= grand;
+
+                for (int i = 0; i < entry.staffCount; i++) {
+                    owners.add(grand ? index : -1);
+                }
+
+                index++;
+            }
+
+            return any ? owners : null;
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
     //-----------------------//
     // getHintedLyricsStaves //
     //-----------------------//

@@ -1431,6 +1431,8 @@ public class NoteHeadsBuilder
             return set;
         }
 
+        mergeGrandStaves(system, slots);
+
         // Each part keeps the hint rank of its first staff, for the parts collation
         for (Part part : system.getParts()) {
             final PartRef ref = part.getRef();
@@ -1453,6 +1455,44 @@ public class NoteHeadsBuilder
         }
 
         return set;
+    }
+
+    //------------------//
+    // mergeGrandStaves //
+    //------------------//
+    /**
+     * Merge the parts of a system that the parts hint gives to the same grand staff.
+     * <p>
+     * Without a brace found in front of them (e.g. the bar lines do not go through the whole
+     * system), GRID makes a separate part of each staff of a keyboard. Both parts were then
+     * mapped to the same hinted logical, and only the upper one was exported.
+     *
+     * @param system the system at hand
+     * @param slots  the hint rank of each staff found
+     */
+    private static void mergeGrandStaves (SystemInfo system,
+                                          int[] slots)
+    {
+        final List<Integer> owners = PartCollation.getHintedGrandStaves();
+
+        if (owners == null) {
+            return;
+        }
+
+        final List<Staff> staves = system.getStaves();
+        final List<Part> parts = system.getParts();
+
+        for (int i = parts.size() - 2; i >= 0; i--) {
+            final Part part = parts.get(i);
+            final Part below = parts.get(i + 1);
+            final int last = slots[staves.indexOf(part.getLastStaff())];
+            final int first = slots[staves.indexOf(below.getFirstStaff())];
+            final int owner = owners.get(last);
+
+            if ((owner != -1) && (first == last + 1) && (owners.get(first) == owner)) {
+                part.mergeWithBelow(below);
+            }
+        }
     }
 
     //------------//
