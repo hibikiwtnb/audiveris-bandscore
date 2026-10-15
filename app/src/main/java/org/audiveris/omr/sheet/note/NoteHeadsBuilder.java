@@ -1501,7 +1501,11 @@ public class NoteHeadsBuilder
     /**
      * Report the rank, in the hinted complete system, of each staff found in the system.
      * <p>
-     * A 4-line tablature (":tab4") makes no 5-line cluster, GRID never finds it as a staff.
+     * A staff missed by GRID still has its lines printed: when the groups of long lines found
+     * between the staves account for all the staves missing, they give the ranks
+     * (see {@link #lineSlots}).
+     * <p>
+     * Otherwise, a 4-line tablature (":tab4") makes no 5-line cluster, GRID never finds it as a staff.
      * Such tablatures are thus left out of the hinted system, the other staves are placed by
      * the room they leave (see {@link #roomSlots}), and the tablature ranks are then skipped.
      * A tablature sits close to its staff, it would not leave the room of a typical staff.
@@ -1513,6 +1517,12 @@ public class NoteHeadsBuilder
     public static int[] staffSlots (SystemInfo system,
                                     int expected)
     {
+        final int[] seen = lineSlots(system, expected);
+
+        if (seen != null) {
+            return seen;
+        }
+
         final List<Boolean> tab4 = PartCollation.getHintedTab4Staves();
         final int n = system.getStaves().size();
 
@@ -1543,6 +1553,133 @@ public class NoteHeadsBuilder
         }
 
         return slots;
+    }
+
+    //-----------//
+    // lineSlots //
+    //-----------//
+    /**
+     * Report the staff ranks from the staves missed between the staves found, as seen in the
+     * image: a group of at least 4 long lines (a staff or a tablature, perhaps with broken
+     * lines) between two staves found.
+     *
+     * @param system   the system at hand
+     * @param expected the staff count of the hinted complete system
+     * @return the ranks, or null if the groups seen do not account for the staves missing
+     */
+    private static int[] lineSlots (SystemInfo system,
+                                    int expected)
+    {
+        final List<Staff> staves = system.getStaves();
+        final int n = staves.size();
+
+        if ((n >= expected) || (n < 2)) {
+            return null;
+        }
+
+        final ByteProcessor image = system.getSheet().getPicture().getSource(
+                Picture.SourceKey.BINARY);
+        final int[] slots = new int[n];
+        int shift = 0;
+
+        for (int i = 0; i < n; i++) {
+            if (i > 0) {
+                shift += missedStaves(image, staves.get(i - 1), staves.get(i));
+            }
+
+            slots[i] = i + shift;
+        }
+
+        if (shift != expected - n) {
+            return null;
+        }
+
+        logger.info(
+                "System#{}: {} staves found for {} in parts hint, lines of the missed ones seen,"
+                        + " ranks {}",
+                system.getId(),
+                n,
+                expected,
+                Arrays.toString(slots));
+
+        return slots;
+    }
+
+    //--------------//
+    // missedStaves //
+    //--------------//
+    /**
+     * Count the groups of at least 4 long lines, parallel to the staves, between two staves.
+     *
+     * @param image the binary image
+     * @param above the staff above
+     * @param below the staff below
+     * @return the count of staves (or tablatures) seen there
+     */
+    private static int missedStaves (ByteProcessor image,
+                                     Staff above,
+                                     Staff below)
+    {
+        final int left = Math.max(above.getAbscissa(LEFT), below.getAbscissa(LEFT));
+        final int right = Math.min(above.getAbscissa(RIGHT), below.getAbscissa(RIGHT));
+        final int x1 = left + ((right - left) / 10);
+        final int x2 = right - ((right - left) / 10);
+        final int xMid = (left + right) / 2;
+        final int il = Math.max(above.getSpecificInterline(), below.getSpecificInterline());
+        final double gap = below.getFirstLine().yAt(xMid) - above.getLastLine().yAt(xMid);
+        final double minRatio = constants.minMissedLineRatio.getValue();
+        final List<Integer> lines = new ArrayList<>();
+        int prev = Integer.MIN_VALUE;
+
+        for (int d = il / 2; d <= gap - (il / 2); d++) {
+            int black = 0;
+            int count = 0;
+
+            for (int x = x1; x <= x2; x += 2) {
+                final double yAbove = above.getLastLine().yAt(x);
+                final double yBelow = below.getFirstLine().yAt(x);
+                final int y = (int) Math.rint(yAbove + ((yBelow - yAbove) * d / gap));
+
+                if ((y >= 0) && (y < image.getHeight())) {
+                    count++;
+
+                    if (image.get(x, y) == 0) {
+                        black++;
+                    }
+                }
+            }
+
+            if ((count > 0) && (black >= minRatio * count)) {
+                if (d > prev + 1) {
+                    lines.add(d);
+                }
+
+                prev = d;
+            }
+        }
+
+        int groups = 0;
+        int run = 0;
+        Integer last = null;
+
+        for (int d : lines) {
+            if ((last != null) && (d - last > 2 * il)) {
+                if (run >= 4) {
+                    groups++;
+                }
+
+                run = 0;
+            }
+
+            run++;
+            last = d;
+        }
+
+        if (run >= 4) {
+            groups++;
+        }
+
+        return groups;
     }
 
     //-----------//
@@ -1827,6 +1964,10 @@ public class NoteHeadsBuilder
                 "Folder of the book's symbol templates (cross.png, cross_line.png, slash.png)"
                         + " and drum-set.xml overrides,"
                         + " empty for none");
+
+        private final Constant.Ratio minMissedLineRatio = new Constant.Ratio(
+                0.5,
+                "Minimum black ratio of a long line between two staves, for a missed staff");
 
         private final Constant.Ratio crossMinGrade = new Constant.Ratio(
                 0.8,

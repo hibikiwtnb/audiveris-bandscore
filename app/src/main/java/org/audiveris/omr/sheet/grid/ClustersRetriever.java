@@ -532,6 +532,23 @@ public class ClustersRetriever
         return clusters;
     }
 
+    //------------------//
+    // isStaffInterline //
+    //------------------//
+    /**
+     * Tell whether this pass looks for the 5-line staves.
+     * <p>
+     * With two interlines, the 5-line staves are the small ones (second pass): the large
+     * interline of the first pass is the tablatures' one, and a 4-line tablature must not be
+     * completed into a staff (e.g. with the beams of its rhythm).
+     *
+     * @return true if staves are at this interline
+     */
+    private boolean isStaffInterline ()
+    {
+        return (pass == 2) || (scale.getSmallInterlineScale() == null);
+    }
+
     //-----------------//
     // completeCluster //
     //-----------------//
@@ -639,7 +656,8 @@ public class ClustersRetriever
             final int size = cluster.getSize();
 
             if (!combSizes.contains(size)) {
-                if ((size >= 3) && combSizes.contains(size + 1) && completeCluster(cluster)) {
+                if ((size >= 3) && combSizes.contains(size + 1) && isStaffInterline()
+                        && completeCluster(cluster)) {
                     logger.info("{} completed with an outer line", cluster);
 
                     continue;
