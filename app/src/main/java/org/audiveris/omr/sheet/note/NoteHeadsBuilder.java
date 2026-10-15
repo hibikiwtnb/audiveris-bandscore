@@ -1561,7 +1561,8 @@ public class NoteHeadsBuilder
     /**
      * Report the staff ranks from the staves missed between the staves found, as seen in the
      * image: a group of at least 4 long lines (a staff or a tablature, perhaps with broken
-     * lines) between two staves found.
+     * lines) between two staves found. The staves still missing are put above the first staff
+     * or below the last one, where the system start line goes on.
      *
      * @param system   the system at hand
      * @param expected the staff count of the hinted complete system
@@ -1590,8 +1591,37 @@ public class NoteHeadsBuilder
             slots[i] = i + shift;
         }
 
-        if (shift != expected - n) {
+        final int rest = expected - n - shift;
+
+        if (rest < 0) {
             return null;
+        }
+
+        if (rest > 0) {
+            // The other staves were missed above the first staff or below the last one (e.g. a
+            // one-line percussion staff at the bottom): on the side where the system start line
+            // goes on further
+            final Staff first = staves.get(0);
+            final Staff last = staves.get(n - 1);
+            final int xFirst = first.getAbscissa(LEFT);
+            final int xLast = last.getAbscissa(LEFT);
+            final double cFirst = (first.getFirstLine().yAt(xFirst) + first.getLastLine().yAt(xFirst)) / 2;
+            final double cLast = (last.getFirstLine().yAt(xLast) + last.getLastLine().yAt(xLast)) / 2;
+            final double above = startLineReach(image, first, cFirst, -1)
+                    - ((first.getLastLine().yAt(xFirst) - first.getFirstLine().yAt(xFirst)) / 2);
+            final double below = startLineReach(image, last, cLast, 1)
+                    - ((last.getLastLine().yAt(xLast) - last.getFirstLine().yAt(xLast)) / 2);
+            final double minRoom = first.getSpecificInterline();
+
+            if (Math.max(above, below) < minRoom) {
+                return null;
+            }
+
+            if (above > below) {
+                for (int i = 0; i < n; i++) {
+                    slots[i] += rest;
+                }
+            }
         }
 
         logger.info(
