@@ -80,7 +80,7 @@ python tools/run_audiveris.py S S/input/omr_in/*.png
 ```
 - 路徑與 binary 全部來自 `environment.txt`，缺什麼就報錯，不猜。
 - 逐行把 `context/audiveris_hints.txt` 轉成 `-constant`。OCR 用 PaddleOCR，服務位址寫在 `environment.txt` 的 `PADDLE_OCR_URL`（本機或區網的機器，先自己啟動：`<OCR_PYTHON> <PADDLE_OCR_SERVER>`），腳本把位址傳給 Audiveris，只檢查 `/health`，沒開就報錯停止，不會啟動或關閉它。
-- 用哪台 OCR：跑批次前 `python3 tools/ocr_pick.py`，從 `PADDLE_OCR_CANDIDATES`（逗號分隔，依序嘗試；預設只有本機）挑第一個有回應的寫進 `PADDLE_OCR_URL`。log 裡有 OCR 失敗的那次算失敗、重試（Audiveris 遇到 OCR 失敗會照樣輸出沒有文字的結果）。
+- log 裡有 OCR 失敗的那次算失敗、重試（Audiveris 遇到 OCR 失敗會照樣輸出沒有文字的結果）。
 - 每頁最多重試 3 次，成功後搬到 `raw/`（`.mxl` + `.omr`）；已完成的頁會跳過。
 - **binary 要是最新版**：`git pull` 後在 repo 根目錄重新編譯（`./gradlew :app:installDist -x test`；原始檔為 CRLF，手改時保持）。
 - 一次只跑一個進程（Audiveris 與 PaddleOCR 都吃記憶體）；長批次用 `setsid` 背景執行並寫進度到檔案（見 DEVELOPMENT.md）。

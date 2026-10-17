@@ -79,7 +79,7 @@
 - **性能實測**：以 `--device gpu:0`（全 fp32 模式）在 GPU 上運行 PaddleOCR 伺服器，單頁 OCR 約 2.6 秒，較 CPU 快約 10 倍。
 - **使用**：
   - GPU 版顯存約 2.1GB。
-  - 跑批次前 `python3 tools/ocr_pick.py`：從 `PADDLE_OCR_CANDIDATES`（逗號分隔，依序嘗試；預設只有本機）挑第一個有回應的寫進 `PADDLE_OCR_URL`。`run_audiveris.py` 本身只用 `PADDLE_OCR_URL`，不挑伺服器。
+  - `run_audiveris.py` 用 `environment.txt` 的 `PADDLE_OCR_URL`；GPU 版的服務開在哪台，就填那台的位址。
 
 ## 10. 細筆畫與去譜線（2026-10-06，054 調號）
 - **Audiveris 去譜線本來就保留穿過譜線的筆畫**：譜線 glyph 不含交叉處的像素。實測在 `Picture.buildNoStaffBuffer` 加「上下都黑就保留」的處理，054 p02／p03 一個像素都沒有恢復、結果完全不變，已撤回。zemsky 的 `staffRemoveWithScan` 不是我們的差異點。

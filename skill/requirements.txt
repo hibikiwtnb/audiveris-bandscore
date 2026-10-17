@@ -18,6 +18,5 @@ numpy>=1.24.0
 # MUSESCORE_BIN=           required by verify_musescore.py     (mscore)
 # PADDLE_OCR_SERVER=       OCR server of Audiveris             (audiveris-bandscore/dev/paddleocr/paddle_ocr_server.py)
 # PADDLE_OCR_URL=          required by run_audiveris.py        (URL of the running OCR server, e.g. http://127.0.0.1:8868 or a LAN machine)
-# PADDLE_OCR_CANDIDATES=   optional: ocr_pick.py               (OCR servers in order of preference, comma separated; default 127.0.0.1:8868)
 # OCR_PYTHON=              page_regions.py, page_ocr.py, OCR server (python of the paddleocr venv)
 # PDF_DIR=                 optional: local folder holding your score PDFs
