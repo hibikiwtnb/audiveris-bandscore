@@ -661,6 +661,8 @@ def main(song_dir):
         subprocess.run([sys.executable, song_fix, merged], check=True)
     # last, so that parts a song hook marked with <transpose> are left alone
     subprocess.run([sys.executable, os.path.join(HERE, 'unify_keys.py'), merged], check=True)
+    # very last: chord names / directions whose notes were shortened or rewritten above
+    subprocess.run([sys.executable, os.path.join(HERE, 'clamp_offsets.py'), merged], check=True)
     # Report
     print(f'pages: {len(mxls)}  empty measures filled: {report["empty_filled"]}  zero divisions fixed: {report["zero_divisions"]}')
     for k in ('rehearsal', 'lyric_words', 'lyric_dropped', 'drop_dot', 'trim_gap', 'trim_rest', 'trim_note', 'padded', 'extended',

@@ -19,6 +19,7 @@ harmony_root_without_key_accidental = chord roots written natural on a letter th
 signature alters (a flat or sharp the OCR may have dropped).
 """
 import collections
+import copy
 import datetime
 import os
 import re
@@ -34,6 +35,7 @@ if sys.platform == 'win32':
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import clean_score_noise as tie_rules  # same tie judgement as the cleanup step
+import clamp_offsets
 
 # plain / dotted / double-dotted note values in quarters
 STANDARD = {F(4, 2 ** k) * (2 - F(1, 2 ** d)) for k in range(0, 7) for d in range(3)}
@@ -391,6 +393,12 @@ def main(path):
          f' of={sum(d.get("voices", 0) for p in pids for d in pm[p])}')
     issue('nonstandard_duration_measures', [numbers[i] for i in range(N) if any(pm[p][i]['value_bad'] for p in pids)])
     line(f'unpaired_ties count={unpaired_ties(root)}')
+    # chord names / directions placed before the measure start (drawn left of the clef) or past its end
+    outside = [str(n) for n in sorted({int(x.split()[1][1:]) for x in clamp_offsets.clamp(copy.deepcopy(root))})]
+    issue('offset_outside_measure', outside)
+    # <direction-type> must have a child (MuseScore refuses the file: "missing child element")
+    issue('empty_direction_type', [m.get('number') for p in parts for m in p.findall('measure')
+                                   if any(len(dt) == 0 for dt in m.iter('direction-type'))])
     line(f'unpaired_octave_shifts count={unpaired_octave_shifts(pm)}')
 
     percussion = {p.get('id') for p in parts
@@ -411,10 +419,10 @@ def main(path):
         rng = f'm{numbers[a]}' if a == b else f'm{numbers[a]}-m{numbers[b]}'
         line(f'  at={rng} ' + ' '.join(f'{p}={key_text(key_of[p][a])}' for p in compared))
 
+    # repeat barlines belong in every part; endings only in the first (MuseScore draws one per part)
     def mark_set(p, i):
         d = pm[p][i]
-        return '+'.join(sorted([direction for _, direction in d['marks']]
-                               + [f'ending{n}_{t}' for n, t in d['endings']])) or 'none'
+        return '+'.join(sorted(direction for _, direction in d['marks'])) or 'none'
     differ = [i for i in range(N) if len({mark_set(p, i) for p in pids}) > 1]
     line(f'repeat_mismatch_between_parts count={len(differ)}' + (' measures' if differ else ''))
     for i in differ:

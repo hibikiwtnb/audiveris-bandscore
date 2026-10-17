@@ -54,9 +54,10 @@
 - 做不到：換樂器後譜表名稱變成樂器庫縮寫（Cel.、Glock.、Hch.、St.），`<instrument-abbreviation>` 無效；`pizz.`/`arco` 文字與 `<sound>` 內的 `midi-program` 都被忽略，要切只能換樂器。
 - 器樂 `<lyric>` 的 begin/middle 沒收尾 → 一路畫連字號（「選不中、刪不掉的短橫線」）。
 - `6(9)` 若寫 `parentheses-degrees` 會被讀成 `69()`（fork 已修匯出）。
+- **外接音源（MU2000 等 XG 機）聽到牛鈴**：旋律聲部被送到 channel 10，或該 part 還停在鼓組模式，音符就變成打擊樂。MuseScore fork 已修（MIDI out 重配 channel 時不沿用舊對應、旋律聲部不用 ch10、每次分配送 XG Part Mode = Normal），**改完 fork 要重開 MuseScore**。追查用 `-O` 印出每個聲部分到的 channel 與 program。這是播放端的問題，不要去改樂譜。
 
 ## 7. Audiveris 仍會出現、後處理補不了的
-- 漏掉整小節或全音符／二分音符，只剩休止符（297：m45 鋼琴、合成器 7 處）。**目前沒有手動補音的層**，是現行流程的缺口。
+- 漏掉整小節或全音符／二分音符，只剩休止符（297：m45 鋼琴、合成器 7 處）。手動補音放在 song hook，照原譜整小節重寫（做法見 12）。
 - 把音符放到小節線後（時間定位錯誤）：後處理保留，其他聲部補到同長度。
 - 偶爾多切／少切一個小節、漏掉整條譜表。
 - 修在哪裡的取捨（ROUND1 實例）：判斷邏輯錯且每首都會遇到 → 原始碼；只對某些曲子成立 → 參數；需要跨頁或全曲資訊 → 後處理；人一眼看出、程式難讀 → 提示檔。修原始碼先用一頁重現、只驗那頁，再批次；崩潰按「root exception＋最底層 Audiveris frame」分類。
@@ -96,3 +97,35 @@
 - **文字被當成二分休止符**：「(Handclap)」被認成 87px 寬的二分休止符，小節超長，音符被丟掉（p05a）。全／二分休止符寬超過 2.5 線距就不建立。
 - 查法：`.omr` 裡的 `sheet#1.xml`，單線譜表的標籤是 `one-line-staff`（不是 `staff`），數譜表時別漏算。
 
+## 12. 逐頁對圖精修（2026-10-16，098）
+後處理和 Step 5 檢查都過了，聽起來仍有大量錯。098 逐頁對完 19 頁，修了 40 多處，大多是下面幾類，**每首精修時先照這張清單掃**：
+
+| 現象 | 原譜實際是 | 聽起來 |
+|---|---|---|
+| 打擊樂、鼓的 ⊗（圈叉）符頭整串不見 | Wind Chime、Timpani、crash 等 | 該響的沒響。Audiveris 不認圈叉符頭 |
+| 8va 線沒讀到（吉他 solo 最常見） | 高八度 | 低一個八度 |
+| 「4 小節反覆」記號讀成休止符 | 抄前 4 小節 | 貝斯整段消失 |
+| 「( ) = Brass」的括號讀成 2x（第二遍才奏） | 每遍都和銅管一起奏 | 第一遍少音 |
+| 結尾頁、段落末的長音讀成休止符 | 全音符，常和前一小節連結 | 延音斷掉 |
+| 譜表中間多讀一個低音譜號 | 沒有譜號 | 整小節低好幾個八度 |
+| 鼓兩個聲部對調、錯位 | — | 節奏亂 |
+| Vocal 附點、八分休止的位置錯 | — | 歌詞對不上拍 |
+| OCR 碎片成了文字（「$1」「d.」） | 不是文字 | 不影響聲音，但譜面髒 |
+
+做法：
+- **對圖**：`mscore -r 100 -o p.png <merged>` 輸出每頁 png，和原譜頁面圖並排看。098 的輸出第 N 頁剛好對到原譜第 N 頁，翻頁對照很快；對不上時用 `pages/<id>_pNN.musicxml` 查小節在哪頁。
+- **寫在 song hook**（`context/hook.py` → `fix_<id>.py`），每一項在 docstring 寫「哪小節、哪頁圖、原來讀成什麼」。共用的寫法在 `tools/hook_lib.py`（用法見檔頭）：
+  - `write_measures(p, table)`：照原譜整小節重寫，音用字串表示（`'C#5~'` 連結線開始、`'r'` 休止、`'x'` 隱形休止、`'Gn4'` 還原），可設 time-only。
+  - `write_drums(root, p, table)`：鼓用字母（K、S、C、O、H、Ho、M，見 `DRUM_SOUNDS`），`/` 滾奏、`~` 連結。
+  - 兩者都自動寫符槓（`beam_marks`）。**補的音一定要有符槓**：只寫音符、不寫 `<beam>`，八分音符全成單音，使用者一眼就看出來。規則：八分音符按半小節分組，有十六分音符的按拍分組，休止符和四分音符打斷。
+  - `copy_measures`：小節反覆、4 小節反覆記號讀成休止符時，抄前面的小節（按 divisions 換算）。
+  - `apply_ottava_range`、`ottava_measures`：hook 裡補 8va，以及查哪些小節已在 8va 內。
+  - `tie_into(p, num)`、`add_tie`、`drop_tie`、`set_lyrics`。
+  - 目前只支援 4/4。其他拍子要用時再擴充 `hook_lib`，不要在歌裡另抄一份。
+- **divisions 每頁不同**：合併後各頁保留自己的 divisions，時值要按該小節的 divisions 換算，不能寫死。
+- **8va**：優先寫 `context/ottava.txt`。hook 在 `apply_ottava` 之後跑，hook 重寫的小節若在已套用的 8va 範圍內，要寫成升八度後的音高（`write_measures(..., octave_up=ottava_measures(...))`）。
+- **time-only 只在真的分遍時用**。「( ) = 某樂器」的括號不是分遍；只在 D.S.①等某一遍才奏的段落才寫 time-only。寫了以後匯出 MIDI 確認只響一次，且位置對。
+- **必須可重複執行**：每項先檢查「是否已經修過」，修過就跳過；跑兩次後 `cmp` 結果相同。小心：一個函式提前 `return` 會連帶跳過後面寫在同一函式裡的修正（098 m138 曾因此沒套上），不相干的修正分成不同函式。
+- **元素順序**：`<notations>` 要在 `<lyric>` 之前，加連結線時插在 lyric、play、listen 之前，否則 `dtd_order_check.py` 報錯。
+- **每改完一批就驗**：`score_quality.py`（length_mismatch、unpaired_ties、unpaired_octave_shifts 都 0）、`dtd_order_check.py`、`mscore -o x.mscx` 匯入、有分遍時 `-o x.mid`。然後更新 `<id>_quality.txt`，commit 訊息只寫實際改了的小節（098 曾寫了 m124 但程式漏改，要再補一筆）。
+- 根本修法候選：Audiveris 認得圈叉符頭。這本書的打擊樂和鼓都用它，修一次就不用每首手補。

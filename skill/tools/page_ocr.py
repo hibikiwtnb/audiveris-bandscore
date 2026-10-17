@@ -34,7 +34,9 @@ def main(song_dir, pages):
     ocr = PaddleOCR(text_detection_model_name='PP-OCRv5_mobile_det',
                     text_recognition_model_name='en_PP-OCRv5_mobile_rec',
                     use_doc_orientation_classify=False, use_doc_unwarping=False,
-                    use_textline_orientation=False)
+                    use_textline_orientation=False,
+                    # the oneDNN path of recent Paddle builds fails on CPU (ConvertPirAttribute2RuntimeAttribute)
+                    enable_mkldnn=False)
     for img_path in imgs:
         unit = os.path.basename(img_path)[:-4].rsplit('_p', 1)[1]      # 02 / 02a
         if pages and not any(p == unit or (p.isdigit() and int(p) == int(unit[:2])) for p in pages):

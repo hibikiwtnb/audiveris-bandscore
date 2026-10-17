@@ -122,6 +122,7 @@ python tools/bandscore_postprocess.py S
    - 器樂聲部的 `<lyric>` 轉成譜下 `<words>`（碎片刪除）；**名稱或縮寫含 Vocal / Vo. / Voice / Chorus / Cho. 的聲部保留歌詞**（已實作）。
    - `<source>` 與 `source-file` 只留檔名（`scrub_paths`）。
 7. **品質事實報告（`score_quality.py`，自動）**：
+   - 真正的最後一步是 `tools/clamp_offsets.py`：和弦代號、文字指示的位置是「前面的音＋offset」，前面的音被後處理或 hook 改短、改寫後，offset 可能指到小節開頭之前（MuseScore 畫在譜號左邊，整行排版被撐壞）。這一步把它拉回小節內，並列出移動了哪些。`quality.txt` 的 `offset_outside_measure` 應該是 0。
    - 後處理最後對 preview 跑一次 `tools/score_quality.py`，印在輸出末尾並寫成 `S/<song>_quality.txt`（不含時間戳，重跑沒變化時檔案不變，和上一份比就看得出這次修改讓哪些項目變好或變差）。
    - 每次修改工具或提示檔後重跑，把新舊 `_quality.txt` 的 `[issues]` 比一下，再決定要不要交付。
    - **重跑後一定要跑對照**：重跑前先把 `<id>_quality.txt` 複製成 `<id>_quality.prev.txt`，重跑後 `python3 tools/compare_quality.py songs/<曲>/<id>_quality.prev.txt songs/<曲>/<id>_quality.txt`（在 git 裡管理曲子時，舊檔也可以寫 `HEAD:<路徑>`）。它列出樂譜結構的變化：頁數、小節數（每頁）、聲部、譜線數、各聲部的調號時間線與移調、排練記號、反覆與房子。有變化時 exit 1：逐項對照原譜，寫進 `omr_report.md`（變好／變壞／未確認）。DTD 和 `verify_musescore` 全過不代表沒有退步（曾發生：五線譜變一線譜、吉他調號被蓋掉、轉調位置延後，這些檢查全部通過）。
@@ -179,6 +180,9 @@ python3 tools/omr_beat_grid.py S <頁>              # 需要精確位置時：�
   前段是基本資訊（頁數、小節數、音符數、速度、排練記號、反覆記號、房子、Segno/Coda/D.S./D.C.、各聲部音符數與調號）；`[issues]` 段列出樂理上的不一致（小節長度不符拍號、非標準時值、tie／八度線不成對、各聲部調號不一致、反覆記號與房子不完整或各聲部不一致），每項給次數與小節位置。`[issues]` 只是「檢查到什麼」，是否真的錯要對照譜面判斷。交付時在回報裡附上 `[issues]` 各項次數，說明哪些已對照譜面確認是原譜本來如此、哪些是未處理的已知缺口。移調樂器（有 `<transpose>`）不參與調號比對。
   - **排練標記常識檢查**：審視報告中的 `rehearsal_marks` 序列是否連續（如 A->B->C... 或 A1->B1->C1...）；若出現跳字母（如 A->C、A1->D1），視為 OMR 漏識或認偏異常，建議優先以低成本手段修復（見避坑指南 8）。
 - 小節時值統計（需要時）：`python3 tools/measure_duration_audit.py --files S/raw/*.mxl`
+
+### 逐頁對圖精修（使用者要求時）
+程式化檢查全過，不代表聽起來對。精修時逐頁把輸出（`mscore -r 100 -o p.png`）和原譜頁面圖對照，修正寫在 song hook，整小節重寫、鼓、反覆、8va 用 `tools/hook_lib.py`。常見錯誤清單和寫法見 [lessons.md](docs/lessons.md) 12。
 
 ### 結果報告 `S/omr_report.md`（每次跑 OMR 都寫）
 跑完 Step 5 後寫（重跑時整份改成這次的結果）。內容：

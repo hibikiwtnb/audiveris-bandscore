@@ -2,6 +2,8 @@
 """Turn printed timbre changes (text only in the OMR output) into real instrument changes.
 
     python3 tools/apply_instrument_changes.py <score.musicxml> <song dir>/context/instrument_changes.txt
+    python3 tools/apply_instrument_changes.py --link-labels <score.musicxml> <hints>   (scores made before
+        the labels carried their instrument: only add sound/midi-instrument to the labels)
 
 Features a built-in General MIDI 1-128 instrument table, making the [timbres] section in hints optional.
 """
@@ -370,6 +372,10 @@ def main(score, hints):
                 if c['label'] != '-':
                     d = ET.Element('direction', placement='above')
                     ET.SubElement(ET.SubElement(d, 'direction-type'), 'words').text = c['label']
+                    if c['timbre'] != '-':
+                        # The label is the printed mark of the change: our MuseScore import shows
+                        # the instrument change with this text instead of an invisible name over it
+                        ET.SubElement(ET.SubElement(d, 'sound'), 'midi-instrument', id=ids[c['timbre']])
                     kids = list(m)
                     idx = next((i for i, x in enumerate(kids)
                                 if x.tag not in ('print', 'attributes', 'barline')), len(kids))
@@ -397,7 +403,55 @@ def main(score, hints):
         print('WARNING:', w)
 
 
+def link_labels(score, hints):
+    """Link the timbre labels of a score where the changes are already applied (made before the
+    labels carried their instrument): add sound/midi-instrument to each label, nothing else."""
+    timbres, _, changes = read_hints(hints)
+    tree = ET.parse(score)
+    root = tree.getroot()
+    rows = systems(root)
+    parts = {p.get('id'): p for p in root.findall('part')}
+    part_map = {sp.get('id'): sp for sp in root.iter('score-part')}
+    linked, missing = 0, []
+    for c in changes:
+        if c['label'] == '-' or c['timbre'] == '-':
+            continue
+        if 'measure' not in c:
+            row = rows.get((c['page'], c['system']))
+            if not row or c['idx'] > len(row):
+                missing.append(f'{c}: no measure')
+                continue
+            c['measure'] = row[c['idx'] - 1]
+        sp = resolve_part(c['part'], part_map)
+        if sp is None:
+            missing.append(f"{c['part']}: part not found")
+            continue
+        name = timbres.get(c['timbre'], (1, c['timbre']))[1].split('（')[0]
+        iid = next((si.get('id') for si in sp.findall('score-instrument')
+                    if si.findtext('instrument-name') == name), None)
+        m = next((m for m in parts[sp.get('id')].findall('measure')
+                  if m.get('number') == c['measure']), None)
+        d = None if m is None else next(
+            (d for d in m.findall('direction')
+             if [w.text for w in d.iter('words')] == [c['label']]), None)
+        if iid is None or d is None:
+            missing.append(f"m{c['measure']} {c['part']} {c['label']!r}: "
+                           + ('no instrument' if iid is None else 'no label'))
+            continue
+        if d.find('sound/midi-instrument') is None:
+            snd = d.find('sound')
+            if snd is None:
+                snd = ET.SubElement(d, 'sound')
+            ET.SubElement(snd, 'midi-instrument', id=iid)
+            linked += 1
+    tree.write(score, encoding='UTF-8', xml_declaration=True)
+    print(f'instrument labels linked: {linked}')
+    for line in missing:
+        print('WARNING:', line)
+
+
 if __name__ == '__main__':
-    if len(sys.argv) < 3:
-        sys.exit('Usage: python tools/apply_instrument_changes.py <score.musicxml> <hints.txt>')
-    main(sys.argv[1], sys.argv[2])
+    args = [a for a in sys.argv[1:] if a != '--link-labels']
+    if len(args) < 2:
+        sys.exit('Usage: python tools/apply_instrument_changes.py [--link-labels] <score.musicxml> <hints.txt>')
+    (link_labels if '--link-labels' in sys.argv else main)(args[0], args[1])
