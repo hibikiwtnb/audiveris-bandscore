@@ -99,11 +99,191 @@ public class MorphoProcessor
     //-------//
     /**
      * Performs graylevel dilation followed by graylevel erosion
-     * with arbitrary structural element
+     * with arbitrary structural element.
+     * <p>
+     * When the element is flat and each of its rows is a centered run (a circle, a square...),
+     * the result is computed row by row: the max (min) over a run of half-width c is built from
+     * the one of half-width c-1, then the rows of the element are combined. Same result as
+     * {@link #closeNaive}, which scans the whole element at every pixel.
      *
      * @param ip the ImageProcessor
      */
     public void close (ByteProcessor ip)
+    {
+        final int[] halfWidths = rowHalfWidths();
+
+        if (halfWidths == null) {
+            closeNaive(ip);
+            return;
+        }
+
+        final int w = ip.getWidth();
+        final int h = ip.getHeight();
+        final byte[] pixels = (byte[]) ip.getPixels();
+        final byte[] dilated = new byte[pixels.length];
+        final byte[] closed = new byte[pixels.length];
+        extremum(pixels, dilated, w, h, halfWidths, true);
+        extremum(dilated, closed, w, h, halfWidths, false);
+        System.arraycopy(closed, 0, pixels, 0, pixels.length);
+    }
+
+    /**
+     * Graylevel dilation (max) or erosion (min) by a flat element given as one centered run per
+     * row. Outside the image a pixel counts as 0 (dilation) or 255 (erosion), so it never wins,
+     * as in {@link #getMinMax}.
+     */
+    private static void extremum (byte[] src,
+                                  byte[] dst,
+                                  int w,
+                                  int h,
+                                  int[] halfWidths,
+                                  boolean max)
+    {
+        final int p = halfWidths.length / 2;
+        int cMax = 0;
+
+        for (int c : halfWidths) {
+            cMax = Math.max(cMax, c);
+        }
+
+        final int n = halfWidths.length;
+        final int[][][] ring = new int[n][cMax + 1][w]; // per source row: run extremum per half-width
+        final int[] acc = new int[w];
+        int next = 0; // next source row to fill
+
+        for (int y = 0; y < h; y++) {
+            for (int last = Math.min(h - 1, y + p); next <= last; next++) {
+                fillRuns(src, next * w, w, ring[next % n], max);
+            }
+
+            java.util.Arrays.fill(acc, max ? 0 : 255);
+
+            for (int dy = -p; dy <= p; dy++) {
+                final int c = halfWidths[dy + p];
+                final int r = y + dy;
+
+                if ((c < 0) || (r < 0) || (r >= h)) {
+                    continue;
+                }
+
+                final int[] e = ring[r % n][c];
+
+                if (max) {
+                    for (int x = 0; x < w; x++) {
+                        if (e[x] > acc[x]) {
+                            acc[x] = e[x];
+                        }
+                    }
+                } else {
+                    for (int x = 0; x < w; x++) {
+                        if (e[x] < acc[x]) {
+                            acc[x] = e[x];
+                        }
+                    }
+                }
+            }
+
+            final int base = y * w;
+
+            for (int x = 0; x < w; x++) {
+                dst[base + x] = (byte) acc[x];
+            }
+        }
+    }
+
+    /** runs[c][x] = max (min) of the source row over [x-c, x+c], clipped to the row. */
+    private static void fillRuns (byte[] src,
+                                  int offset,
+                                  int w,
+                                  int[][] runs,
+                                  boolean max)
+    {
+        final int[] e0 = runs[0];
+
+        for (int x = 0; x < w; x++) {
+            e0[x] = src[offset + x] & 0xFF;
+        }
+
+        for (int c = 1; c < runs.length; c++) {
+            final int[] prev = runs[c - 1];
+            final int[] cur = runs[c];
+
+            for (int x = 0; x < w; x++) {
+                int v = prev[x];
+
+                if (x - c >= 0) {
+                    final int a = e0[x - c];
+                    v = max ? Math.max(v, a) : Math.min(v, a);
+                }
+
+                if (x + c < w) {
+                    final int b = e0[x + c];
+                    v = max ? Math.max(v, b) : Math.min(v, b);
+                }
+
+                cur[x] = v;
+            }
+        }
+    }
+
+    /**
+     * The element as one centered run per row: half-width per row offset -p..p, -1 for an empty
+     * row. Null when the element is not flat (value 255), or a row is not a run centered on the
+     * column of the origin, or the origin is not in it.
+     */
+    int[] rowHalfWidths ()
+    {
+        int p = 0;
+
+        for (int[] v : pg) {
+            p = Math.max(p, Math.abs(v[0]));
+        }
+
+        final int[] lo = new int[(2 * p) + 1];
+        final int[] hi = new int[(2 * p) + 1];
+        final int[] count = new int[(2 * p) + 1];
+        java.util.Arrays.fill(lo, Integer.MAX_VALUE);
+        java.util.Arrays.fill(hi, Integer.MIN_VALUE);
+        boolean origin = false;
+
+        for (int[] v : pg) {
+            if (v[2] != 255) {
+                return null;
+            }
+
+            final int k = v[0] + p;
+            lo[k] = Math.min(lo[k], v[1]);
+            hi[k] = Math.max(hi[k], v[1]);
+            count[k]++;
+            origin |= (v[0] == 0) && (v[1] == 0);
+        }
+
+        if (!origin) {
+            return null;
+        }
+
+        final int[] halfWidths = new int[(2 * p) + 1];
+
+        for (int k = 0; k < halfWidths.length; k++) {
+            if (count[k] == 0) {
+                halfWidths[k] = -1;
+            } else if ((lo[k] != -hi[k]) || (count[k] != (hi[k] - lo[k] + 1))) {
+                return null;
+            } else {
+                halfWidths[k] = hi[k];
+            }
+        }
+
+        return halfWidths;
+    }
+
+    /**
+     * Performs graylevel dilation followed by graylevel erosion
+     * with arbitrary structural element, scanning the whole element at every pixel.
+     *
+     * @param ip the ImageProcessor
+     */
+    void closeNaive (ByteProcessor ip)
     {
         int width = ip.getWidth();
         int height = ip.getHeight();
