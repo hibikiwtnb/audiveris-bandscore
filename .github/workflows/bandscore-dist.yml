@@ -1,0 +1,65 @@
+name: Bandscore portable build
+
+# Manual only. Builds app/build/install/app (bin/Audiveris[.bat] + lib) on each OS, because the
+# OCR jars carry native libraries per platform, and uploads it as a zip for a GitHub release.
+# It needs Java 25 on the user's machine; it does not install anything or replace upstream Audiveris.
+
+on:
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  dist:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest      # Apple Silicon
+            name: macos-arm64
+          - os: macos-15-intel    # Intel Mac
+            name: macos-x64
+          - os: windows-latest
+            name: windows-x64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Retrieve Gradle properties
+        uses: BrycensRanch/read-properties-action@v1
+        id: all
+        with:
+          file: gradle.properties
+          all: true
+
+      - name: Setup Java ${{ steps.all.outputs.theMinJavaVersion }}
+        uses: actions/setup-java@v5
+        with:
+          java-version: ${{ steps.all.outputs.theMinJavaVersion }}
+          distribution: zulu
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Build
+        run: ./gradlew :app:installDist -x test
+
+      - name: Zip
+        shell: bash
+        run: |
+          mv app/build/install/app app/build/install/Audiveris-Bandscore
+          cd app/build/install
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            7z a -tzip "$GITHUB_WORKSPACE/Audiveris-Bandscore-${{ matrix.name }}.zip" Audiveris-Bandscore
+          else
+            zip -qr "$GITHUB_WORKSPACE/Audiveris-Bandscore-${{ matrix.name }}.zip" Audiveris-Bandscore
+          fi
+
+      - name: Upload
+        uses: actions/upload-artifact@v7
+        with:
+          name: Audiveris-Bandscore-${{ matrix.name }}
+          path: Audiveris-Bandscore-${{ matrix.name }}.zip
+          compression-level: 0
