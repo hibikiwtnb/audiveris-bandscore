@@ -39,16 +39,16 @@ Input-hint features are **opt-in** `-constant` switches; without them the behavi
 
 ## 2. Changes
 
-On top of upstream 5.12.0 this branch has 83 commits that change code. Leaving out a pair that was added and reverted, one that only changed line endings and one that removed cache files, that is 79 patches, grouped from 2.2 on into 11 categories and 39 improvements:
+On top of upstream 5.12.0 this branch has 84 commits that change code. Leaving out a pair that was added and reverted, one that only changed line endings and one that removed cache files, that is 80 patches, grouped from 2.2 on into 11 categories and 39 improvements:
 
 | Category | Improvements | Commits |
 |---|---|---|
 | Parts and lyrics (2.2–2.3) | 5 | 8 |
 | Text and chord names (2.4–2.5) | 8 | 20 |
-| Drums and guitar (2.6–2.7) | 10 | 26 |
+| Drums and guitar (2.6–2.7) | 10 | 27 |
 | Key signatures, rhythm and symbols (2.8–2.10) | 13 | 21 |
 | Stability and speed (2.11–2.12) | 3 | 10 |
-| **Total** | **39** | **79** |
+| **Total** | **39** | **80** |
 
 Six commits touch two categories, so the per-category commit counts add up to more than the total.
 
@@ -125,7 +125,7 @@ The tables below list the improvements over upstream, by what they deal with. **
 | Drum staff export | • Drum parts are exported with a percussion clef and drum sounds whatever clef is printed (band scores often use a bass clef for drums)<br>• With several drum parts on a page, each part uses its own drum sound definitions | [`:drums`](USAGE.md#drums) |
 | X noteheads | • Noteheads on drum staves are looked for at the drum kit's positions, including hi-hat and crash x-heads<br>• X-heads can be found with templates made from the book, whatever the print density<br>• X-heads crossed by staff lines or sitting on ledger lines are found too<br>• Fixed x-head stems and dots being attached wrongly, and x-head legs being taken as dots<br>• Fixed single hi-hats losing their stems<br>• A wrong template folder path now stops with an error | [`templateDir`](USAGE.md#templatedir) |
 | The book's drum map | • When a book writes drums differently from the usual (e.g. hi-hat on the top line), your own mapping can override it | [`templateDir`](USAGE.md#templatedir) |
-| One-line staves | • Percussion staves with a single line, and x-heads on them, are recognized<br>• Fixed five-line staff lines being taken as one-line staves<br>• Fixed one-line staves being dropped on slightly warped pages, and runs of ties being taken as one-line staves | [`:oneline`](USAGE.md#oneline) |
+| One-line staves | • Percussion staves with a single line, and x-heads on them, are recognized<br>• Fixed five-line staff lines being taken as one-line staves<br>• Fixed one-line staves being dropped on slightly warped pages, and runs of ties being taken as one-line staves<br>• A one-line staff whose barlines do not reach the drums staff above is no longer made a system of its own (the page had its measure count doubled, the percussion played after the other parts) | [`:oneline`](USAGE.md#oneline) |
 | Open/closed marks | • Hi-hat open/closed marks (`+`, `o`) above drum staves are no longer exported as text | [`:drums`](USAGE.md#drums) |
 | Sound numbers | • Fixed every drum sound being off by one, which turned bass drum and hi-hat into other drums on playback | Default |
 

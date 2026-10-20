@@ -1063,6 +1063,8 @@ public class PeakGraph
             }
         }
 
+        joinLonelyOneLineStaves(systemTops);
+
         final int[] ids = new int[staffManager.getStaffCount()];
 
         for (int i = 0; i < ids.length; i++) {
@@ -1073,6 +1075,130 @@ public class PeakGraph
         logger.debug("Systems: {}", (Object) systemTops);
 
         return systemTops;
+    }
+
+    //-------------------------//
+    // joinLonelyOneLineStaves //
+    //-------------------------//
+    /**
+     * A one-line staff left alone in its system, right below (above) another system, joins that
+     * system when the system start line at the left goes on down (up) to its line.
+     * <p>
+     * In band scores the barlines of a one-line percussion staff often do not connect to the
+     * drums staff above it; only the start line and the bracket of the system reach it. Left as
+     * a system of its own, its measures were exported after the measures of the other parts
+     * (038 p06b, 180 p13b: every part got the measure count twice, the percussion played after
+     * the others).
+     *
+     * @param systemTops the system top, per staff, updated in place
+     */
+    private void joinLonelyOneLineStaves (Integer[] systemTops)
+    {
+        final ByteProcessor image = sheet.getPicture().getSource(Picture.SourceKey.BINARY);
+
+        if (image == null) {
+            return;
+        }
+
+        final List<Staff> staves = staffManager.getStaves();
+
+        for (int i = 0; i < systemTops.length; i++) {
+            final Staff staff = staves.get(i);
+
+            if (!staff.isOneLineStaff() || !isAlone(systemTops, i)) {
+                continue;
+            }
+
+            for (int dir : new int[] { -1, 1 }) {
+                final int j = i + dir;
+
+                if ((j < 0) || (j >= systemTops.length)) {
+                    continue;
+                }
+
+                final Staff other = staves.get(j);
+                final int x = other.getAbscissa(LEFT);
+                final double from = (dir < 0) ? other.getLastLine().yAt(x)
+                        : other.getFirstLine().yAt(x);
+                final double to = staff.getMidLine().yAt(x);
+                final double reach = startLineReach(image, other, from, dir);
+
+                if (reach >= Math.abs(to - from) - other.getSpecificInterline() / 2.0) {
+                    logger.info("One-line staff#{} joins the system of staff#{}, start line seen",
+                            staff.getId(), other.getId());
+                    final int top = systemTops[j];
+                    final int own = systemTops[i];
+
+                    for (int k = 0; k < systemTops.length; k++) {
+                        if (systemTops[k] == own) {
+                            systemTops[k] = top;
+                        }
+                    }
+
+                    if (dir > 0) {
+                        // The joined system now starts here
+                        for (int k = 0; k < systemTops.length; k++) {
+                            if (systemTops[k] == top) {
+                                systemTops[k] = i + 1;
+                            }
+                        }
+                    }
+
+                    break;
+                }
+            }
+        }
+    }
+
+    /** True when staff index i is the only staff of its system. */
+    private static boolean isAlone (Integer[] systemTops,
+                                    int i)
+    {
+        for (int k = 0; k < systemTops.length; k++) {
+            if ((k != i) && systemTops[k].equals(systemTops[i])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * How far the system start line, near the left of the staff, goes on from ordinate start
+     * in direction dir (-1 up, +1 down), small gaps allowed.
+     */
+    private static double startLineReach (ByteProcessor image,
+                                          Staff staff,
+                                          double start,
+                                          int dir)
+    {
+        final int il = staff.getSpecificInterline();
+        final int left = staff.getAbscissa(LEFT);
+        final int maxGap = Math.max(2, il / 6);
+        final int y0 = (int) Math.round(start);
+        int best = 0;
+
+        for (int x = Math.max(0, left - il); x <= Math.min(image.getWidth() - 1, left + il / 2);
+                x++) {
+            int y = y0;
+            int lastInk = y;
+            int gap = 0;
+
+            while ((y > 0) && (y < image.getHeight() - 1) && (gap <= maxGap)) {
+                y += dir;
+
+                if (image.get(x, y) == 0) {
+                    lastInk = y;
+                    gap = 0;
+                } else {
+                    gap++;
+                }
+            }
+
+            best = Math.max(best, Math.abs(lastInk - y0));
+        }
+
+        return best;
     }
 
     //---------//
