@@ -324,6 +324,9 @@ public class PartwiseBuilder
     /** Map of OctaveShift numbers, reset for every (physical) Part. */
     private final Map<OctaveShiftInter, Integer> octaveShiftNumbers = new HashMap<>();
 
+    /** Octave shifts whose line covers a single chord, and thus has no stop relation. */
+    private final Set<OctaveShiftInter> singleChordShifts = new HashSet<>();
+
     /** Map of Slur numbers, reset for every LogicalPart. */
     private final Map<SlurInter, Integer> slurNumbers = new HashMap<>();
 
@@ -539,54 +542,89 @@ public class PartwiseBuilder
 
                 // Insert octave-shift element?
                 final OctaveShiftInter os = (OctaveShiftInter) sig.getOppositeInter(chord, rel);
-                OctaveShift octaveShift = null;
+                UpDownStopContinue type = null;
                 if (side == RIGHT) {
-                    if (os.getExtension(RIGHT) == null) {
-                        octaveShift = factory.createOctaveShift();
-                        octaveShift.setType(UpDownStopContinue.STOP);
-                    }
-                } else {
-                    if (os.getExtension(LEFT) == null) {
-                        octaveShift = factory.createOctaveShift();
-                        if (os.getKind() == OctaveShiftInter.Kind.ALTA) {
-                            octaveShift.setType(UpDownStopContinue.DOWN);
-                        } else {
-                            octaveShift.setType(UpDownStopContinue.UP); // BASSA
-                        }
-                    } else {
-                        // TODO: uncomment the following 2 lines when Finale software can handle the CONTINUE type
-                        //                        octaveShift = factory.createOctaveShift();
-                        //                        octaveShift.setType(UpDownStopContinue.CONTINUE);
-                    }
+                    // Emit a stop at the last covered chord, even when the printed line
+                    // goes on in the next system: playback must not keep shifting.
+                    type = UpDownStopContinue.STOP;
+                } else if (os.getExtension(LEFT) == null) {
+                    type = (os.getKind() == OctaveShiftInter.Kind.ALTA) ? UpDownStopContinue.DOWN
+                            : UpDownStopContinue.UP; // BASSA
                 }
 
-                if (octaveShift != null) {
-                    octaveShift.setNumber(getOctaveShiftNumber(os));
-                    octaveShift.setSize(new BigInteger("" + os.getValue()));
-                    octaveShift.setDefaultY(
-                            yOf(
-                                    side == LEFT ? os.getLine().getP1() : os.getLine().getP2(),
-                                    os.getStaff()));
+                if (type != null) {
+                    insertOctaveShift(os, side, type);
 
-                    // Within a direction-type element
-                    final DirectionType directionType = factory.createDirectionType();
-                    directionType.setOctaveShift(octaveShift);
-
-                    // Within a direction element
-                    final Direction direction = factory.createDirection();
-                    insertStaffId(direction, os.getStaff());
-
-                    // NOTA: We consider ALTA is always above staff and BASSA always below
-                    direction.setPlacement(
-                            os.getKind() == OctaveShiftInter.Kind.ALTA ? AboveBelow.ABOVE
-                                    : AboveBelow.BELOW);
-                    direction.getDirectionType().add(directionType);
-                    current.pmMeasure.getNoteOrBackupOrForward().add(direction);
+                    if ((side == LEFT) && (os.getChord(RIGHT) == null)) {
+                        // The line ends here: the stop goes after this very chord.
+                        singleChordShifts.add(os);
+                    }
                 }
             }
         } catch (Exception ex) {
             logger.warn("Error checking octave-shift {} side on {}", side, chord, ex);
         }
+    }
+
+    //--------------------//
+    // checkSingleStops //
+    //--------------------//
+    /**
+     * Insert the stop of an octave shift whose line covers a single chord.
+     *
+     * @param chord the chord just processed
+     */
+    private void checkSingleStops (AbstractChordInter chord)
+    {
+        if (singleChordShifts.isEmpty()) {
+            return;
+        }
+
+        for (OctaveShiftInter os : new ArrayList<>(singleChordShifts)) {
+            if (os.getChord(LEFT) == chord) {
+                insertOctaveShift(os, RIGHT, UpDownStopContinue.STOP);
+                singleChordShifts.remove(os);
+            }
+        }
+    }
+
+    //------------------//
+    // insertOctaveShift //
+    //------------------//
+    /**
+     * Insert an octave-shift direction.
+     *
+     * @param os   the octave shift
+     * @param side LEFT for the start, RIGHT for the stop
+     * @param type shift type
+     */
+    private void insertOctaveShift (OctaveShiftInter os,
+                                    HorizontalSide side,
+                                    UpDownStopContinue type)
+    {
+        final OctaveShift octaveShift = factory.createOctaveShift();
+        octaveShift.setType(type);
+        octaveShift.setNumber(getOctaveShiftNumber(os));
+        octaveShift.setSize(new BigInteger("" + os.getValue()));
+        octaveShift.setDefaultY(
+                yOf(
+                        side == LEFT ? os.getLine().getP1() : os.getLine().getP2(),
+                        os.getStaff()));
+
+        // Within a direction-type element
+        final DirectionType directionType = factory.createDirectionType();
+        directionType.setOctaveShift(octaveShift);
+
+        // Within a direction element
+        final Direction direction = factory.createDirection();
+        insertStaffId(direction, os.getStaff());
+
+        // NOTA: We consider ALTA is always above staff and BASSA always below
+        direction.setPlacement(
+                os.getKind() == OctaveShiftInter.Kind.ALTA ? AboveBelow.ABOVE
+                        : AboveBelow.BELOW);
+        direction.getDirectionType().add(directionType);
+        current.pmMeasure.getNoteOrBackupOrForward().add(direction);
     }
 
     //-----------------//
@@ -1462,6 +1500,7 @@ public class PartwiseBuilder
         }
 
         checkOctaveShift(chord, RIGHT); // Check for octave shift stop
+        checkSingleStops(chord); // Stop a shift whose line covers only this chord
     }
 
     //-------------//

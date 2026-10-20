@@ -26,6 +26,7 @@ import org.audiveris.omr.glyph.Glyph;
 import org.audiveris.omr.glyph.Shape;
 import org.audiveris.omr.math.PointUtil;
 import org.audiveris.omr.sheet.Part;
+import org.audiveris.omr.sheet.Picture.SourceKey;
 import org.audiveris.omr.sheet.Scale;
 import org.audiveris.omr.sheet.Sheet;
 import org.audiveris.omr.sheet.Staff;
@@ -59,6 +60,8 @@ import static org.audiveris.omr.util.HorizontalSide.*;
 import org.audiveris.omr.util.Jaxb;
 import static org.audiveris.omr.util.VerticalSide.*;
 import org.audiveris.omr.util.WrappedBoolean;
+
+import ij.process.ByteProcessor;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -897,15 +900,151 @@ public class OctaveShiftInter
             return null;
         }
 
-        //TODO: Can we check for presence of a long dashed line???
+        // The dashed line after the value tells how far the shift applies.
+        // A lone "8va" text with only an arrow is a label, not a span.
         //
         final OctaveShiftInter os = new OctaveShiftInter(glyph, shape, null, grade);
         final Scale scale = staff.getSystem().getSheet().getScale();
         final int lineLg = scale.toPixels(DEFAULT_LINE_LENGTH);
-        os.line = new Line2D.Double(center, new Point(center.x + lineLg, center.y));
+        final Point2D lineEnd = findDashedLineEnd(staff, center, lineLg);
+
+        if (lineEnd == null) {
+            return null;
+        }
+
+        os.line = new Line2D.Double(center, lineEnd);
         os.setStaff(staff);
 
         return os;
+    }
+
+    //-------------------//
+    // findDashedLineEnd //
+    //-------------------//
+    /**
+     * Follow the dashed line printed after an octave shift value and report its right end.
+     * <p>
+     * The value glyph contains no dash, so the line is read from the sheet image, starting
+     * just after the value. Only short horizontal runs are accepted as dashes; a long solid
+     * line (an arrow or a slur) is not an octave shift line.
+     *
+     * @param staff  the related staff
+     * @param center the value glyph center
+     * @param lineLg the length of the value part
+     * @return the right end of the dashed line, or null if no dash is found
+     */
+    private static Point2D findDashedLineEnd (Staff staff,
+                                              Point center,
+                                              int lineLg)
+    {
+        final Sheet sheet = staff.getSystem().getSheet();
+        final ByteProcessor img = sheet.getPicture().getSource(SourceKey.BINARY);
+
+        if (img == null) {
+            return null;
+        }
+
+        final int interline = sheet.getScale().getInterline();
+        final int xStart = center.x + lineLg + 2;
+        final int xStop = staff.getAbscissa(RIGHT);
+        final int span = Math.max(4, (int) Math.rint(0.8 * interline));
+        final int maxDash = Math.max(4, (int) Math.rint(1.5 * interline));
+        final int maxGap = Math.max(8, (int) Math.rint(2.5 * interline));
+
+        int y = center.y;
+        int first = -1;
+        int last = -1;
+        int lastY = -1;
+        int darkCols = 0;
+        int longCols = 0;
+
+        for (int x = xStart; x < xStop; x++) {
+            if ((x < 0) || (x >= img.getWidth())) {
+                break;
+            }
+
+            int bestY = -1;
+            int bestA = -1;
+            int bestB = -1;
+            int bestDist = Integer.MAX_VALUE;
+            boolean hasLong = false;
+
+            for (int yy = y - span; yy <= y + span; yy++) {
+                if ((yy < 0) || (yy >= img.getHeight()) || !isDark(img, x, yy)) {
+                    continue;
+                }
+
+                int a = x;
+                while ((a > 0) && isDark(img, a - 1, yy)) {
+                    a--;
+                }
+
+                int b = x;
+                while ((b + 1 < img.getWidth()) && isDark(img, b + 1, yy)) {
+                    b++;
+                }
+
+                final int len = b - a + 1;
+                final int dist = Math.abs(yy - y);
+
+                if ((len > maxDash) && (dist <= 2)) {
+                    hasLong = true;
+                }
+
+                if ((len >= 2) && (len <= maxDash) && (dist < bestDist)) {
+                    bestY = yy;
+                    bestA = a;
+                    bestB = b;
+                    bestDist = dist;
+                }
+            }
+
+            if (hasLong) {
+                longCols++;
+            }
+
+            if (bestY >= 0) {
+                if (first < 0) {
+                    first = bestA;
+                }
+
+                last = bestB;
+                lastY = bestY;
+                darkCols++;
+                y += Math.max(-2, Math.min(2, bestY - y));
+            } else if ((last >= 0) && (x - last > maxGap)) {
+                break;
+            }
+        }
+
+        if ((first < 0) || (last - first < 1.5 * interline)) {
+            return null;
+        }
+
+        // A solid line (slur, arrow) is not a dashed octave shift line
+        if ((darkCols > 0.7 * (last - first + 1)) || (longCols > 0.15 * (last - first + 1))) {
+            return null;
+        }
+
+        return new Point2D.Double(last, lastY);
+    }
+
+    //---------//
+    // isDark //
+    //---------//
+    /**
+     * Tell whether a pixel of the binary sheet image is dark.
+     *
+     * @param img the binary image
+     * @param x   pixel abscissa
+     * @param y   pixel ordinate
+     * @return true if dark
+     */
+    private static boolean isDark (ByteProcessor img,
+                                   int x,
+                                   int y)
+    {
+        return img.get(x, y) < 160;
     }
 
     //~ Inner Classes ------------------------------------------------------------------------------
