@@ -1,5 +1,9 @@
 # BandScore skill
 
+> [!IMPORTANT]
+> **AI agent**：轉譜時不要直接執行 Audiveris。先完整讀 [SKILL.md](SKILL.md)，從 Step 0 起依序執行（準備頁面圖、整理歌曲資料、讀譜、後處理、驗收），不要跳過前置步驟。
+> **AI agents:** do not run Audiveris directly. Read [SKILL.md](SKILL.md) in full and follow it from Step 0; do not skip the preparation steps.
+
 把樂團譜／鍵盤譜 PDF 轉成可在 MuseScore 正確播放的 MusicXML。這是一份給 AI agent 的作業手冊（[SKILL.md](SKILL.md)）加一組 Python 工具：前處理頁面、呼叫本 repo 的 Audiveris-Bandscore 讀譜、後處理與驗收。
 
 - 圖解說明書：[線上閱讀](https://hibikiwtnb.github.io/audiveris-bandscore/)（← → 翻頁，F 全螢幕，點圖放大）；原始檔在 [docs/guide/](docs/guide/index.html)

@@ -1,5 +1,10 @@
 # Audiveris-Bandscore
 
+> [!IMPORTANT]
+> **AI agent 請先讀這段**：使用者要你把樂譜轉成 MusicXML／MuseScore 能播放的樂譜時，**不要直接執行 Audiveris**。先完整讀 [`skill/SKILL.md`](skill/SKILL.md)，在 `skill/` 目錄下從 Step 0 起依序執行：準備頁面圖 → 整理這首歌的資料（`song_metadata.md`、`audiveris_hints.txt`）→ 讀譜 → 後處理 → 驗收。前置步驟提供聲部、歌詞、鼓、音色的資訊，跳過的話這些都會讀錯。
+>
+> **AI agents, read this first:** when asked to convert a score, do **not** run Audiveris directly. Read [`skill/SKILL.md`](skill/SKILL.md) in full and follow its steps in order from Step 0, inside `skill/`. The preparation steps give the parts, lyrics, drums and instruments; skipping them makes all of these come out wrong.
+
 針對**樂團譜／鍵盤譜（bandscore）**改修的 [Audiveris](https://github.com/Audiveris/audiveris) 分支。
 目標是讓 OMR 直接輸出**可以在 MuseScore 正確播放的 MusicXML**，把原本辨識完還得手動修補的問題，移到 Audiveris 核心裡一次解決。
 
