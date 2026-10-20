@@ -324,8 +324,18 @@ public class PartwiseBuilder
     /** Map of OctaveShift numbers, reset for every (physical) Part. */
     private final Map<OctaveShiftInter, Integer> octaveShiftNumbers = new HashMap<>();
 
-    /** Octave shifts whose line covers a single chord, and thus has no stop relation. */
-    private final Set<OctaveShiftInter> singleChordShifts = new HashSet<>();
+    /** Octave shifts started in the current system, with their last exported covered chord. */
+    private final Set<OctaveShiftInter> activeShifts = new HashSet<>();
+
+    /** Last exported chord covered by each octave shift. */
+    private final Map<OctaveShiftInter, AbstractChordInter> shiftLastChords = new HashMap<>();
+
+    /** Measure and item index just after the last covered chord. */
+    private final Map<OctaveShiftInter, ScorePartwise.Part.Measure> shiftLastMeasures = new HashMap<>();
+    private final Map<OctaveShiftInter, Integer> shiftLastIndexes = new HashMap<>();
+
+    /** Octave shifts already given a stop in the current system. */
+    private final Set<OctaveShiftInter> stoppedShifts = new HashSet<>();
 
     /** Map of Slur numbers, reset for every LogicalPart. */
     private final Map<SlurInter, Integer> slurNumbers = new HashMap<>();
@@ -555,9 +565,10 @@ public class PartwiseBuilder
                 if (type != null) {
                     insertOctaveShift(os, side, type);
 
-                    if ((side == LEFT) && (os.getChord(RIGHT) == null)) {
-                        // The line ends here: the stop goes after this very chord.
-                        singleChordShifts.add(os);
+                    if (side == LEFT) {
+                        activeShifts.add(os);
+                    } else {
+                        stoppedShifts.add(os);
                     }
                 }
             }
@@ -567,25 +578,62 @@ public class PartwiseBuilder
     }
 
     //--------------------//
-    // checkSingleStops //
+    // trackOctaveShifts //
     //--------------------//
     /**
-     * Insert the stop of an octave shift whose line covers a single chord.
+     * Remember the last exported chord covered by each octave shift of the current system.
      *
      * @param chord the chord just processed
      */
-    private void checkSingleStops (AbstractChordInter chord)
+    private void trackOctaveShifts (AbstractChordInter chord)
     {
-        if (singleChordShifts.isEmpty()) {
-            return;
-        }
+        for (OctaveShiftInter os : activeShifts) {
+            if (stoppedShifts.contains(os) || (os.getStaff() != chord.getStaff())) {
+                continue;
+            }
 
-        for (OctaveShiftInter os : new ArrayList<>(singleChordShifts)) {
-            if (os.getChord(LEFT) == chord) {
-                insertOctaveShift(os, RIGHT, UpDownStopContinue.STOP);
-                singleChordShifts.remove(os);
+            final double x = chord.getCenter().x;
+
+            if ((x < os.getLine().getX1() - 2) || (x > os.getLine().getX2() + 2)) {
+                continue;
+            }
+
+            final AbstractChordInter previous = shiftLastChords.get(os);
+
+            if ((previous == null) || (x >= previous.getCenter().x)) {
+                shiftLastChords.put(os, chord);
+                shiftLastMeasures.put(os, current.pmMeasure);
+                shiftLastIndexes.put(os, current.pmMeasure.getNoteOrBackupOrForward().size());
             }
         }
+    }
+
+    //---------------------//
+    // finishOctaveShifts //
+    //---------------------//
+    /**
+     * Stop every octave shift still open at the end of the system, after its last covered chord.
+     */
+    private void finishOctaveShifts ()
+    {
+        for (OctaveShiftInter os : activeShifts) {
+            if (stoppedShifts.contains(os)) {
+                continue;
+            }
+
+            final ScorePartwise.Part.Measure measure = shiftLastMeasures.get(os);
+            final Integer index = shiftLastIndexes.get(os);
+
+            if ((measure != null) && (index != null)) {
+                insertOctaveShift(os, RIGHT, UpDownStopContinue.STOP, measure, index);
+            }
+        }
+
+        activeShifts.clear();
+        shiftLastChords.clear();
+        shiftLastMeasures.clear();
+        shiftLastIndexes.clear();
+        stoppedShifts.clear();
     }
 
     //------------------//
@@ -601,6 +649,25 @@ public class PartwiseBuilder
     private void insertOctaveShift (OctaveShiftInter os,
                                     HorizontalSide side,
                                     UpDownStopContinue type)
+    {
+        insertOctaveShift(os, side, type, current.pmMeasure,
+                current.pmMeasure.getNoteOrBackupOrForward().size());
+    }
+
+    /**
+     * Insert an octave-shift direction into the provided measure at the provided index.
+     *
+     * @param os      the octave shift
+     * @param side    LEFT for the start, RIGHT for the stop
+     * @param type    shift type
+     * @param measure target measure
+     * @param index   insertion index in the measure
+     */
+    private void insertOctaveShift (OctaveShiftInter os,
+                                    HorizontalSide side,
+                                    UpDownStopContinue type,
+                                    ScorePartwise.Part.Measure measure,
+                                    int index)
     {
         final OctaveShift octaveShift = factory.createOctaveShift();
         octaveShift.setType(type);
@@ -624,7 +691,9 @@ public class PartwiseBuilder
                 os.getKind() == OctaveShiftInter.Kind.ALTA ? AboveBelow.ABOVE
                         : AboveBelow.BELOW);
         direction.getDirectionType().add(directionType);
-        current.pmMeasure.getNoteOrBackupOrForward().add(direction);
+        measure.getNoteOrBackupOrForward().add(
+                Math.min(index, measure.getNoteOrBackupOrForward().size()),
+                direction);
     }
 
     //-----------------//
@@ -1500,7 +1569,7 @@ public class PartwiseBuilder
         }
 
         checkOctaveShift(chord, RIGHT); // Check for octave shift stop
-        checkSingleStops(chord); // Stop a shift whose line covers only this chord
+        trackOctaveShifts(chord); // Remember the last covered chord
     }
 
     //-------------//
@@ -3941,6 +4010,12 @@ public class PartwiseBuilder
             current.multipleRests = system.getSig().inters(MultipleRestInter.class);
             isFirst.measure = true;
 
+            activeShifts.clear();
+            shiftLastChords.clear();
+            shiftLastMeasures.clear();
+            shiftLastIndexes.clear();
+            stoppedShifts.clear();
+
             final Part systemPart = system.getPartById(current.logicalPart.getId());
 
             if (systemPart != null) {
@@ -3961,6 +4036,9 @@ public class PartwiseBuilder
                     processSentence((SentenceInter) inter);
                 }
             }
+
+            // Close the octave shifts of this system
+            finishOctaveShifts();
 
             // If we have exported a measure, we are no longer in the first system
             if (!isFirst.measure) {

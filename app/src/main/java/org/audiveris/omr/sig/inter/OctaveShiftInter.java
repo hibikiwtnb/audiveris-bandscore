@@ -35,6 +35,7 @@ import org.audiveris.omr.sheet.SystemInfo;
 import org.audiveris.omr.sheet.ui.ObjectEditor.Handle;
 import org.audiveris.omr.sheet.ui.ObjectUIModel;
 import org.audiveris.omr.sheet.ui.StubsController;
+import org.audiveris.omr.sig.SIGraph;
 import org.audiveris.omr.sig.relation.Link;
 import org.audiveris.omr.sig.relation.OctaveShiftChordRelation;
 import org.audiveris.omr.sig.relation.Relation;
@@ -908,7 +909,7 @@ public class OctaveShiftInter
         final int lineLg = scale.toPixels(DEFAULT_LINE_LENGTH);
         final Point2D lineEnd = findDashedLineEnd(staff, center, lineLg);
 
-        if (lineEnd == null) {
+        if ((lineEnd == null) || !hasChordUnder(staff, center, lineEnd, scale.getInterline())) {
             return null;
         }
 
@@ -918,20 +919,62 @@ public class OctaveShiftInter
         return os;
     }
 
+    //---------------//
+    // hasChordUnder //
+    //---------------//
+    /**
+     * Tell whether at least one chord is printed under the line.
+     * <p>
+     * A label with only an arrow and no notes under it is not an octave shift span.
+     *
+     * @param staff     the related staff
+     * @param start     the line start
+     * @param end       the line end
+     * @param interline the staff interline
+     * @return true if a chord lies under the line
+     */
+    private static boolean hasChordUnder (Staff staff,
+                                          Point2D start,
+                                          Point2D end,
+                                          int interline)
+    {
+        final SIGraph sig = staff.getSystem().getSig();
+
+        if (sig == null) {
+            return true;
+        }
+
+        final double lineY = (start.getY() + end.getY()) / 2;
+
+        for (Inter inter : sig.vertexSet()) {
+            if ((inter instanceof HeadChordInter chord) && !chord.isRemoved()) {
+                final double x = chord.getCenter().x;
+                final double y = chord.getCenter().y;
+
+                if ((x >= start.getX() - interline) && (x <= end.getX() + interline)
+                        && (Math.abs(y - lineY) <= 6 * interline)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     //-------------------//
     // findDashedLineEnd //
     //-------------------//
     /**
-     * Follow the dashed line printed after an octave shift value and report its right end.
+     * Follow the printed line after an octave shift value and report its right end.
      * <p>
      * The value glyph contains no dash, so the line is read from the sheet image, starting
-     * just after the value. Only short horizontal runs are accepted as dashes; a long solid
-     * line (an arrow or a slur) is not an octave shift line.
+     * just after the value. Either short horizontal runs (dashes) or a long horizontal solid
+     * line (the bracket used by some scores) is accepted; a curved slur is not.
      *
      * @param staff  the related staff
      * @param center the value glyph center
      * @param lineLg the length of the value part
-     * @return the right end of the dashed line, or null if no dash is found
+     * @return the right end of the line, or null if no line is found
      */
     private static Point2D findDashedLineEnd (Staff staff,
                                               Point center,
@@ -954,8 +997,9 @@ public class OctaveShiftInter
         int y = center.y;
         int first = -1;
         int last = -1;
+        int firstY = -1;
         int lastY = -1;
-        int darkCols = 0;
+        int shortCols = 0;
         int longCols = 0;
 
         for (int x = xStart; x < xStop; x++) {
@@ -963,11 +1007,14 @@ public class OctaveShiftInter
                 break;
             }
 
-            int bestY = -1;
-            int bestA = -1;
-            int bestB = -1;
-            int bestDist = Integer.MAX_VALUE;
-            boolean hasLong = false;
+            int shortY = -1;
+            int shortA = -1;
+            int shortB = -1;
+            int shortDist = Integer.MAX_VALUE;
+            int longY = -1;
+            int longA = -1;
+            int longB = -1;
+            int longDist = Integer.MAX_VALUE;
 
             for (int yy = y - span; yy <= y + span; yy++) {
                 if ((yy < 0) || (yy >= img.getHeight()) || !isDark(img, x, yy)) {
@@ -987,31 +1034,46 @@ public class OctaveShiftInter
                 final int len = b - a + 1;
                 final int dist = Math.abs(yy - y);
 
-                if ((len > maxDash) && (dist <= 2)) {
-                    hasLong = true;
-                }
-
-                if ((len >= 2) && (len <= maxDash) && (dist < bestDist)) {
-                    bestY = yy;
-                    bestA = a;
-                    bestB = b;
-                    bestDist = dist;
+                if (len > maxDash) {
+                    if (dist < longDist) {
+                        longY = yy;
+                        longA = a;
+                        longB = b;
+                        longDist = dist;
+                    }
+                } else if ((len >= 2) && (dist < shortDist)) {
+                    shortY = yy;
+                    shortA = a;
+                    shortB = b;
+                    shortDist = dist;
                 }
             }
 
-            if (hasLong) {
+            int useY = -1;
+            int useA = -1;
+            int useB = -1;
+
+            if (shortY >= 0) {
+                useY = shortY;
+                useA = shortA;
+                useB = shortB;
+                shortCols++;
+            } else if (longY >= 0) {
+                useY = longY;
+                useA = longA;
+                useB = longB;
                 longCols++;
             }
 
-            if (bestY >= 0) {
+            if (useY >= 0) {
                 if (first < 0) {
-                    first = bestA;
+                    first = useA;
+                    firstY = useY;
                 }
 
-                last = bestB;
-                lastY = bestY;
-                darkCols++;
-                y += Math.max(-2, Math.min(2, bestY - y));
+                last = useB;
+                lastY = useY;
+                y += Math.max(-2, Math.min(2, useY - y));
             } else if ((last >= 0) && (x - last > maxGap)) {
                 break;
             }
@@ -1021,8 +1083,13 @@ public class OctaveShiftInter
             return null;
         }
 
-        // A solid line (slur, arrow) is not a dashed octave shift line
-        if ((darkCols > 0.7 * (last - first + 1)) || (longCols > 0.15 * (last - first + 1))) {
+        final int width = last - first + 1;
+        final boolean dashed = (shortCols >= 0.2 * width) && (longCols <= 0.3 * width);
+        final boolean solid = (longCols >= 0.6 * width)
+                && (width >= 4 * interline)
+                && (Math.abs(lastY - firstY) <= interline);
+
+        if (!dashed && !solid) {
             return null;
         }
 
