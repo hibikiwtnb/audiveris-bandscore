@@ -1,5 +1,7 @@
 # Audiveris-Bandscore
 
+中文 | [English](README.en.md)
+
 > [!IMPORTANT]
 > **AI agent 請先讀這段**：轉譜時**不要直接執行 Audiveris**。先完整讀 [`skill/SKILL.md`](skill/SKILL.md)，在 `skill/` 目錄下從 Step 0 起依序執行：準備頁面圖 → 整理這首歌的資料（`song_metadata.md`、`audiveris_hints.txt`）→ 讀譜 → 後處理 → 驗收。前置步驟提供聲部、歌詞、鼓、音色的資訊，跳過的話這些都會讀錯。
 >
@@ -11,6 +13,7 @@
 - 基底：上游 Audiveris **5.12.0**（`598d16410`），改動見第 2 節
 - 分支：`bandscore`（預設分支）
 - 授權：與上游相同，[AGPL-3.0](LICENSE)
+- **下載**：macOS（Apple 晶片、Intel）和 Windows 的預編譯 zip 在 [Releases](https://github.com/hibikiwtnb/audiveris-bandscore/releases)（需要 Java 25）；播放與檢查請搭配 [MuseScore-Bandscore](https://github.com/hibikiwtnb/MuseScore/releases)
 - **AI 轉譜流程**：[`skill/`](skill/README.md) 是給 AI agent 的作業手冊和工具，把樂隊總譜 PDF 一路轉成可播放的 MusicXML；圖解說明書可以[線上閱讀](https://hibikiwtnb.github.io/audiveris-bandscore/)（原始檔在 [`skill/docs/guide/`](skill/docs/guide/index.html)）
 - 回報問題、提議改進：[CONTRIBUTING.md](CONTRIBUTING.md)
 
@@ -36,7 +39,7 @@ Audiveris 是最常用的開源 OMR 引擎，但拿來處理日式樂團譜、�
 
 ## 2. 改進點總覽
 
-本分支在上游 5.12.0 之上有 82 個改動程式碼的提交。扣掉一組加了又撤回的、一個只改換行格式的、一個移除快取檔的，實際是 78 個 patch，整理成 2.2 起的 11 類、38 項改進：
+本分支在上游 5.12.0 之上有 83 個改動程式碼的提交。扣掉一組加了又撤回的、一個只改換行格式的、一個移除快取檔的，實際是 79 個 patch，整理成 2.2 起的 11 類、39 項改進：
 
 | 類別 | 改進項數 | Commit 數 |
 |---|---|---|
@@ -94,7 +97,7 @@ Audiveris 是最常用的開源 OMR 引擎，但拿來處理日式樂團譜、�
 
 | 改進 | 效果 | 設定 |
 |---|---|---|
-| 識別位置修正 | • 只有人聲聲部下方的文字才會成為歌詞，`pizz.`、`Woodwind` 等譜面文字不再被掛到音符上 | [`:lyrics`](USAGE.md#lyrics) |
+| 識別位置修正 | • 只有標記為有歌詞的譜表（數量不限）下方的文字才會成為歌詞，`pizz.`、`Woodwind` 等譜面文字不再被掛到音符上 | [`:lyrics`](USAGE.md#lyrics) |
 | 誤認符號修正 | • 歌詞裡的假名、標點不再被認成重音、斷音等記號 | 預設 |
 
 ### 2.4 文字
@@ -182,7 +185,7 @@ Audiveris 是最常用的開源 OMR 引擎，但拿來處理日式樂團譜、�
 
 ### 建置
 
-需要 **JDK 25**（上游的要求）。
+預編譯版本在 [Releases](https://github.com/hibikiwtnb/audiveris-bandscore/releases)。自己建置需要 **JDK 25**（上游的要求）。
 
 ```bash
 ./gradlew :app:installDist -x test
