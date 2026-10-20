@@ -608,6 +608,41 @@ public class ChordNameInter
      */
     private static ChordStructure parseChord (String value)
     {
+        final ChordStructure cs = parseExact(value);
+
+        if (cs != null) {
+            return cs;
+        }
+
+        // A chord name the OCR misread in a known way, kept only when it then parses
+        final String repaired = repairOcr(value);
+
+        return repaired.equals(value) ? null : parseExact(repaired);
+    }
+
+    //-----------//
+    // repairOcr //
+    //-----------//
+    /**
+     * Undo the usual OCR misreadings of chord names: "$" or "^" for a sharp ("F$m", "D^m7"),
+     * "-" for a sharp between the root and a minor or diminished mark ("C-m7", "C-dim"), and a
+     * minor seventh followed by a 5 whose flat was lost or read as "6", "0" or "&gt;"
+     * ("Bm765", "Dm7(&gt;5)", "Dm7(5)", "Dm7(5"), which is the half-diminished m7(b5).
+     *
+     * @param value the OCR text
+     * @return the repaired text, or value itself
+     */
+    static String repairOcr (String value)
+    {
+        String s = value.replace('$', '#').replace('^', '#');
+        s = s.replaceAll("^([A-G])-(?=m|dim|M)", "$1#");
+        s = s.replaceAll("m7\\(?[60>]?5\\)?(?=/|$)", "m7(b5)");
+
+        return s;
+    }
+
+    private static ChordStructure parseExact (String value)
+    {
         for (Pattern pattern : getPatterns()) {
             Matcher matcher = pattern.matcher(value);
 

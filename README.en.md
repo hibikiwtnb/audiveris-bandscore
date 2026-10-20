@@ -39,16 +39,16 @@ Input-hint features are **opt-in** `-constant` switches; without them the behavi
 
 ## 2. Changes
 
-On top of upstream 5.12.0 this branch has 84 commits that change code. Leaving out a pair that was added and reverted, one that only changed line endings and one that removed cache files, that is 80 patches, grouped from 2.2 on into 11 categories and 39 improvements:
+On top of upstream 5.12.0 this branch has 85 commits that change code. Leaving out a pair that was added and reverted, one that only changed line endings and one that removed cache files, that is 81 patches, grouped from 2.2 on into 11 categories and 39 improvements:
 
 | Category | Improvements | Commits |
 |---|---|---|
 | Parts and lyrics (2.2–2.3) | 5 | 8 |
-| Text and chord names (2.4–2.5) | 8 | 20 |
+| Text and chord names (2.4–2.5) | 8 | 21 |
 | Drums and guitar (2.6–2.7) | 10 | 27 |
 | Key signatures, rhythm and symbols (2.8–2.10) | 13 | 21 |
 | Stability and speed (2.11–2.12) | 3 | 10 |
-| **Total** | **39** | **80** |
+| **Total** | **39** | **81** |
 
 Six commits touch two categories, so the per-category commit counts add up to more than the total.
 
@@ -114,7 +114,7 @@ The tables below list the improvements over upstream, by what they deal with. **
 
 | Improvement | Effect | Setting |
 |---|---|---|
-| Recognition | • Added chords such as `add2`, `add9`, `add11` are supported<br>• Fixed chord names with a gap (`E sus4`) being split into two texts<br>• Better OCR of ♭ in chord names, which used to be very poor<br>• Small ♭ can be found with the book's template, and ♭ lost by OCR is put back | Default; the template needs [`openingFifths`](USAGE.md#openingfifths) |
+| Recognition | • Added chords such as `add2`, `add9`, `add11` are supported<br>• Fixed chord names with a gap (`E sus4`) being split into two texts<br>• Better OCR of ♭ in chord names, which used to be very poor<br>• Small ♭ can be found with the book's template, and ♭ lost by OCR is put back<br>• The usual OCR misreadings of chord names are repaired before parsing: `$`, `^` or a `-` after the root is a # (`F$m`, `C-m7`), and `(>5)`, `(65)`, `(5)` after m7 is (b5); such chord names, and their whole line, used to be exported as plain text | Default; the template needs [`openingFifths`](USAGE.md#openingfifths) |
 | Position | • Several chord names over one long note now each sit on their own beat instead of all stacking at the note's start | Default |
 | Export | • Fixed 6(9) chords showing as `69()` in MuseScore | Default |
 
