@@ -36,9 +36,11 @@ import org.audiveris.omr.math.GeoUtil;
 import org.audiveris.omr.sheet.Scale;
 import org.audiveris.omr.sheet.Sheet;
 import org.audiveris.omr.sheet.Staff;
+import org.audiveris.omr.sheet.note.NoteHeadsBuilder;
 import org.audiveris.omr.sheet.SystemInfo;
 import org.audiveris.omr.sig.SIGraph;
 import org.audiveris.omr.sig.inter.Inter;
+import org.audiveris.omr.sig.inter.MarkerInter;
 import org.audiveris.omr.sig.inter.SmallChordInter;
 import org.audiveris.omr.sig.relation.Exclusion;
 import org.audiveris.omr.util.Dumping;
@@ -213,6 +215,20 @@ public class SymbolsBuilder
 
         // Create one interpretation for each acceptable evaluation
         final SIGraph sig = system.getSig();
+
+        // A segno or coda sign at system top is often not recognized by the classifier:
+        // the book's templates give the evidence, above the first staff only.
+        if (isAboveFirstStaff(glyph, closestStaff)) {
+            final MarkerTemplate.Match match = MarkerTemplate.match(
+                    sheet,
+                    glyph,
+                    closestStaff,
+                    NoteHeadsBuilder.getTemplateDir());
+
+            if ((match != null) && !hasMarkerNear(sig, glyph)) {
+                factory.create(new Evaluation(match.shape, match.grade), glyph, closestStaff);
+            }
+        }
         final List<Inter> createdInters = new ArrayList<>();
 
         for (Evaluation eval : evals) {
@@ -231,6 +247,37 @@ public class SymbolsBuilder
                 logger.warn("Error in glyph evaluation " + ex, ex);
             }
         }
+    }
+
+    //-------------------//
+    // isAboveFirstStaff //
+    //-------------------//
+    private boolean isAboveFirstStaff (Glyph glyph,
+                                       Staff staff)
+    {
+        if ((staff == null) || (staff != system.getFirstStaff()) || staff.isTablature()) {
+            return false;
+        }
+
+        final Point2D center = glyph.getCenter2D();
+        final double top = staff.getFirstLine().yAt(center.getX());
+
+        return (center.getY() < top) && (center.getY() > (top - (12 * sheet.getInterline())));
+    }
+
+    //---------------//
+    // hasMarkerNear //
+    //---------------//
+    private boolean hasMarkerNear (SIGraph sig,
+                                   Glyph glyph)
+    {
+        for (Inter inter : sig.inters(MarkerInter.class)) {
+            if (inter.getBounds().intersects(glyph.getBounds())) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     //------------------//

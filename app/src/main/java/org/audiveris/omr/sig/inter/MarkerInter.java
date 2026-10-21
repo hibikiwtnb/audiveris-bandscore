@@ -113,8 +113,18 @@ public class MarkerInter
                 center);
         Link link = null;
 
-        if ((staffBar != null) && (GeoUtil.xOverlap(box, staffBar.getBounds()) > 0)) {
-            link = new Link(staffBar, new MarkerBarRelation(), true);
+        // The mark may stand a bit to the right of its barline ("to <coda>", mark above a
+        // rehearsal letter): accept the closest barline when the horizontal gap stays small.
+        if (staffBar != null) {
+            final Rectangle barBox = staffBar.getBounds();
+            final double gap = Math.max(
+                    0,
+                    Math.max(barBox.x - (box.x + box.width), box.x - (barBox.x + barBox.width)));
+
+            if ((GeoUtil.xOverlap(box, barBox) > 0)
+                    || (gap <= (4 * getStaff().getSpecificInterline()))) {
+                link = new Link(staffBar, new MarkerBarRelation(), true);
+            }
         }
 
         return (link == null) ? Collections.emptyList() : Collections.singleton(link);

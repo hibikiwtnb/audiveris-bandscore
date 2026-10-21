@@ -41,6 +41,8 @@ import org.audiveris.omr.sheet.Sheet;
 import org.audiveris.omr.sheet.SheetStub;
 import org.audiveris.omr.sheet.Staff;
 import org.audiveris.omr.sheet.SystemInfo;
+import org.audiveris.omr.sheet.note.NoteHeadsBuilder;
+import org.audiveris.omr.sheet.symbol.MarkerTemplate;
 import org.audiveris.omr.sheet.rhythm.Measure;
 import org.audiveris.omr.sheet.rhythm.MeasureStack;
 import org.audiveris.omr.sheet.rhythm.ParenthesizedChords;
@@ -1876,6 +1878,10 @@ public class PartwiseBuilder
             if (!current.laterPasses.isEmpty() && ParenthesizedChords.isLaterPassText(content)) {
                 return; // "2x" of a later pass, told by time-only
             }
+
+            if (queueJumpFromText(content)) {
+                return; // exported as a jump direction at the end of the measure
+            }
             final Direction direction = factory.createDirection();
             final Point2D location = sentence.getLocation();
 
@@ -2334,75 +2340,320 @@ public class PartwiseBuilder
         }
 
         try {
+            // Structure and jumps are written in the first part only, as the endings are.
+            if (current.logicalPart.getId() != 1) {
+                return;
+            }
+
+            // A marker may be visited from more than one barline
+            if (!current.exportedMarkers.add(marker.getId())) {
+                return;
+            }
+
+            // With book templates, a marker needs template evidence: a boxed rehearsal letter
+            // can also be classified as a coda.
+            final String templateDir = NoteHeadsBuilder.getTemplateDir();
+
+            if (((marker.getShape() == Shape.CODA) || (marker.getShape() == Shape.SEGNO))
+                    && MarkerTemplate.hasTemplates(templateDir)
+                    && (MarkerTemplate.match(
+                            current.page.getSheet(),
+                            marker.getGlyph(),
+                            marker.getStaff(),
+                            templateDir) == null)) {
+                return;
+            }
+
             logger.debug("Visiting {}", marker);
 
-            String measureId = current.measure.getStack().getScoreId(current.pageMeasureIdOffset);
-            Direction direction = factory.createDirection();
-            DirectionType directionType = factory.createDirectionType();
+            final Direction direction = factory.createDirection();
+            final DirectionType directionType = factory.createDirectionType();
             direction.getDirectionType().add(directionType);
 
             // Staff? We use top staff of current measure, perhaps not the marker staff.
             insertStaffId(direction, current.measure.getPart().getFirstStaff());
 
-            //            // default-x
-            //            empty.setDefaultX(
-            //                    toTenths(marker.getCenterLeft().x - current.measure.getAbscissa(LEFT, staff)));
-            //
-            //            // default-y
-            //            empty.setDefaultY(yOf(marker.getCenterLeft(), staff));
-            //
-            // Need also a Sound element
-            Sound sound = factory.createSound();
-            direction.setSound(sound);
+            final Sound sound = factory.createSound();
             sound.setDivisions(new BigDecimal(current.page.simpleDurationOf(Rational.QUARTER)));
 
             switch (marker.getShape()) {
                 case CODA -> {
-                    sound.setCoda(measureId);
-                    Coda coda = factory.createCoda();
+                    final Coda coda = factory.createCoda();
                     directionType.getCoda().add(coda);
+
+                    if (hasToTextNear(marker)) {
+                        // "to <coda sign>" is the point where the later pass jumps to the coda.
+                        // Only the sound is exported, as the playable reference score does:
+                        // a coda sign here would be read as a second coda target.
+                        queueJump(Map.of("tocoda", "coda" + groupNear(marker)), "to Coda");
+                    } else {
+                        sound.setCoda("coda" + (++current.codaCount));
+                        direction.setSound(sound);
+                        current.pmMeasure.getNoteOrBackupOrForward().add(direction);
+                    }
                 }
 
                 case SEGNO -> {
-                    sound.setSegno(measureId);
-                    Segno segno = factory.createSegno();
+                    sound.setSegno("segno" + (++current.segnoCount));
+                    final Segno segno = factory.createSegno();
                     directionType.getSegno().add(segno);
+                    direction.setSound(sound);
+                    current.pmMeasure.getNoteOrBackupOrForward().add(direction);
                 }
 
                 case DA_CAPO -> {
-                    FormattedText text = new FormattedText();
-                    text.setValue("D.C.");
-                    directionType.getWordsOrSymbol().add(text);
-                    sound.setDacapo(YesNo.YES);
+                    // The printed D.C. text is usually exported as a sentence; only add the jump
+                    queueJump(Map.of("dacapo", "yes"), null);
                 }
 
                 case DAL_SEGNO -> {
-                    // Example:
-                    //  <direction placement="above">
-                    //	<direction-type>
-                    //	    <words font-style="italic">D.S. al Fine</words>
-                    //	</direction-type>
-                    //	<sound dalsegno="9"/>
-                    //  </direction>
-                    FormattedText text = new FormattedText();
-                    text.setValue("D.S.");
-                    directionType.getWordsOrSymbol().add(text);
-
-                    //TODO: we need to point back to id of measure where segno is located
-                    ///sound.setDalsegno(measureId); // NO, not this measure, but the target measure!
+                    // The printed D.S. text is usually exported as a sentence; only add the jump
+                    queueJump(Map.of("dalsegno", "segno1"), null);
                 }
 
-                default -> {
-                    logger.warn("Unknown marker shape: {}", marker.getShape());
+                default -> logger.warn("Unknown marker shape: {}", marker.getShape());
+            }
+        } catch (Exception ex) {
+            logger.warn("Error visiting {} in {}", marker, current.page, ex);
+        }
+    }
+
+    //-----------------//
+    // hasToTextNear //
+    //-----------------//
+    private boolean hasToTextNear (MarkerInter marker)
+    {
+        final SystemInfo system = marker.getStaff().getSystem();
+        final Point2D center = marker.getCenter2D();
+        final int il = marker.getStaff().getSpecificInterline();
+
+        for (Inter inter : system.getSig().inters(SentenceInter.class)) {
+            final String text = ((SentenceInter) inter).getValue();
+
+            if ((text != null) && text.trim().toLowerCase(Locale.ROOT).startsWith("to")) {
+                final Point2D pt = inter.getCenter2D();
+
+                if ((Math.abs(pt.getX() - center.getX()) < (4 * il))
+                        && (Math.abs(pt.getY() - center.getY()) < (3 * il))) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    //--------------//
+    // groupNear //
+    //--------------//
+    private int groupNear (MarkerInter marker)
+    {
+        final SystemInfo system = marker.getStaff().getSystem();
+        final Point2D center = marker.getCenter2D();
+        final int il = marker.getStaff().getSpecificInterline();
+
+        for (Inter inter : system.getSig().inters(SentenceInter.class)) {
+            final Point2D pt = inter.getCenter2D();
+
+            if ((Math.abs(pt.getX() - center.getX()) < (5 * il))
+                    && (Math.abs(pt.getY() - center.getY()) < (3 * il))) {
+                final int group = groupOf(((SentenceInter) inter).getValue());
+
+                if (group > 0) {
+                    return group;
+                }
+            }
+        }
+
+        return 1;
+    }
+
+    //-------------------//
+    // queueJumpFromText //
+    //-------------------//
+    /**
+     * Turn the printed D.S., D.C., To Coda and Fine texts into a playback sound.
+     * <p>
+     * "D.S.1x", "2x" and similar later-pass texts are not jumps.
+     *
+     * @param content printed text
+     */
+    private boolean queueJumpFromText (String content)
+    {
+        if (content == null) {
+            return false;
+        }
+
+        final String text = content.trim();
+
+        if (text.isEmpty() || (text.indexOf('x') >= 0) || (text.indexOf('X') >= 0)) {
+            return false; // later-pass text
+        }
+
+        final String u = text.toUpperCase(Locale.ROOT).replace(".", "").replace(" ", "");
+        final int group = Math.max(1, groupOf(text));
+        final Map<String, String> attrs = new LinkedHashMap<>();
+
+        if (u.startsWith("DS")) {
+            attrs.put("dalsegno", "segno" + group);
+
+            if (u.contains("CODA")) {
+                attrs.put("tocoda", "coda" + group);
+            }
+        } else if (u.startsWith("DC")) {
+            attrs.put("dacapo", "yes");
+
+            if (u.contains("CODA")) {
+                attrs.put("tocoda", "coda" + group);
+            }
+        } else if (u.startsWith("TO") && (u.contains("CODA") || u.contains("$")
+                || u.contains("⊕") || u.contains("Φ") || u.contains("φ"))) {
+            attrs.put("tocoda", "coda" + group);
+        } else if (u.equals("FINE") || u.startsWith("FINE")) {
+            attrs.put("fine", "yes");
+        } else {
+            return false;
+        }
+
+        queueJump(attrs, text);
+
+        return true;
+    }
+
+    //---------//
+    // groupOf //
+    //---------//
+    private static int groupOf (String text)
+    {
+        if (text.contains("②") || text.contains("Ⅱ") || text.contains("II")) {
+            return 2;
+        }
+
+        if (text.contains("③") || text.contains("Ⅲ") || text.contains("III")) {
+            return 3;
+        }
+
+        if (text.contains("④") || text.contains("Ⅳ")) {
+            return 4;
+        }
+
+        if (text.contains("①") || text.contains("Ⅰ") || text.contains("1")) {
+            return 1;
+        }
+
+        if (text.contains("I")) {
+            return 1;
+        }
+
+        return 0;
+    }
+
+    //-----------//
+    // queueJump //
+    //-----------//
+    private void queueJump (Map<String, String> attrs,
+                             String text)
+    {
+        if (current.logicalPart.getId() == 1) {
+            // The first part measure is still being built: sound the jump at its end
+            for (Direction existing : current.pendingJumps) {
+                if (sameJump(existing, attrs)) {
                     return;
                 }
             }
 
-            // Everything is now OK
-            current.pmMeasure.getNoteOrBackupOrForward().add(direction);
-        } catch (Exception ex) {
-            logger.warn("Error visiting {} in {}", marker, current.page, ex);
+            current.pendingJumps.add(buildJump(attrs, text));
+        } else {
+            // The text may be attached to another part (often the drums): put the sound in
+            // the same measure of the first part, which has already been built.
+            final String number = current.measure.getStack().getScoreId(
+                    current.pageMeasureIdOffset);
+            final ScorePartwise.Part firstPart = scorePartwise.getPart().get(0);
+
+            for (ScorePartwise.Part.Measure measure : firstPart.getMeasure()) {
+                if (number.equals(measure.getNumber())) {
+                    for (Object obj : measure.getNoteOrBackupOrForward()) {
+                        if ((obj instanceof Direction direction) && sameJump(direction, attrs)) {
+                            return;
+                        }
+                    }
+
+                    // Insert before the trailing barline(s), not after them
+                    final List<Object> items = measure.getNoteOrBackupOrForward();
+                    int index = items.size();
+
+                    for (int i = items.size() - 1; (i >= 0) && (items.get(i) instanceof Barline); i--) {
+                        index = i;
+                    }
+
+                    items.add(index, buildJump(attrs, text));
+                    return;
+                }
+            }
         }
+    }
+
+    //------------//
+    // sameJump //
+    //------------//
+    private static boolean sameJump (Direction direction,
+                                     Map<String, String> attrs)
+    {
+        final Sound sound = direction.getSound();
+
+        if (sound == null) {
+            return false;
+        }
+
+        for (Entry<String, String> entry : attrs.entrySet()) {
+            final boolean same = switch (entry.getKey()) {
+                case "segno" -> entry.getValue().equals(sound.getSegno());
+                case "coda" -> entry.getValue().equals(sound.getCoda());
+                case "dalsegno" -> entry.getValue().equals(sound.getDalsegno());
+                case "tocoda" -> entry.getValue().equals(sound.getTocoda());
+                case "dacapo" -> (sound.getDacapo() == YesNo.YES);
+                case "fine" -> entry.getValue().equals(sound.getFine());
+                default -> false;
+            };
+
+            if (!same) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    //-------------//
+    // buildJump //
+    //-------------//
+    private Direction buildJump (Map<String, String> attrs,
+                                String text)
+    {
+        final Direction direction = factory.createDirection();
+        final DirectionType directionType = factory.createDirectionType();
+        final FormattedTextId words = factory.createFormattedTextId();
+        words.setValue(((text != null) && !text.isBlank()) ? text : "");
+        directionType.getWordsOrSymbol().add(words);
+        direction.getDirectionType().add(directionType);
+
+        final Sound sound = factory.createSound();
+
+        for (Entry<String, String> entry : attrs.entrySet()) {
+            switch (entry.getKey()) {
+                case "segno" -> sound.setSegno(entry.getValue());
+                case "coda" -> sound.setCoda(entry.getValue());
+                case "dalsegno" -> sound.setDalsegno(entry.getValue());
+                case "tocoda" -> sound.setTocoda(entry.getValue());
+                case "dacapo" -> sound.setDacapo(YesNo.YES);
+                case "fine" -> sound.setFine(entry.getValue());
+                default -> logger.warn("Unknown jump attribute {}", entry.getKey());
+            }
+        }
+
+        direction.setSound(sound);
+
+        return direction;
     }
 
     //----------------------//
@@ -2574,6 +2825,20 @@ public class PartwiseBuilder
             if (!current.repeatCopying) {
                 for (AbstractChordInter chord : measure.getLaterPassChords()) {
                     current.laterPasses.merge(chord.getTopStaff(), chord.getPass(), Math::max);
+                }
+            }
+
+            // Segno and coda marks of this stack (first part only)
+            if (!current.repeatCopying && (current.logicalPart.getId() == 1)) {
+                final SystemInfo system = measure.getStack().getSystem();
+
+                for (Inter inter : system.getSig().inters(MarkerInter.class)) {
+                    final MarkerInter marker = (MarkerInter) inter;
+
+                    if ((marker.getStaff() != null)
+                            && (system.getStackAt(marker.getCenter2D()) == measure.getStack())) {
+                        processMarker(marker);
+                    }
                 }
             }
 
@@ -2786,6 +3051,15 @@ public class PartwiseBuilder
 
             // Wedges that occur after time slots, if any
             wedgeIters.push(null);
+
+            // Jumps are sounded at the end of the measure
+            if (!current.pendingJumps.isEmpty()) {
+                for (Direction direction : current.pendingJumps) {
+                    current.pmMeasure.getNoteOrBackupOrForward().add(direction);
+                }
+
+                current.pendingJumps.clear();
+            }
 
             // Right Barline
             if (!measure.isDummy()) {
@@ -4826,6 +5100,15 @@ public class PartwiseBuilder
 
         ScorePartwise.Part.Measure pmMeasure;
 
+        // Playback structure of this page (first part only)
+        final Set<Integer> exportedMarkers = new HashSet<>();
+
+        int segnoCount;
+
+        int codaCount;
+
+        final List<Direction> pendingJumps = new ArrayList<>();
+
         final TreeMap<Integer, Key> keys = new TreeMap<>();
 
         Integer prevConcertKey;
@@ -4862,6 +5145,7 @@ public class PartwiseBuilder
         {
             measure = null;
             pmMeasure = null;
+            pendingJumps.clear();
             voice = null;
             pmAttributes = null;
             voiceIdMap.clear();

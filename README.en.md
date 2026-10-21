@@ -39,16 +39,16 @@ Input-hint features are **opt-in** `-constant` switches; without them the behavi
 
 ## 2. Changes
 
-On top of upstream 5.12.0 this branch has 86 commits that change code. Leaving out a pair that was added and reverted, one that only changed line endings and one that removed cache files, that is 82 patches, grouped from 2.2 on into 11 categories and 40 improvements:
+On top of upstream 5.12.0 this branch has 87 commits that change code. Leaving out a pair that was added and reverted, one that only changed line endings and one that removed cache files, that is 83 patches, grouped from 2.2 on into 11 categories and 41 improvements:
 
 | Category | Improvements | Commits |
 |---|---|---|
 | Parts and lyrics (2.2–2.3) | 5 | 8 |
 | Text and chord names (2.4–2.5) | 8 | 21 |
 | Drums and guitar (2.6–2.7) | 10 | 27 |
-| Key signatures, rhythm and symbols (2.8–2.10) | 14 | 22 |
+| Key signatures, rhythm and symbols (2.8–2.10) | 15 | 23 |
 | Stability and speed (2.11–2.12) | 3 | 10 |
-| **Total** | **40** | **82** |
+| **Total** | **41** | **83** |
 
 Six commits touch two categories, so the per-category commit counts add up to more than the total.
 
@@ -166,6 +166,7 @@ The tables below list the improvements over upstream, by what they deal with. **
 | Articulation attachment | • Accents and staccatos are no longer attached to far-away notes of other parts | Default |
 | Misread endings | • Ending detection can be turned off, so extension lines such as `— pizz. —↓` are not taken as 1st/2nd endings<br>• Fixed unrecognized TAB or one-line staff lines being taken as endings and stealing each part's barlines | Turning detection off needs [`endings`](USAGE.md#endings) |
 | Octave shift export | • 8va/8vb now follows the printed dashed line and exports a `stop` after the last note it covers, so the whole passage stays shifted and the postprocess no longer drops it as an unterminated fragment<br>• An "8va →" label with no dashed line is no longer taken as an octave shift | Default |
+| D.S./Coda playback | • With the book's `segno.png` and `coda.png`, the segno and coda marks above the first staff are confirmed by template, so `<segno>`/`<coda>` and named `<sound segno=...>`/`<sound coda=...>` are exported even when the classifier misses them<br>• A mark above the staff that is not exactly on a barline is attached to the nearest staff barline<br>• `D.S.`, `D.C.`, `To Coda`/`to ⊕` and `Fine` are exported as `dalsegno`, `dacapo`, `tocoda` and `fine` at the end of their measure<br>• Later-pass texts such as `D.S.①x` and `2x` are not taken as jumps | [`templateDir`](USAGE.md#templatedir) (mark templates) |
 
 ### 2.11 Stability
 
