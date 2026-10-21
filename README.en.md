@@ -39,16 +39,16 @@ Input-hint features are **opt-in** `-constant` switches; without them the behavi
 
 ## 2. Changes
 
-On top of upstream 5.12.0 this branch has 87 commits that change code. Leaving out a pair that was added and reverted, one that only changed line endings and one that removed cache files, that is 83 patches, grouped from 2.2 on into 11 categories and 41 improvements:
+On top of upstream 5.12.0 this branch has 88 commits that change code. Leaving out a pair that was added and reverted, one that only changed line endings and one that removed cache files, that is 84 patches, grouped from 2.2 on into 11 categories and 41 improvements:
 
 | Category | Improvements | Commits |
 |---|---|---|
 | Parts and lyrics (2.2–2.3) | 5 | 8 |
 | Text and chord names (2.4–2.5) | 8 | 21 |
 | Drums and guitar (2.6–2.7) | 10 | 27 |
-| Key signatures, rhythm and symbols (2.8–2.10) | 15 | 23 |
+| Key signatures, rhythm and symbols (2.8–2.10) | 15 | 24 |
 | Stability and speed (2.11–2.12) | 3 | 10 |
-| **Total** | **41** | **83** |
+| **Total** | **41** | **84** |
 
 Six commits touch two categories, so the per-category commit counts add up to more than the total.
 

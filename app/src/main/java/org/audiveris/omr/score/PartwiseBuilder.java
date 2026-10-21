@@ -1879,11 +1879,12 @@ public class PartwiseBuilder
                 return; // "2x" of a later pass, told by time-only
             }
 
-            if (queueJumpFromText(content)) {
-                return; // exported as a jump direction at the end of the measure
-            }
             final Direction direction = factory.createDirection();
             final Point2D location = sentence.getLocation();
+
+            if (queueJumpFromText(content, location)) {
+                return; // exported as a jump direction at the end of the measure
+            }
 
             DirectionType directionType = factory.createDirectionType();
             direction.getDirectionType().add(directionType);
@@ -2478,7 +2479,8 @@ public class PartwiseBuilder
      *
      * @param content printed text
      */
-    private boolean queueJumpFromText (String content)
+    private boolean queueJumpFromText (String content,
+                                        Point2D location)
     {
         if (content == null) {
             return false;
@@ -2507,7 +2509,8 @@ public class PartwiseBuilder
                 attrs.put("tocoda", "coda" + group);
             }
         } else if (u.startsWith("TO") && (u.contains("CODA") || u.contains("$")
-                || u.contains("⊕") || u.contains("Φ") || u.contains("φ"))) {
+                || u.contains("⊕") || u.contains("Φ") || u.contains("φ")
+                || codaMarkNear(location))) {
             attrs.put("tocoda", "coda" + group);
         } else if (u.equals("FINE") || u.startsWith("FINE")) {
             attrs.put("fine", "yes");
@@ -2518,6 +2521,34 @@ public class PartwiseBuilder
         queueJump(attrs, text);
 
         return true;
+    }
+
+    //--------------//
+    // codaMarkNear //
+    //--------------//
+    private boolean codaMarkNear (Point2D location)
+    {
+        if (location == null) {
+            return false;
+        }
+
+        final SystemInfo system = current.measure.getStack().getSystem();
+        final int il = current.measure.getPart().getFirstStaff().getSpecificInterline();
+
+        for (Inter inter : system.getSig().inters(MarkerInter.class)) {
+            final MarkerInter marker = (MarkerInter) inter;
+
+            if ((marker.getShape() == Shape.CODA) && (marker.getStaff() != null)) {
+                final Point2D center = marker.getCenter2D();
+
+                if ((Math.abs(center.getX() - location.getX()) < (4 * il))
+                        && (Math.abs(center.getY() - location.getY()) < (3 * il))) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     //---------//
