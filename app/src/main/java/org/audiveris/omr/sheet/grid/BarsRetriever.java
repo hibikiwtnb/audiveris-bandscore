@@ -2379,6 +2379,14 @@ public class BarsRetriever
                 final BarColumn column = columns.get(i);
 
                 if (!column.isFull()) {
+                    if (isDenseColumn(column)) {
+                        // The book prints a separate barline segment in each staff, and a small
+                        // staff (one-line percussion) may have no barline at all. Such a column
+                        // is still a real measure separator.
+                        logger.debug("Keeping dense partial {}", column);
+                        continue;
+                    }
+
                     logger.debug("Deleting partial {}", column);
 
                     // Delete this column, with its related peaks
@@ -2396,6 +2404,31 @@ public class BarsRetriever
                 }
             }
         }
+    }
+
+    //---------------//
+    // isDenseColumn //
+    //---------------//
+    /**
+     * Report whether a column holds peaks in more than half of the system staves.
+     * A segmented barline (printed separately in each staff) has no vertical connectors, and a
+     * one-line staff may lack a barline, so it never forms a full column; density tells it apart
+     * from a stray stem or beam peak.
+     *
+     * @param column the column to check
+     * @return true if the column is dense
+     */
+    private boolean isDenseColumn (BarColumn column)
+    {
+        int count = 0;
+
+        for (StaffPeak peak : column.getPeaks()) {
+            if (peak != null) {
+                count++;
+            }
+        }
+
+        return (count * 2) > column.getPeaks().length;
     }
 
     //--------------//
@@ -2460,7 +2493,15 @@ public class BarsRetriever
                 final StaffProjector projector = projectorOf(staff);
 
                 for (StaffPeak peak : new ArrayList<>(projector.getPeaks())) {
-                    if (peakGraph.containsVertex(peak) && peakGraph.edgesOf(peak).isEmpty()) {
+                    // A barline whose staff does not touch the staves above and below (the books
+                    // print a separate segment per staff) still belongs to a dense column when it
+                    // is abscissa-aligned with the other staves. Such a peak has no graph edge but
+                    // is aligned, so it must be kept.
+                    boolean aligned = peak.getColumn() != null && isDenseColumn(peak.getColumn());
+
+                    if (!aligned
+                            && peakGraph.containsVertex(peak)
+                            && peakGraph.edgesOf(peak).isEmpty()) {
                         if (peak.isVip()) {
                             logger.info("VIP unaligned {}", peak);
                         }
