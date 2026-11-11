@@ -79,6 +79,9 @@ public class TextWord
     /** Regexp for tuplets. */
     private static final Pattern TUPLET_WORDS = compileRegexp(constants.tupletWordRegexp);
 
+    /** A lone tuplet number, perhaps with bits of its bracket: "3", "-3-", "6-". */
+    public static final Pattern LONE_TUPLET_WORD = Pattern.compile("^[-_—]*([36])[-_—]*$");
+
     /** Regexp for words with a dash. */
     private static final Pattern DASHED_WORDS = compileRegexp(constants.dashedWordRegexp);
 
@@ -300,11 +303,12 @@ public class TextWord
             }
         }
 
-        // Remove tuplet
+        // Remove tuplet, except a lone bracketed number ("-3-", "-3"):
+        // the SYMBOLS step turns that word into its tuplet sign (InterFactory.handleTupletWords)
         if (TUPLET_WORDS != null) {
             Matcher matcher = TUPLET_WORDS.matcher(value);
 
-            if (matcher.matches()) {
+            if (matcher.matches() && !LONE_TUPLET_WORD.matcher(value.trim()).matches()) {
                 logger.debug("      tuplet word value {}", this);
                 return "tuplet-word-value";
             }

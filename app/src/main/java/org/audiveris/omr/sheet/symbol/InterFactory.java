@@ -99,6 +99,7 @@ import org.audiveris.omr.sig.inter.TupletInter;
 import org.audiveris.omr.sig.inter.WedgeInter;
 import org.audiveris.omr.sig.inter.WordInter;
 import org.audiveris.omr.text.TextRole;
+import org.audiveris.omr.text.TextWord;
 import org.audiveris.omr.util.Navigable;
 
 import org.slf4j.Logger;
@@ -115,6 +116,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.regex.Matcher;
 
 /**
  * Class <code>InterFactory</code> generates the inter instances corresponding to
@@ -834,6 +836,12 @@ public class InterFactory
                         systemChords);
 
                 if (tuplet == null) {
+                    if (!word.getValue().trim().equals(tupletDigit(word))) {
+                        // A bracketed number away from any chord is dropped, as OCR used to do
+                        word.remove();
+                        replaced++;
+                    }
+
                     continue;
                 }
 
@@ -855,18 +863,30 @@ public class InterFactory
     // tupletShape //
     //-------------//
     /**
-     * Report the tuplet shape a lone "3" or "6" word stands for.
+     * Report the tuplet shape a lone "3" or "6" word stands for, bracket bits allowed ("-3-").
      *
      * @param word the OCR word
      * @return TUPLET_THREE, TUPLET_SIX or null
      */
     private static Shape tupletShape (WordInter word)
     {
-        return switch (word.getValue().trim()) {
-            case "3" -> Shape.TUPLET_THREE;
-            case "6" -> Shape.TUPLET_SIX;
-            default -> null;
-        };
+        final String digit = tupletDigit(word);
+
+        if (digit == null) {
+            return null;
+        }
+
+        return digit.equals("3") ? Shape.TUPLET_THREE : Shape.TUPLET_SIX;
+    }
+
+    //-------------//
+    // tupletDigit //
+    //-------------//
+    private static String tupletDigit (WordInter word)
+    {
+        final Matcher m = TextWord.LONE_TUPLET_WORD.matcher(word.getValue().trim());
+
+        return m.matches() ? m.group(1) : null;
     }
 
     //-------------//
