@@ -797,8 +797,9 @@ public class InterFactory
      * one-character word and kept as a direction text: its glyph then never reaches the
      * classifier, the tuplet is missing and the measure overflows, so the rhythm step leaves
      * whole chords out of every voice.
-     * A sentence made of that single word, near a chord and clear of the note heads (the checks
-     * of TupletInter.createValid), is replaced by the tuplet sign it shows.
+     * A sentence made only of such words (OCR may join the "3" under one staff and the "3" over
+     * the next staff into one sentence) has each word that lies near a chord and clear of the
+     * note heads (the checks of TupletInter.createValid) replaced by the tuplet sign it shows.
      */
     private void handleTupletWords ()
     {
@@ -809,43 +810,63 @@ public class InterFactory
                 continue;
             }
 
-            final List<Inter> members = sentence.getMembers();
+            final List<Inter> members = new ArrayList<>(sentence.getMembers());
 
-            if ((members.size() != 1) || !(members.get(0) instanceof WordInter word)) {
+            if (members.isEmpty() || !members.stream().allMatch(
+                    m -> (m instanceof WordInter w) && (tupletShape(w) != null))) {
                 continue;
             }
 
-            final String value = word.getValue().trim();
-            final Shape shape = switch (value) {
-                case "3" -> Shape.TUPLET_THREE;
-                case "6" -> Shape.TUPLET_SIX;
-                default -> null;
-            };
+            int replaced = 0;
 
-            if ((shape == null) || (word.getGlyph() == null)) {
-                continue;
-            }
+            for (Inter member : members) {
+                final WordInter word = (WordInter) member;
 
-            final TupletInter tuplet = TupletInter.createValid(
-                    word.getGlyph(),
-                    shape,
-                    word.getGrade(),
-                    system,
-                    systemChords);
+                if (word.getGlyph() == null) {
+                    continue;
+                }
 
-            if (tuplet == null) {
-                continue;
-            }
+                final TupletInter tuplet = TupletInter.createValid(
+                        word.getGlyph(),
+                        tupletShape(word),
+                        word.getGrade(),
+                        system,
+                        systemChords);
 
-            logger.debug("Tuplet {} from OCR word {}", tuplet, word);
-            sentence.remove();
+                if (tuplet == null) {
+                    continue;
+                }
 
-            if (!word.isRemoved()) {
+                logger.debug("Tuplet {} from OCR word {}", tuplet, word);
                 word.remove();
+                sig.addVertex(tuplet);
+                replaced++;
             }
 
-            sig.addVertex(tuplet);
+            if ((replaced == members.size()) && !sentence.isRemoved()) {
+                sentence.remove();
+            } else if (replaced > 0) {
+                sentence.invalidateCache();
+            }
         }
+    }
+
+    //-------------//
+    // tupletShape //
+    //-------------//
+    /**
+     * Report the tuplet shape a lone "3" or "6" word stands for.
+     *
+     * @param word the OCR word
+     * @return TUPLET_THREE, TUPLET_SIX or null
+     */
+    private static Shape tupletShape (WordInter word)
+    {
+        return switch (word.getValue().trim()) {
+            case "3" -> Shape.TUPLET_THREE;
+            case "6" -> Shape.TUPLET_SIX;
+            default -> null;
+        };
     }
 
     //-------------//
