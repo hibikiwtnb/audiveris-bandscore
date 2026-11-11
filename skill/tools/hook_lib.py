@@ -3,8 +3,11 @@
 
 Import from a song hook:
 
-    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..', 'tools'))
-    from hook_lib import *  # noqa: E402,F403
+    from hook_lib import *  # noqa: F403
+
+bandscore_postprocess.py runs the hook with tools/ on PYTHONPATH.  Running a hook by hand, do the
+same from skill/: `PYTHONPATH=tools python3 songs/<id>/context/hook.py <merged>`.  (A relative
+path such as ../../../tools breaks when songs/ is a symlink: Python resolves it.)
 
 What is here:
   load / save            read a merged score, write it back keeping the DOCTYPE

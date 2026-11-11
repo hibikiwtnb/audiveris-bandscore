@@ -661,7 +661,11 @@ def main(song_dir):
                        check=True)
     song_fix = os.path.join(song_dir, 'context', 'hook.py')
     if os.path.exists(song_fix):
-        subprocess.run([sys.executable, song_fix, merged], check=True)
+        # tools/ on PYTHONPATH: a hook (and the fix scripts it runs) can import hook_lib wherever
+        # songs/ is kept (Python resolves a songs/ symlink, so ../../../tools may not be tools/)
+        env = dict(os.environ, PYTHONPATH=os.pathsep.join(
+            filter(None, [HERE, os.environ.get('PYTHONPATH')])))
+        subprocess.run([sys.executable, song_fix, merged], check=True, env=env)
     # last, so that parts a song hook marked with <transpose> are left alone
     subprocess.run([sys.executable, os.path.join(HERE, 'unify_keys.py'), merged], check=True)
     # very last: chord names / directions whose notes were shortened or rewritten above

@@ -20,6 +20,10 @@
   - 比對音高時套用聲部的 `<transpose>`（移調樂器、capo 吉他），不再整個聲部對不上。
   - MuseScore 把連續相同的小節畫成小節反覆記號時，那個小節的音照被反覆的小節計算，不再被當成空小節。
 
+### songs/ 可以放在別處
+- `songs/` 可以是指到另一個資料夾（例如自己的私人資料 repo）的連結：根目錄 `.gitignore` 改成連 `skill/songs` 這個連結本身也忽略。
+- **`bandscore_postprocess.py` 執行 song hook 時把 `tools/` 放進 `PYTHONPATH`**：Python 會把 `songs` 連結解析成真實路徑，hook 裡用 `../../../tools` 找 `hook_lib` 的寫法就會找錯地方。現在 hook 直接 `from hook_lib import ...` 即可；手動跑 hook 時在 `skill/` 下用 `PYTHONPATH=tools python3 songs/<曲>/context/hook.py <merged>`（`hook_lib.py` 檔頭已改寫）。
+
 ### 準備頁面
 - **`prepare_pages.py` 不把 PDF 的 soft mask 當成頁面**：有些 PDF 每頁帶一張透明度遮罩，`pdfimages` 會把它當成另一張圖抽出來，頁數變成兩倍、OMR 讀到空白頁。現在照 `pdfimages -list` 把 smask 刪掉。
 
