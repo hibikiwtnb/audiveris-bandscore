@@ -39,16 +39,16 @@ Input-hint features are **opt-in** `-constant` switches; without them the behavi
 
 ## 2. Changes
 
-On top of upstream 5.12.0 this branch has 88 commits that change code. Leaving out a pair that was added and reverted, one that only changed line endings and one that removed cache files, that is 84 patches, grouped from 2.2 on into 11 categories and 41 improvements:
+On top of upstream 5.12.0 this branch has 91 commits that change code. Leaving out a pair that was added and reverted, one that only changed line endings and one that removed cache files, that is 87 patches, grouped from 2.2 on into 11 categories and 42 improvements:
 
 | Category | Improvements | Commits |
 |---|---|---|
 | Parts and lyrics (2.2–2.3) | 5 | 8 |
 | Text and chord names (2.4–2.5) | 8 | 21 |
 | Drums and guitar (2.6–2.7) | 10 | 27 |
-| Key signatures, rhythm and symbols (2.8–2.10) | 15 | 24 |
+| Key signatures, rhythm and symbols (2.8–2.10) | 16 | 27 |
 | Stability and speed (2.11–2.12) | 3 | 10 |
-| **Total** | **41** | **84** |
+| **Total** | **42** | **87** |
 
 Six commits touch two categories, so the per-category commit counts add up to more than the total.
 
@@ -152,6 +152,7 @@ The tables below list the improvements over upstream, by what they deal with. **
 |---|---|---|
 | Default time signature | • When a page does not print a time signature at the top, a given one can be used, so page-by-page recognition keeps its length checks | [`defaultTimeSignature`](USAGE.md#defaulttimesignature) |
 | Tuplets | • Fixed noteheads read as triplet marks, which broke measure lengths | Default |
+| Tuplet numbers read as text | • A lone "3" or "6" that OCR took as a word (also with bracket bits, such as "-3-") becomes a tuplet sign when a chord is nearby; before, the tuplet was missing, the measure overflowed and chords that did not fit any voice were dropped (Revue Starlight full score p02: lost heads 57 → 16)<br>• Also handled one word at a time when OCR joins the "3" of two staves into one sentence | Default |
 | Whole-measure rests | • When a part has an extra or missing note, the other parts' whole-measure rests no longer get longer or shorter | Default |
 | Rests for empty staves | • A staff with nothing in a measure gets a whole-measure rest, so all staves have the same length | Default |
 | Extra rest voices | • Extra voices with only rests on staves that have notes are dropped; the MuseScore playback cursor and voice order are no longer confused | Default |
