@@ -85,6 +85,7 @@ import org.audiveris.omr.sig.inter.PlayingInter;
 import org.audiveris.omr.sig.inter.PluckingInter;
 import org.audiveris.omr.sig.inter.RepeatDotInter;
 import org.audiveris.omr.sig.inter.RestInter;
+import org.audiveris.omr.sig.inter.SentenceInter;
 import org.audiveris.omr.sig.inter.SlurInter;
 import org.audiveris.omr.sig.inter.SmallBeamInter;
 import org.audiveris.omr.sig.inter.SmallFlagInter;
@@ -97,6 +98,7 @@ import org.audiveris.omr.sig.inter.TremoloInter;
 import org.audiveris.omr.sig.inter.TupletInter;
 import org.audiveris.omr.sig.inter.WedgeInter;
 import org.audiveris.omr.sig.inter.WordInter;
+import org.audiveris.omr.text.TextRole;
 import org.audiveris.omr.util.Navigable;
 
 import org.slf4j.Logger;
@@ -785,6 +787,67 @@ public class InterFactory
         }
     }
 
+    //-------------------//
+    // handleTupletWords //
+    //-------------------//
+    /**
+     * Turn OCR words that are a lone tuplet number into tuplet signs.
+     * <p>
+     * A small printed "3" (or "6") over or under a group of notes is often read by OCR as a
+     * one-character word and kept as a direction text: its glyph then never reaches the
+     * classifier, the tuplet is missing and the measure overflows, so the rhythm step leaves
+     * whole chords out of every voice.
+     * A sentence made of that single word, near a chord and clear of the note heads (the checks
+     * of TupletInter.createValid), is replaced by the tuplet sign it shows.
+     */
+    private void handleTupletWords ()
+    {
+        for (Inter inter : sig.inters(SentenceInter.class)) {
+            final SentenceInter sentence = (SentenceInter) inter;
+
+            if (sentence.isRemoved() || (sentence.getRole() == TextRole.Lyrics)) {
+                continue;
+            }
+
+            final List<Inter> members = sentence.getMembers();
+
+            if ((members.size() != 1) || !(members.get(0) instanceof WordInter word)) {
+                continue;
+            }
+
+            final String value = word.getValue().trim();
+            final Shape shape = switch (value) {
+                case "3" -> Shape.TUPLET_THREE;
+                case "6" -> Shape.TUPLET_SIX;
+                default -> null;
+            };
+
+            if ((shape == null) || (word.getGlyph() == null)) {
+                continue;
+            }
+
+            final TupletInter tuplet = TupletInter.createValid(
+                    word.getGlyph(),
+                    shape,
+                    word.getGrade(),
+                    system,
+                    systemChords);
+
+            if (tuplet == null) {
+                continue;
+            }
+
+            logger.debug("Tuplet {} from OCR word {}", tuplet, word);
+            sentence.remove();
+
+            if (!word.isRemoved()) {
+                word.remove();
+            }
+
+            sig.addVertex(tuplet);
+        }
+    }
+
     //-------------//
     // handleTimes //
     //-------------//
@@ -888,6 +951,9 @@ public class InterFactory
 
         // Column consistency of Time Signatures in a system
         handleTimes();
+
+        // Lone "3" / "6" words read by OCR are tuplet signs
+        handleTupletWords();
     }
 
     //~ Static Methods -----------------------------------------------------------------------------
