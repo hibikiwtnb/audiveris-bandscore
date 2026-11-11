@@ -50,6 +50,16 @@ if not glob.glob(os.path.join(ext, 'e-*.png')):
     os.makedirs(ext, exist_ok=True)
     subprocess.run(['pdfimages', '-png', pdf, os.path.join(ext, 'e')], check=True)
 
+# pdfimages also writes soft masks (smask) as separate images; they are not pages.
+if os.path.exists(pdf):
+    listing = subprocess.run(
+            ['pdfimages', '-list', pdf], capture_output=True, text=True, check=True).stdout
+    rows = [line.split() for line in listing.splitlines()
+            if re.match(r'\s*\d+\s+\d+\s+\w+', line)]
+    for i, row in enumerate(rows):
+        f = os.path.join(ext, f'e-{i:03d}.png')
+        if row[2] == 'smask' and os.path.exists(f):
+            os.remove(f)
 
 
 def split_on():

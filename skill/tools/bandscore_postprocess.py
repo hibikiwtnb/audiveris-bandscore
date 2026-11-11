@@ -648,6 +648,9 @@ def main(song_dir):
     if os.path.exists(ottava):
         subprocess.run([sys.executable, os.path.join(HERE, 'apply_ottava.py'), merged, ottava],
                        check=True)
+        # an octave shift changes the pitch at its ends, so ties crossing them are no longer pairs
+        subprocess.run([sys.executable, os.path.join(HERE, 'clean_score_noise.py'), merged],
+                       check=True)
     meta = os.path.join(song_dir, 'context', 'song_metadata.md')
     if os.path.exists(meta):
         subprocess.run([sys.executable, os.path.join(HERE, 'apply_score_hints.py'), merged, meta],

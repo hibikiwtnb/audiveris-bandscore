@@ -10,6 +10,7 @@
 - 跑一首曲子：[SKILL.md](SKILL.md)
 - 開發規則：[DEVELOPMENT.md](DEVELOPMENT.md)
 - 檔案格式、教訓、已知缺口：[docs/](docs/)
+- 變更履歷：[CHANGELOG.md](CHANGELOG.md)
 - 回報問題、提議改進：[../CONTRIBUTING.md](../CONTRIBUTING.md)
 
 ## 快速開始

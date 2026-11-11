@@ -85,6 +85,7 @@ org.audiveris.omr.sheet.grid.StaffProjector.gapThreshold=0.8
   - 每個非鼓聲部都要寫。照譜上第一個音色標示（例如 `(Strings)`、`(Distortion)`、`5st. Bass`）選；沒有標示時照樂器名稱選。曲中的音色變更另外用 `instrument_changes.txt`。
   - 沒寫時照譜表數用預設音色（1 行 54 Voice Oohs，其他 1 Acoustic Grand Piano），電吉他會變成鋼琴。
   - `:drums` 的聲部一律用 GM 鼓組，不用寫。
+  - **編號是 1 起算**（寫進 `midi-program` 的值，MusicXML 規定 1–128）。許多 GM 表（含 MIDI 檔、程式庫）是 0 起算，直接抄會全部少 1：Flute 在 0 起算表是 73、在這裡是 74。寫完用 `midi-program` 反查一遍名稱確認；管弦樂常用：48 Timpani、57 Trumpet、58 Trombone、59 Tuba、61 French Horn、69 Oboe、70 English Horn、71 Bassoon、72 Clarinet、73 Piccolo、74 Flute、41 Violin、42 Viola、43 Cello、44 Contrabass、46 Pizzicato Strings、47 Orchestral Harp。
   - 常用編號：1 Acoustic Grand Piano、5 Electric Piano 1、10 Glockenspiel、17 Drawbar Organ、26 Acoustic Guitar (steel)、28 Electric Guitar (clean)、30 Overdriven Guitar、31 Distortion Guitar、34 Electric Bass (finger)、35 Electric Bass (pick)、39 Synth Bass 1、49 String Ensemble 1、53 Choir Aahs、54 Voice Oohs、62 Brass Section、63 Synth Brass 1、81 Lead 1 (square)、82 Lead 2 (sawtooth)、89 Pad 1 (new age)、90 Pad 2 (warm)。
 - 打錯的標記會讓整個 partsHint 失效並寫 WARN，不會悄悄忽略。
 - 改了 partsHint 要重跑 OMR，不能只重新匯出舊的 `.omr`。

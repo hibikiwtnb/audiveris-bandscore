@@ -422,7 +422,8 @@ def main(path):
     # repeat barlines belong in every part; endings only in the first (MuseScore draws one per part)
     def mark_set(p, i):
         d = pm[p][i]
-        return '+'.join(sorted(direction for _, direction in d['marks'])) or 'none'
+        return '+'.join(sorted(direction for _, direction in d['marks']
+                               if not direction.startswith('ending'))) or 'none'
     differ = [i for i in range(N) if len({mark_set(p, i) for p in pids}) > 1]
     line(f'repeat_mismatch_between_parts count={len(differ)}' + (' measures' if differ else ''))
     for i in differ:
@@ -484,12 +485,14 @@ def main(path):
         if transposing[p] is None or p not in pitched:
             continue
         shift = transposition_fifths(transposing[p])
+        # 12 fifths apart is the same key spelled the other way (10 = -2, 12 = 0)
         bad_at = [i for i in range(N) if key_of[p][i] is not None and concert_key(i) is not None
-                  and int(key_of[p][i]) != concert_key(i) - shift]
+                  and (int(key_of[p][i]) - concert_key(i) + shift) % 12]
         if bad_at:
             a = bad_at[0]
+            expected = (concert_key(a) - shift + 6) % 12 - 6
             wrong.append(f'  {p} "{names.get(p) or ""}" measures={len(bad_at)} first=m{numbers[a]} '
-                         f'key={key_of[p][a]} expected={concert_key(a) - shift} '
+                         f'key={key_of[p][a]} expected={expected} '
                          f'(concert key {concert_key(a)})')
     line(f'transposing_key_mismatch count={len(wrong)}')
     out.extend(wrong)

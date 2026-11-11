@@ -54,6 +54,8 @@
 - 做不到：換樂器後譜表名稱變成樂器庫縮寫（Cel.、Glock.、Hch.、St.），`<instrument-abbreviation>` 無效；`pizz.`/`arco` 文字與 `<sound>` 內的 `midi-program` 都被忽略，要切只能換樂器。
 - 器樂 `<lyric>` 的 begin/middle 沒收尾 → 一路畫連字號（「選不中、刪不掉的短橫線」）。
 - `6(9)` 若寫 `parentheses-degrees` 會被讀成 `69()`（fork 已修匯出）。
+- **MuseScore 3.6.2 不匯入 `tocoda`**：`<sound dalsegno>` 會變成 Jump，但 `<sound tocoda>` 只被當成普通 Marker，Jump 的 `playUntil` 仍是 `end`。D.S.／Coda 的實際播放要用 MuseScore-bandscore fork 驗收；XML 端輸出具名的 segno／coda、D.S. 放在該小節尾即可（合併時 `merge_pages.py` 會重新編號並接好跳轉）。
+- **書上的 segno／coda 記號分類器認不出**：`.omr` 裡記號已是獨立 glyph，但 evaluation 是空的；改用該書的 `segno.png`、`coda.png` 模板在系統最上方比對（`MarkerTemplate`），並要求分類器產生的標記也通過模板，避免方框排練記號被當成 coda。
 - **外接音源（MU2000 等 XG 機）聽到牛鈴**：旋律聲部被送到 channel 10，或該 part 還停在鼓組模式，音符就變成打擊樂。MuseScore fork 已修（MIDI out 重配 channel 時不沿用舊對應、旋律聲部不用 ch10、每次分配送 XG Part Mode = Normal），**改完 fork 要重開 MuseScore**。追查用 `-O` 印出每個聲部分到的 channel 與 program。這是播放端的問題，不要去改樂譜。
 
 ## 7. Audiveris 仍會出現、後處理補不了的

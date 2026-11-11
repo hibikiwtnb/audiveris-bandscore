@@ -112,6 +112,54 @@ def expand_empty_measures(xml_text):
                   % (m.group(1), m.group(2)), xml_text)
 
 
+def resolve_jumps(part):
+    """Give every segno/coda target a unique name and point the jumps at them.
+
+    Each page exports its own segno/coda names (segno1, coda1).  After the merge, the
+    targets are numbered in document order.  The k-th D.S. points at the k-th segno;
+    a To Coda (also the one carried by a D.S. al Coda) points at the first coda target
+    at or after its own measure.
+    """
+    segnos = []   # (measure index, sound)
+    codas = []
+    ds = []
+    tc = []
+
+    for mi, m in enumerate(part.findall("measure")):
+        for d in m.findall("direction"):
+            s = d.find("sound")
+            if s is None:
+                continue
+            if s.get("segno") is not None:
+                segnos.append((mi, s))
+            if s.get("coda") is not None:
+                codas.append((mi, s))
+            if s.get("dalsegno") is not None:
+                ds.append((mi, s))
+            if s.get("tocoda") is not None:
+                tc.append((mi, s))
+
+    for i, (_, s) in enumerate(segnos, start=1):
+        s.set("segno", "segno%d" % i)
+
+    for i, (_, s) in enumerate(codas, start=1):
+        s.set("coda", "coda%d" % i)
+
+    for i, (_, s) in enumerate(ds, start=1):
+        if segnos:
+            s.set("dalsegno", "segno%d" % min(i, len(segnos)))
+
+    for mi, s in tc:
+        if not codas:
+            continue
+        k = next((j for j, (cm, _) in enumerate(codas) if cm >= mi), len(codas) - 1)
+        s.set("tocoda", "coda%d" % (k + 1))
+
+    if segnos or codas:
+        print("jumps: %d segno, %d coda, %d D.S., %d To Coda"
+              % (len(segnos), len(codas), len(ds), len(tc)))
+
+
 def main():
     global SONG_DIR
     continues = set()
@@ -240,6 +288,7 @@ def main():
     for c in credits:
         out_root.append(c)
     out_root.append(merged_part_list(roots))
+    resolve_jumps(parts[0])
     for p in parts:
         out_root.append(p)
 

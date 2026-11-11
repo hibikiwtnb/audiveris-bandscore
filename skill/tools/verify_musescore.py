@@ -8,6 +8,7 @@ by measure, the pitches MuseScore stores (= displayed pitches: an 8va line is al
 off) with the XML pitches minus the octave-shift lines of that staff (a drum note's pitch is
 its instrument's midi-unpitched - 1, the GM key MuseScore stores). Also counts
 InstrumentChange, Ottava and invisible notes per staff. Exit code 1 on any mismatch.
+MuseScore measure-repeat symbols represent the notes of the referenced earlier measures.
 
 A mismatch right after an octave-shift usually means the parts have unequal measure lengths
 (MuseScore times octave-shifts with per-part cumulative time); see the skill.
@@ -31,6 +32,14 @@ def midi(n):
             + int(float(p.findtext('alter') or 0)))
 
 
+def transpose_offset(part):
+    """Semitones MuseScore moves the written pitch to sounding pitch (part <transpose>)."""
+    tr = part.find('.//transpose')
+    if tr is None:
+        return 0
+    return int(tr.findtext('chromatic') or 0) + 12 * int(tr.findtext('octave-change') or 0)
+
+
 def xml_staves(path):
     """[(label, [sorted display pitches per measure])] in MuseScore staff order."""
     root = ET.parse(path).getroot()
@@ -39,6 +48,7 @@ def xml_staves(path):
     out = []
     for part in root.findall('part'):
         nst = max([int(e.text) for e in part.iter('staves')] or [1])
+        transpose = transpose_offset(part)
         per = {str(s): [] for s in range(1, nst + 1)}
         shift = {s: 0 for s in per}
         for m in part.findall('measure'):
@@ -53,7 +63,7 @@ def xml_staves(path):
                             size * (1 if o.get('type') == 'down' else -1)
                 elif el.tag == 'note' and el.find('pitch') is not None:
                     s = el.findtext('staff') or '1'
-                    cur[s].append(midi(el) - 12 * shift[s])
+                    cur[s].append(midi(el) - 12 * shift[s] + transpose)
                 elif el.tag == 'note' and el.find('unpitched') is not None:
                     i = el.find('instrument')
                     if i is not None and i.get('id') in drum:
@@ -71,8 +81,16 @@ def mscx_staves(path):
     out = []
     for m in re.finditer(r'<Staff id="(\d+)">(.*?)(?=<Staff id="|\Z)', body, re.S):
         text = m.group(2)
-        measures = [sorted(int(x) for x in re.findall(r'<pitch>(\d+)</pitch>', ms))
-                    for ms in text.split('<Measure')[1:]]
+        measures = []
+        for ms in text.split('<Measure')[1:]:
+            pitches = sorted(int(x) for x in re.findall(r'<pitch>(\d+)</pitch>', ms))
+            repeat = re.search(r'<RepeatMeasure>(.*?)</RepeatMeasure>', ms, re.S)
+            if repeat:
+                count = re.search(r'<numMeasures>(\d+)</numMeasures>', repeat.group(1))
+                distance = int(count.group(1)) if count else 1
+                if len(measures) >= distance:
+                    pitches = measures[-distance].copy()
+            measures.append(pitches)
         out.append(dict(measures=measures,
                         changes=len(re.findall(r'<InstrumentChange>', text)),
                         ottava=len(re.findall(r'<Ottava>', text)),
