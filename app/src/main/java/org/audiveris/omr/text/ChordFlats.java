@@ -49,7 +49,7 @@ import javax.imageio.ImageIO;
  * the user in the hints) and the template folder of the book (NoteHeadsBuilder.templateDir)
  * holds chord templates: <code>chord_Ab.png</code>, <code>chord_Bb.png</code>, ... a square just
  * holding the root letter and its flat, drawn at a root letter height of {@link #CAP_HEIGHT}
- * pixels (ink dark), made by <code>tools/learn_template.py</code> (bandscore-omr-skill).
+ * pixels (ink dark), made by <code>tools/learn_template.py</code> (skill/).
  * <p>
  * For every root letter read by the OCR (first char of a word, or char after "/") with a template,
  * the whole template is aligned on the gray page at the letter (the letter fixes the position),

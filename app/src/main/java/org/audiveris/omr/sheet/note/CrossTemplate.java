@@ -64,7 +64,7 @@ import javax.imageio.ImageIO;
  * It may also hold <code>cross_line.png</code> (a cross crossed by a staff line or ledger) and
  * <code>cross_ledger.png</code> (a cross standing on a short thick ledger): the same symbol
  * looks different there. At every place all are tried, the best correlation counts.
- * They are made once per book by <code>tools/learn_template.py</code> (bandscore-omr-skill).
+ * They are made once per book by <code>tools/learn_template.py</code> (skill/).
  * <p>
  * Templates and page are gray, never binarized: the page darkness (0 white .. 1 black) after a
  * 3x3 median, as when learning.

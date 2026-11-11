@@ -46,7 +46,7 @@ import javax.imageio.ImageIO;
  * <p>
  * The folder given by {@code NoteHeadsBuilder.templateDir} may hold <code>segno.png</code> and
  * <code>coda.png</code>: a box just holding the mark, drawn at an interline of {@link #INTERLINE}
- * pixels, as made by {@code tools/learn_template.py} (bandscore-omr-skill). The page is gray, not
+ * pixels, as made by {@code tools/learn_template.py} (skill/). The page is gray, not
  * binarized, and the mark stands above the first staff, so no line has to be erased.
  * <p>
  * The match is tried around the provided glyph, which is already segmented but may be only a part
