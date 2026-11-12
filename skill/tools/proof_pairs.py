@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Make "spot the difference" proof units: one part over one printed system (about 4 measures).
+"""Make "spot the difference" proof units: at most two staves over one printed system (about 4 measures).
 Each unit is an image with that part of the original page on top and the same measures of the merged
 MusicXML, rendered by MuseScore, below, plus a text listing of the MusicXML notes of those measures.
-An agent proofreading the OMR only compares the two halves.  A grand staff (piano) is one part.
+An agent proofreading the OMR only compares the two halves.  Consecutive parts share a unit up to
+--max-staves staves (default 2: a grand staff alone, or two one-staff parts); a part is never split.
 
 Usage (from skill/, with Pillow):
   python tools/proof_pairs.py <song dir> <merged.musicxml> <out dir> [--parts P1,P3] [--pages 5,6]
-                              [--min-stack 300]
+                              [--min-stack 300] [--max-staves 2]
 
 Geometry comes from the Audiveris projects <song dir>/raw/<id>_pNN.omr: each system's measure stacks
 (left/right x) and staff lines (y), drawn on the project's BINARY.png; book.xml says which part each
@@ -18,7 +19,7 @@ The MusicXML half: each part alone, the whole score rendered once with the print
 cut by system and each measure stretched to its printed width, so bar lines line up and measure repeats,
 line-start clefs and keys come out as printed.
 
-Out dir gets, per unit, pNN_sK_<part id>.png and .txt (MusicXML notes: written pitch, i.e. 8va/15ma
+Out dir gets, per unit, pNN_sK_<part ids>.png and .txt (MusicXML notes: written pitch, i.e. 8va/15ma
 lines taken off; hidden coll'8va doubles marked), and index.txt.  A part not printed in a system (empty
 staves hidden) gets no image; index.txt lists it, flagged when the MusicXML has notes there.
 """
@@ -84,6 +85,16 @@ def crop_original(image, interline, system, logical_id):
     stacks = system['stacks']
     bounds = [stacks[0][0]] + [st[0] for st in stacks[1:]] + [stacks[-1][1]]
     return image.crop(box), [b - box[0] for b in bounds]
+
+
+def stack(images):
+    """Images of the same width one above the other (crops of adjacent staves tile)."""
+    out = Image.new('L', (images[0].width, sum(im.height for im in images)), 255)
+    y = 0
+    for im in images:
+        out.paste(im, (0, y))
+        y += im.height
+    return out
 
 
 def has_notes(root, part_id, first, last):
@@ -270,6 +281,7 @@ def main():
     ap.add_argument('--parts', help='part ids, e.g. P1,P3 (default: all)')
     ap.add_argument('--pages')
     ap.add_argument('--min-stack', type=int, default=300)
+    ap.add_argument('--max-staves', type=int, default=2, help='staves per unit (default 2, a grand staff)')
     args = ap.parse_args()
     raw = os.path.join(args.song_dir, 'raw')
     omrs = sorted(f for f in os.listdir(raw) if f.endswith('.omr'))
@@ -290,36 +302,57 @@ def main():
     wanted = {int(x) for x in args.pages.split(',')} if args.pages else None
     os.makedirs(args.out_dir, exist_ok=True)
     index = []
+    groups = []  # consecutive parts, at most --max-staves staves per unit (a part never split)
+    for part_id in chosen:
+        part = next(p for p in root.findall('part') if p.get('id') == part_id)
+        staves = int(next((m.findtext('attributes/staves') for m in part.findall('measure')
+                           if m.findtext('attributes/staves')), '1'))
+        if groups and groups[-1][1] + staves <= args.max_staves:
+            groups[-1][0].append(part_id)
+            groups[-1][1] += staves
+        else:
+            groups.append([[part_id], staves])
     with tempfile.TemporaryDirectory() as work:
+        rendered = {}
         for part_id in chosen:
-            logical_id = ids.index(part_id) + 1
-            rendered = render_systems(group_score(root, [part_id]), work)
-            if len(rendered) != len(plan):
-                sys.exit('%s: MuseScore laid out %d systems, the original has %d' % (part_id, len(rendered), len(plan)))
-            for (page, k, first, last, image, interline, s), (xml, xml_bounds) in zip(plan, rendered):
-                if wanted and page not in wanted:
+            rendered[part_id] = render_systems(group_score(root, [part_id]), work)
+            if len(rendered[part_id]) != len(plan):
+                sys.exit('%s: MuseScore laid out %d systems, the original has %d'
+                         % (part_id, len(rendered[part_id]), len(plan)))
+        for i, (page, k, first, last, image, interline, s) in enumerate(plan):
+            if wanted and page not in wanted:
+                continue
+            for members, _ in groups:
+                name = 'p%02d_s%d_%s' % (page, k, '-'.join(members))
+                tops, bottoms, shown = [], [], []
+                for part_id in members:
+                    cropped = crop_original(image, interline, s, ids.index(part_id) + 1)
+                    if cropped is None:
+                        flag = '  OMR 有音符，原譜沒印這個聲部' if has_notes(root, part_id, first, last) else ''
+                        index.append('%s\tm%d-%d\t%s\t原譜沒印%s' % (name, first, last, names[part_id], flag))
+                        continue
+                    orig, orig_bounds = cropped
+                    xml, xml_bounds = rendered[part_id][i]
+                    if len(xml_bounds) != len(orig_bounds):
+                        sys.exit('%s %s: %d bars rendered, %d on the original'
+                                 % (name, part_id, len(xml_bounds) - 1, len(orig_bounds) - 1))
+                    tops.append(orig.convert('L'))
+                    bottoms.append(align(xml, xml_bounds, orig.width, orig_bounds, orig.height))
+                    shown.append(part_id)
+                if not shown:
                     continue
-                name = 'p%02d_s%d_%s' % (page, k, part_id)
-                cropped = crop_original(image, interline, s, logical_id)
-                if cropped is None:
-                    flag = '  OMR 有音符，原譜沒印這個聲部' if has_notes(root, part_id, first, last) else ''
-                    index.append('%s\tm%d-%d\t%s\t原譜沒印%s' % (name, first, last, names[part_id], flag))
-                    continue
-                orig, orig_bounds = cropped
-                if len(xml_bounds) != len(orig_bounds):
-                    sys.exit('%s: %d bars rendered, %d on the original' % (name, len(xml_bounds) - 1, len(orig_bounds) - 1))
-                xml = align(xml, xml_bounds, orig.width, orig_bounds, orig.height)
-                top = label(orig.convert('L'), '原譜 p%02d 第 %d 行  m%d–%d  %s' % (page, k, first, last, names[part_id]))
-                bottom = label(xml, 'OMR（MusicXML 經 MuseScore 渲染）  m%d–%d  %s' % (first, last, names[part_id]))
+                what = ' / '.join(names[p] for p in shown)
+                top = label(stack(tops), '原譜 p%02d 第 %d 行  m%d–%d  %s' % (page, k, first, last, what))
+                bottom = label(stack(bottoms), 'OMR（MusicXML 經 MuseScore 渲染）  m%d–%d  %s' % (first, last, what))
                 out = Image.new('L', (WIDTH, top.height + bottom.height + 12), 128)
                 out.paste(top, (0, 0))
                 out.paste(bottom, (0, top.height + 12))
                 out.save(os.path.join(args.out_dir, name + '.png'), optimize=True)
                 with open(os.path.join(args.out_dir, name + '.txt'), 'w', encoding='utf-8') as fh:
                     fh.write('# %s  m%d–%d  %s（音高為譜面書寫音高；beat 從 1 起算；×後面是時值，單位四分音符）\n'
-                             % (name, first, last, names[part_id]))
-                    fh.write(listing(root, [part_id], names, first, last) + '\n')
-                index.append('%s\tm%d-%d\t%s' % (name, first, last, names[part_id]))
+                             % (name, first, last, what))
+                    fh.write(listing(root, shown, names, first, last) + '\n')
+                index.append('%s\tm%d-%d\t%s' % (name, first, last, what))
                 print(name, 'm%d-%d' % (first, last))
     with open(os.path.join(args.out_dir, 'index.txt'), 'w', encoding='utf-8') as fh:
         fh.write('\n'.join(index) + '\n')
