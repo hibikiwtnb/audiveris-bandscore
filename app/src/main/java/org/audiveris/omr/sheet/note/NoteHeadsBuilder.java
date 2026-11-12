@@ -2055,7 +2055,7 @@ public class NoteHeadsBuilder
                 + " whose stem is drawn from a tip");
 
         private final Constant.Ratio stemLessBoost = new Constant.Ratio(
-                0, // Was 0.38,
+                0.45, // Upstream: 0.38 until 2023-01, then 0
                 "How much do we boost stem-less heads (always isolated)");
 
         private final Constant.Ratio minInkHeight = new Constant.Ratio(
