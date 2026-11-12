@@ -40,16 +40,16 @@ Input-hint features are **opt-in** `-constant` switches; without them the behavi
 
 ## 2. Changes
 
-On top of upstream 5.12.0 this branch has 91 commits that change code. Leaving out a pair that was added and reverted, one that only changed line endings and one that removed cache files, that is 87 patches, grouped from 2.2 on into 11 categories and 42 improvements:
+On top of upstream 5.12.0 this branch has 95 commits that change code. Leaving out a pair that was added and reverted, one that only changed line endings and one that removed cache files, that is 91 patches, grouped from 2.2 on into 11 categories and 44 improvements:
 
 | Category | Improvements | Commits |
 |---|---|---|
 | Parts and lyrics (2.2–2.3) | 5 | 8 |
 | Text and chord names (2.4–2.5) | 8 | 21 |
 | Drums and guitar (2.6–2.7) | 10 | 27 |
-| Key signatures, rhythm and symbols (2.8–2.10) | 16 | 27 |
+| Key signatures, rhythm and symbols (2.8–2.10) | 18 | 31 |
 | Stability and speed (2.11–2.12) | 3 | 10 |
-| **Total** | **42** | **87** |
+| **Total** | **44** | **91** |
 
 Six commits touch two categories, so the per-category commit counts add up to more than the total.
 
@@ -152,6 +152,7 @@ The tables below list the improvements over upstream, by what they deal with. **
 | Improvement | Effect | Setting |
 |---|---|---|
 | Default time signature | • When a page does not print a time signature at the top, a given one can be used, so page-by-page recognition keeps its length checks | [`defaultTimeSignature`](USAGE.md#defaulttimesignature) |
+| Header time signature checked by OCR | • The time signature digits at the start of each line are also read by OCR, and when more than half of the staves give the same signature it wins; fixes 4/4 read as 2/4 on every staff, which made every measure of the page overflow (Revue Starlight full score p01: lost heads 212 → 10) | Default |
 | Tuplets | • Fixed noteheads read as triplet marks, which broke measure lengths | Default |
 | Tuplet numbers read as text | • A lone "3" or "6" that OCR took as a word (also with bracket bits, such as "-3-") becomes a tuplet sign when a chord is nearby; before, the tuplet was missing, the measure overflowed and chords that did not fit any voice were dropped (Revue Starlight full score p02: lost heads 57 → 16)<br>• Also handled one word at a time when OCR joins the "3" of two staves into one sentence | Default |
 | Whole-measure rests | • When a part has an extra or missing note, the other parts' whole-measure rests no longer get longer or shorter | Default |
@@ -164,7 +165,8 @@ The tables below list the improvements over upstream, by what they deal with. **
 
 | Improvement | Effect | Setting |
 |---|---|---|
-| Misread rests | • Quarter rests are no longer read as hollow noteheads<br>• Text is no longer read as a very wide half rest | Default |
+| Misread rests | • Quarter rests are no longer read as hollow noteheads<br>• Text is no longer read as a very wide half rest<br>• A leftover piece of a tie between two heads of the same pitch is no longer read as a whole or half rest (Revue Starlight full score p11: lost heads 27 → 5) | Default |
+| Missed whole notes | • Heads without a stem (whole notes, breves) get their grade boost back, so a whole note that matches its template well is no longer dropped as a weak candidate (21-page keyboard band score: whole notes 145 → 316)<br>• Text printed within the staff lines (for example `Add Sequenced Synth.` in an empty measure) is now read by a separate OCR request, and the false whole notes found on its letters are removed | Default |
 | Articulation attachment | • Accents and staccatos are no longer attached to far-away notes of other parts | Default |
 | Misread endings | • Ending detection can be turned off, so extension lines such as `— pizz. —↓` are not taken as 1st/2nd endings<br>• Fixed unrecognized TAB or one-line staff lines being taken as endings and stealing each part's barlines | Turning detection off needs [`endings`](USAGE.md#endings) |
 | Octave shift export | • 8va/8vb now follows the printed dashed line and exports a `stop` after the last note it covers, so the whole passage stays shifted and the postprocess no longer drops it as an unterminated fragment<br>• An "8va →" label with no dashed line is no longer taken as an octave shift | Default |
