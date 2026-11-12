@@ -144,6 +144,53 @@ public class RestInter
 
     //~ Static Methods -----------------------------------------------------------------------------
 
+    //------------//
+    // isTieBlock //
+    //------------//
+    /**
+     * Report whether the block lies right between two heads of the same pitch in the staff,
+     * where a tie is expected.
+     */
+    private static boolean isTieBlock (Rectangle box,
+                                       Staff staff,
+                                       List<Inter> systemHeadChords)
+    {
+        final int il = staff.getSpecificInterline();
+        final int maxGap = (int) Math.rint(constants.maxTieBlockGap.getValue() * il);
+        final int maxDy = (int) Math.rint(constants.maxTieBlockDy.getValue() * il);
+        final int yMid = box.y + (box.height / 2);
+        final List<Integer> lefts = new ArrayList<>();
+        final List<Integer> rights = new ArrayList<>();
+
+        for (Inter chord : systemHeadChords) {
+            if (chord.isRemoved() || (chord.getStaff() != staff)) {
+                continue;
+            }
+
+            for (Inter note : ((AbstractChordInter) chord).getNotes()) {
+                final Rectangle b = note.getBounds();
+
+                if (Math.abs((b.y + (b.height / 2)) - yMid) > maxDy) {
+                    continue;
+                }
+
+                final int pitch = ((AbstractPitchedInter) note).getIntegerPitch();
+                final int leftGap = box.x - (b.x + b.width);
+                final int rightGap = b.x - (box.x + box.width);
+
+                if ((leftGap <= maxGap) && (leftGap >= -maxGap)) {
+                    lefts.add(pitch);
+                } else if ((rightGap <= maxGap) && (rightGap >= -maxGap)) {
+                    rights.add(pitch);
+                }
+            }
+        }
+
+        lefts.retainAll(rights);
+
+        return !lefts.isEmpty();
+    }
+
     //-------------//
     // createValid //
     //-------------//
@@ -189,6 +236,19 @@ public class RestInter
             if (glyph.getBounds().width > maxWidth) {
                 return null;
             }
+        }
+
+        // A whole or half rest squeezed between two heads of the same pitch is the tie between
+        // them: a short thick tie, on a blurred print, looks like a block rest
+        if (((shape == Shape.WHOLE_REST) || (shape == Shape.HALF_REST)) && isTieBlock(
+                glyph.getBounds(),
+                restStaff,
+                systemHeadChords)) {
+            if (glyph.isVip() || logger.isDebugEnabled()) {
+                logger.info("Discarded tie-like rest candidate glyph#{}", glyph.getId());
+            }
+
+            return null;
         }
 
         // Check horizontal position WRT head-chords
@@ -295,6 +355,14 @@ public class RestInter
         private final Scale.Fraction minInterChordDx = new Scale.Fraction(
                 0.5,
                 "Minimum horizontal delta between two chords");
+
+        private final Constant.Ratio maxTieBlockGap = new Constant.Ratio(
+                0.6,
+                "Maximum abscissa gap between a tie-like block and the head on each side, in interlines");
+
+        private final Constant.Ratio maxTieBlockDy = new Constant.Ratio(
+                2.0,
+                "Maximum ordinate distance between a tie-like block and the heads, in interlines");
 
         private final Constant.Ratio maxBlockRestWidth = new Constant.Ratio(
                 2.5,
