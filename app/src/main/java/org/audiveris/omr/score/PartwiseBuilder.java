@@ -257,8 +257,10 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.regex.Pattern;
@@ -2312,8 +2314,8 @@ public class PartwiseBuilder
 
         // A sequence of measure repeats belongs to its part: it goes on in the same part on the
         // next page, and must not leak into the next part of this page
-        current.repeatStarted = current.partRepeatStarted.getOrDefault(logicalPart, false);
-        current.repeatStyleNumber = current.partRepeatStyleNumber.get(logicalPart);
+        current.repeatActive = new TreeSet<>(
+                current.partRepeatActive.getOrDefault(logicalPart, Collections.emptySet()));
 
         // Delegate to children the filling of measures
         logger.debug("Populating {}", logicalPart);
@@ -2327,8 +2329,7 @@ public class PartwiseBuilder
             processSystem(system);
         }
 
-        current.partRepeatStarted.put(logicalPart, current.repeatStarted);
-        current.partRepeatStyleNumber.put(logicalPart, current.repeatStyleNumber);
+        current.partRepeatActive.put(logicalPart, current.repeatActive);
     }
 
     //---------------//
@@ -2733,6 +2734,43 @@ public class PartwiseBuilder
         }
     }
 
+    //--------------------//
+    // repeatStaffIndices //
+    //--------------------//
+    /**
+     * The staves (index in part) of a measure that hold a measure repeat sign.
+     * A sign not tied to a staff stands for every staff of the part.
+     */
+    private static Set<Integer> repeatStaffIndices (Measure measure)
+    {
+        final Set<Integer> staves = new HashSet<>();
+
+        for (MeasureRepeatInter sign : measure.getMeasureRepeats()) {
+            if (sign.getStaff() != null) {
+                staves.add(sign.getStaff().getIndexInPart());
+            } else {
+                for (Staff staff : measure.getPart().getStaves()) {
+                    staves.add(staff.getIndexInPart());
+                }
+            }
+        }
+
+        return staves;
+    }
+
+    //----------------//
+    // setRepeatStaff //
+    //----------------//
+    /** On a part of several staves, a measure-style applies to the given staff only. */
+    private static void setRepeatStaff (MeasureStyle measureStyle,
+                                        Measure measure,
+                                        int indexInPart)
+    {
+        if (measure.getPart().getStaves().size() > 1) {
+            measureStyle.setNumber(BigInteger.valueOf(1 + indexInPart));
+        }
+    }
+
     //----------------//
     // processMeasure //
     //----------------//
@@ -2761,17 +2799,21 @@ public class PartwiseBuilder
                 current.pmPart.getMeasure().add(current.pmMeasure);
                 current.pmMeasure.setNumber(stack.getScoreId(current.pageMeasureIdOffset));
 
-                if (current.repeatStarted && repeats.isEmpty()) {
-                    // Stop the repeat sequence
-                    final MeasureStyle measureStyle = factory.createMeasureStyle();
-                    final MeasureRepeat repeat = factory.createMeasureRepeat();
-                    repeat.setType(StartStop.STOP);
-                    measureStyle.setMeasureRepeat(repeat);
-                    measureStyle.setNumber(current.repeatStyleNumber);
-                    getAttributes().getMeasureStyle().add(measureStyle);
+                // Stop the repeat sequence of each staff without a sign here
+                final Set<Integer> signStaves = repeatStaffIndices(measure);
 
-                    current.repeatStarted = false;
-                    current.repeatStyleNumber = null;
+                for (Iterator<Integer> it = current.repeatActive.iterator(); it.hasNext();) {
+                    final int idx = it.next();
+
+                    if (!signStaves.contains(idx)) {
+                        final MeasureStyle measureStyle = factory.createMeasureStyle();
+                        final MeasureRepeat repeat = factory.createMeasureRepeat();
+                        repeat.setType(StartStop.STOP);
+                        measureStyle.setMeasureRepeat(repeat);
+                        setRepeatStaff(measureStyle, measure, idx);
+                        getAttributes().getMeasureStyle().add(measureStyle);
+                        it.remove();
+                    }
                 }
 
                 if (!measure.isDummy()) {
@@ -3102,90 +3144,88 @@ public class PartwiseBuilder
                 insertMultipleRest(stack);
             }
 
-            if (!repeats.isEmpty()) {
+            if (!repeats.isEmpty() && !current.repeatCopying) {
                 final MeasureRepeatInter repeatSign = repeats.iterator().next();
                 final int slashes = repeatSign.getShape().getSlashCount();
+                final Set<Integer> signStaves = repeatStaffIndices(measure);
 
-                // Insert "measure-repeat" element in measure attributes, unless already started
-                if (!current.repeatStarted) {
-                    final MeasureStyle measureStyle = factory.createMeasureStyle();
-                    final MeasureRepeat repeat = factory.createMeasureRepeat();
-
-                    repeat.setSlashes(new BigInteger("" + slashes));
-                    repeat.setType(StartStop.START);
-                    repeat.setValue(Integer.toString(slashes)); // Measures in pattern (required)
-                    measureStyle.setMeasureRepeat(repeat);
-
-                    // Sign on a single staff of a multi-staff part?
-                    final int partStaves = measure.getPart().getStaves().size();
-
-                    if ((partStaves > 1) && (repeats.size() < partStaves)
-                            && (repeatSign.getStaff() != null)) {
-                        current.repeatStyleNumber = BigInteger.valueOf(
-                                1 + repeatSign.getStaff().getIndexInPart());
-                        measureStyle.setNumber(current.repeatStyleNumber);
+                // A "measure-repeat" start on each staff whose sequence begins here
+                for (int idx : new TreeSet<>(signStaves)) {
+                    if (current.repeatActive.add(idx)) {
+                        final MeasureStyle measureStyle = factory.createMeasureStyle();
+                        final MeasureRepeat repeat = factory.createMeasureRepeat();
+                        repeat.setSlashes(new BigInteger("" + slashes));
+                        repeat.setType(StartStop.START);
+                        repeat.setValue(Integer.toString(slashes)); // Measures in pattern (required)
+                        measureStyle.setMeasureRepeat(repeat);
+                        setRepeatStaff(measureStyle, measure, idx);
+                        getAttributes().getMeasureStyle().add(measureStyle);
                     }
-
-                    getAttributes().getMeasureStyle().add(measureStyle);
-
-                    current.repeatStarted = true;
                 }
 
-                // Copy logical content of proper preceding measure(s), w/o physical info
-                // One measure per slash
+                // Copy the logical content, w/o physical info, staff per staff: a staff repeats
+                // its own last measure without a sign, which may differ from another staff's.
+                // One measure per slash.
                 // TODO: take into account the number symbol if any above the measure repeat sign
-                final List<Measure> toCopy = new ArrayList<>();
+                final Map<List<Measure>, Set<Integer>> sources = new LinkedHashMap<>();
 
-                Measure precMeasure = measure.getPrecedingInScore();
-                int countLeft = slashes;
-                while (countLeft > 0 && precMeasure != null) {
-                    if (precMeasure.getMeasureRepeats().isEmpty()) {
-                        toCopy.add(0, precMeasure);
-                        if (--countLeft == 0) {
-                            break;
+                for (int idx : new TreeSet<>(signStaves)) {
+                    final List<Measure> toCopy = new ArrayList<>();
+                    Measure precMeasure = measure.getPrecedingInScore();
+
+                    while ((toCopy.size() < slashes) && (precMeasure != null)) {
+                        if (!repeatStaffIndices(precMeasure).contains(idx)) {
+                            toCopy.add(0, precMeasure);
+                        } else if (!toCopy.isEmpty()) {
+                            // We need a whole sequence of "normal" measures on this staff
+                            logger.warn("Abnormal measure sequence before repeat sign {}", measure);
+                            break; // Safer!
                         }
-                    } else if (!toCopy.isEmpty()) {
-                        // We need a whole sequence of "normal" measures (w/o measure repeat signs)
-                        logger.warn("Abnormal measure sequence before repeat sign {}", measure);
-                        break; // Safer!
+
+                        precMeasure = precMeasure.getPrecedingInScore();
                     }
 
-                    precMeasure = precMeasure.getPrecedingInScore();
-                }
-
-                // Staves with a repeat sign (the other staves keep their own content only)
-                final Set<Integer> staves = new HashSet<>();
-                for (MeasureRepeatInter sign : repeats) {
-                    if (sign.getStaff() != null) {
-                        staves.add(sign.getStaff().getIndexInPart());
+                    if (!toCopy.isEmpty()) {
+                        sources.computeIfAbsent(toCopy, k -> new HashSet<>()).add(idx);
                     }
                 }
 
-                // Rewind to measure start, after the content of this measure if any
-                final Rational endCounter = current.measureEndCounter;
+                final ScorePartwise.Part.Measure pmMeasure = current.pmMeasure;
 
-                if ((endCounter != null) && (endCounter.compareTo(Rational.ZERO) > 0)
-                        && !toCopy.isEmpty()) {
-                    insertBackup(endCounter);
-                }
+                for (Entry<List<Measure>, Set<Integer>> entry : sources.entrySet()) {
+                    final List<Measure> toCopy = entry.getKey();
 
-                for (int i = 0, iMax = toCopy.size() - 1; i <= iMax; i++) {
-                    final Measure sourceMeasure = toCopy.get(i);
-                    current.repeatCopying = true;
-                    current.repeatStaves = staves.isEmpty() ? null : staves;
-                    logger.debug("{} copying {}", measure, sourceMeasure);
-                    processMeasure(sourceMeasure);
+                    // Rewind to measure start, after what this measure already holds
+                    final Rational endCounter = current.measureEndCounter;
 
-                    if (i < iMax) {
-                        // Allocate a new Measure
-                        current.pmMeasure = factory.createScorePartwisePartMeasure();
-                        current.pmPart.getMeasure().add(current.pmMeasure);
-                        current.pmMeasure.setNumber(
-                                stack.getScoreId(current.pageMeasureIdOffset) + "+" + (i + 1));
+                    if ((endCounter != null) && (endCounter.compareTo(Rational.ZERO) > 0)) {
+                        insertBackup(endCounter);
                     }
 
-                    current.repeatCopying = false;
-                    current.repeatStaves = null;
+                    for (int i = 0, iMax = toCopy.size() - 1; i <= iMax; i++) {
+                        final Measure sourceMeasure = toCopy.get(i);
+                        current.repeatCopying = true;
+                        current.repeatStaves = entry.getValue();
+                        logger.debug("{} copying {}", measure, sourceMeasure);
+                        processMeasure(sourceMeasure);
+
+                        if (i < iMax) {
+                            // Allocate a new Measure
+                            current.pmMeasure = factory.createScorePartwisePartMeasure();
+                            current.pmPart.getMeasure().add(current.pmMeasure);
+                            current.pmMeasure.setNumber(
+                                    stack.getScoreId(current.pageMeasureIdOffset) + "+" + (i + 1));
+                        }
+
+                        current.repeatCopying = false;
+                        current.repeatStaves = null;
+                    }
+
+                    // processMeasure() of the source ended "its" measure: back to this one
+                    if (toCopy.size() == 1) {
+                        current.pmMeasure = pmMeasure;
+                        current.measure = measure;
+                    }
                 }
             }
         } catch (Exception ex) {
@@ -5114,18 +5154,14 @@ public class PartwiseBuilder
         // Measure dependent
         Measure measure;
 
-        boolean repeatStarted; // True when in a sequence of repeated measures
+        Set<Integer> repeatActive = new TreeSet<>(); // Staves (index in part) in a sequence of repeated measures
 
         boolean repeatCopying; // True when copying measure pure logical content
 
         Set<Integer> repeatStaves; // Indices in part of staves to copy, when repeatCopying
 
-        BigInteger repeatStyleNumber; // Staff number of current measure-repeat style, if any
-
-        // Per part: repeatStarted and repeatStyleNumber at the end of its last page exported
-        final Map<LogicalPart, Boolean> partRepeatStarted = new HashMap<>();
-
-        final Map<LogicalPart, BigInteger> partRepeatStyleNumber = new HashMap<>();
+        // Per part: repeatActive at the end of its last page exported
+        final Map<LogicalPart, Set<Integer>> partRepeatActive = new HashMap<>();
 
         Rational measureEndCounter; // Time counter at end of last exported voice in measure
 
