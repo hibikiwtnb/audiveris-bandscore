@@ -214,7 +214,8 @@ public class SheetScanner
      * text printed within the staff lines (like "Add Sequenced Synth." in an empty measure).
      * <p>
      * Staff lines are kept, so the spelling is approximate. A line is kept only if it lies within
-     * the staff lines and contains a run of several letters, since notes give no such word.
+     * the staff lines and contains a run of several letters, since notes give no such word. The letters that look
+     * like notes (o, d, b, p, q) are ignored in this count.
      * For a kept line, the stem-less heads found on its letters are removed and its pixels are
      * put back into the buffer, for the words glyphs.
      * To be called after {@link #scanSheet()}.
@@ -261,6 +262,8 @@ public class SheetScanner
                 sheet,
                 sheet.getId() + "-staves");
         final ByteProcessor noStaff = picture.getSource(Picture.SourceKey.NO_STAFF);
+        // Letters that look like a note (a ring, with or without a stem) do not count
+        final String noteLike = "[" + constants.noteLikeLetters.getValue() + "]";
         final Pattern letterRun = Pattern.compile(
                 "\\p{L}{" + constants.minStaffWordLetters.getValue() + ",}");
 
@@ -270,7 +273,8 @@ public class SheetScanner
 
             // Notes can give formula-like garbage ("$b\\frac{}$"), never a run of letters
             if ((staff == null) || line.getValue().contains("$") || line.getWords().stream()
-                    .noneMatch(w -> letterRun.matcher(w.getValue()).find())) {
+                    .noneMatch(
+                            w -> letterRun.matcher(w.getValue().replaceAll(noteLike, "")).find())) {
                 continue;
             }
 
@@ -353,10 +357,14 @@ public class SheetScanner
                 true,
                 "Should we also run OCR on the inside of staves?");
 
+        private final Constant.String noteLikeLetters = new Constant.String(
+                "oOdbpq0",
+                "Characters ignored in a text found within staff lines (they look like notes)");
+
         private final Constant.Integer minStaffWordLetters = new Constant.Integer(
                 "letters",
                 4,
-                "Minimum run of letters in a word to accept a text line found within staff lines");
+                "Minimum run of (not note-like) letters in a word to accept a text line within staff lines");
 
         private final Scale.Fraction staffHorizontalMargin = new Scale.Fraction(
                 0.25,
