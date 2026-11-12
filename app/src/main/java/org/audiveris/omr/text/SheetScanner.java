@@ -215,7 +215,8 @@ public class SheetScanner
      * <p>
      * Staff lines are kept, so the spelling is approximate. A line is kept only if it lies within
      * the staff lines and contains a run of several letters, since notes give no such word.
-     * The letters that look like notes (o, d, b, p, q) are ignored in this count.
+     * The letters that look like notes (o, d, b, p, q) are ignored in this count, and the line
+     * OCR confidence must be high enough.
      * For a kept line, the stem-less heads found on its letters are removed and its pixels are
      * put back into the buffer, for the words glyphs.
      * To be called after {@link #scanSheet()}.
@@ -272,7 +273,10 @@ public class SheetScanner
             final Staff staff = staffAround(staves, box);
 
             // Notes can give formula-like garbage ("$b\\frac{}$"), never a run of letters
-            if ((staff == null) || line.getValue().contains("$") || line.getWords().stream()
+            final Double conf = line.getConfidence();
+
+            if ((staff == null) || (conf == null) || (conf < constants.minStaffLineConfidence
+                    .getValue()) || line.getValue().contains("$") || line.getWords().stream()
                     .noneMatch(
                             w -> letterRun.matcher(w.getValue().replaceAll(noteLike, "")).find())) {
                 continue;
@@ -365,6 +369,10 @@ public class SheetScanner
                 "letters",
                 4,
                 "Minimum run of (not note-like) letters to accept a text line within staff lines");
+
+        private final Constant.Ratio minStaffLineConfidence = new Constant.Ratio(
+                0.8,
+                "Minimum OCR confidence to accept a text line within staff lines");
 
         private final Scale.Fraction staffHorizontalMargin = new Scale.Fraction(
                 0.25,
