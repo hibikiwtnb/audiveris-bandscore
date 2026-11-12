@@ -342,8 +342,8 @@ def main():
                 if not shown:
                     continue
                 what = ' / '.join(names[p] for p in shown)
-                top = label(stack(tops), '原譜  m%d–%d' % (first, last))
-                bottom = label(stack(bottoms), 'OMR  m%d–%d' % (first, last))
+                top = label(stack(tops), '原譜 p%02d 第 %d 行  m%d–%d  %s' % (page, k, first, last, what))
+                bottom = label(stack(bottoms), 'OMR  m%d–%d  %s' % (first, last, what))
                 out = Image.new('L', (WIDTH, top.height + bottom.height + 12), 128)
                 out.paste(top, (0, 0))
                 out.paste(bottom, (0, top.height + 12))
