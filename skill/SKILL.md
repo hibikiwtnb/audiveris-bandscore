@@ -186,10 +186,9 @@ python3 tools/omr_beat_grid.py S <頁>              # 需要精確位置時：�
 
 對照圖用 `tools/proof_pairs.py` 產生，不要自己裁圖：
 ```bash
-python tools/proof_pairs.py S <merged.musicxml> S/proof_units --group piano    # 第一個聲部（鋼琴大譜表）
-python tools/proof_pairs.py S <merged.musicxml> S/proof_units --group others   # 其他聲部
+python tools/proof_pairs.py S <merged.musicxml> S/proof_units [--parts P1,P3] [--pages 5]
 ```
-每個單位是原譜一行（約 4 小節）：`pNN_sK_<group>.png` 上半原譜、下半 MusicXML 渲染，小節線對齊；`.txt` 是同樣小節的音符清單。需要 Pillow 和 `raw/*.omr`。交給 agent 時只讓它看指定單位的 png 和 txt、不准跑程式，每看完一個單位就寫結果（一次給一頁的單位）。
+每個單位是一個聲部的原譜一行（約 4 小節；鋼琴大譜表算一個聲部）：`pNN_sK_<group>.png` 上半原譜、下半 MusicXML 渲染，小節線對齊；`.txt` 是同樣小節的音符清單。需要 Pillow 和 `raw/*.omr`。交給 agent 時只讓它看指定單位的 png 和 txt、不准跑程式，每看完一個單位就寫結果（一次給一頁的單位）。
 
 ### 結果報告 `S/omr_report.md`（每次跑 OMR 都寫）
 跑完 Step 5 後寫（重跑時整份改成這次的結果）。內容：

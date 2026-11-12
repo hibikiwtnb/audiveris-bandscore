@@ -1,24 +1,26 @@
 #!/usr/bin/env python3
-"""Make "spot the difference" proof units: one printed system (about 4 measures) of the original page
-on top, the same measures of the merged MusicXML rendered by MuseScore below, plus a text listing of
-the MusicXML notes of those measures.  An agent proofreading the OMR only compares the two halves.
+"""Make "spot the difference" proof units: one part over one printed system (about 4 measures).
+Each unit is an image with that part of the original page on top and the same measures of the merged
+MusicXML, rendered by MuseScore, below, plus a text listing of the MusicXML notes of those measures.
+An agent proofreading the OMR only compares the two halves.  A grand staff (piano) is one part.
 
 Usage (from skill/, with Pillow):
-  python tools/proof_pairs.py <song dir> <merged.musicxml> <out dir> [--group piano|others|all]
-                              [--pages 5,6] [--min-stack 300]
+  python tools/proof_pairs.py <song dir> <merged.musicxml> <out dir> [--parts P1,P3] [--pages 5,6]
+                              [--min-stack 300]
 
 Geometry comes from the Audiveris projects <song dir>/raw/<id>_pNN.omr: each system's measure stacks
-(left/right x) and staff lines (y), drawn on the project's BINARY.png.  Stacks narrower than
---min-stack pixels are courtesy key/clef space read as a measure (the "phantom measures" a hook
-removes) and are skipped.  The remaining stacks are numbered in order and must add up to the merged
-score's measure count; otherwise the run stops.
+(left/right x) and staff lines (y), drawn on the project's BINARY.png; book.xml says which part each
+printed staff belongs to.  Stacks narrower than --min-stack pixels are courtesy key/clef space read as
+a measure (the "phantom measures" a hook removes) and are skipped.  The remaining stacks are numbered
+in order and must add up to the merged score's measure count; otherwise the run stops.
 
-Groups: piano = the first part (grand staff), others = every part below it, all = the whole system.
-The original crop takes the staves of the group; a system where the original prints fewer staves
-(empty parts hidden) is cropped as printed.
+The MusicXML half: each part alone, the whole score rendered once with the printed system breaks, then
+cut by system and each measure stretched to its printed width, so bar lines line up and measure repeats,
+line-start clefs and keys come out as printed.
 
-Out dir gets, per unit, pNN_sK_<group>.png (original on top, MusicXML below) and .txt (MusicXML notes:
-written pitch, i.e. 8va/15ma lines taken off; hidden coll'8va doubles marked), and index.txt.
+Out dir gets, per unit, pNN_sK_<part id>.png and .txt (MusicXML notes: written pitch, i.e. 8va/15ma
+lines taken off; hidden coll'8va doubles marked), and index.txt.  A part not printed in a system (empty
+staves hidden) gets no image; index.txt lists it, flagged when the MusicXML has notes there.
 """
 import argparse
 import copy
@@ -45,36 +47,49 @@ MPOS_DPI = 4320       # .mpos coordinates per inch (360 dpi x 12)
 def read_systems(omr, min_stack):
     with zipfile.ZipFile(omr) as z:
         sheet = ET.fromstring(z.read('sheet#1/sheet#1.xml'))
+        book = ET.fromstring(z.read('book.xml'))
         image = Image.open(z.open('sheet#1/BINARY.png')).convert('L')
     interline = int(sheet.find('scale/interline').get('main'))
+    logical = [[int(p.get('logical-id')) for p in s.findall('part')] for s in book.iter('system')]
     systems = []
-    for s in sheet.iter('system'):
-        stacks = [(int(k.get('left')), int(k.get('right'))) for k in s.findall('stack')]
+    for k, s in enumerate(sheet.iter('system')):
+        stacks = [(int(st.get('left')), int(st.get('right'))) for st in s.findall('stack')]
         stacks = [st for st in stacks if st[1] - st[0] >= min_stack]
-        parts = []
-        for p in s.findall('part'):
+        parts = {}
+        for j, p in enumerate(s.findall('part')):
             staves = []
             for st in p.findall('staff'):
                 ys = [float(pt.get('y')) for ln in st.find('lines') for pt in ln.findall('point')]
                 staves.append((min(ys), max(ys)))
-            parts.append(staves)
+            parts[logical[k][j]] = staves
         systems.append(dict(stacks=stacks, parts=parts))
     return image, interline, systems
 
 
-def crop_original(image, interline, system, group):
-    parts = system['parts']
-    chosen = parts[:1] if group == 'piano' else parts[1:] if group == 'others' else parts
-    if not chosen:
+def crop_original(image, interline, system, logical_id):
+    """The part's staves on the original, from halfway to the staff above to halfway to the one below."""
+    if logical_id not in system['parts']:
         return None
-    top = min(y for st in chosen for y, _ in st) - (9 if group != 'others' else 3) * interline
-    bottom = max(y for st in chosen for _, y in st) + 4 * interline
+    mine = system['parts'][logical_id]
+    others = [st for lid, staves in system['parts'].items() if lid != logical_id for st in staves]
+    top = min(y for y, _ in mine)
+    bottom = max(y for _, y in mine)
+    above = [b for _, b in others if b < top]
+    below = [t for t, _ in others if t > bottom]
+    top = (top + max(above)) / 2 if above else top - 8 * interline
+    bottom = (bottom + min(below)) / 2 if below else bottom + 5 * interline
     left = system['stacks'][0][0] - 4 * interline
     right = system['stacks'][-1][1] + interline
     box = (max(0, int(left)), max(0, int(top)), min(image.width, int(right)), min(image.height, int(bottom)))
     stacks = system['stacks']
     bounds = [stacks[0][0]] + [st[0] for st in stacks[1:]] + [stacks[-1][1]]
     return image.crop(box), [b - box[0] for b in bounds]
+
+
+def has_notes(root, part_id, first, last):
+    part = next(p for p in root.findall('part') if p.get('id') == part_id)
+    return any(n.find('pitch') is not None for m in part.findall('measure')
+               if first <= int(m.get('number')) <= last for n in m.findall('note'))
 
 
 def group_score(root, part_ids):
@@ -252,7 +267,7 @@ def main():
     ap.add_argument('song_dir')
     ap.add_argument('merged')
     ap.add_argument('out_dir')
-    ap.add_argument('--group', default='piano', choices=('piano', 'others', 'all'))
+    ap.add_argument('--parts', help='part ids, e.g. P1,P3 (default: all)')
     ap.add_argument('--pages')
     ap.add_argument('--min-stack', type=int, default=300)
     args = ap.parse_args()
@@ -261,7 +276,7 @@ def main():
     root = ET.parse(args.merged).getroot()
     names = {sp.get('id'): sp.findtext('part-name') for sp in root.find('part-list').findall('score-part')}
     ids = [p.get('id') for p in root.findall('part')]
-    group_ids = ids[:1] if args.group == 'piano' else ids[1:] if args.group == 'others' else ids
+    chosen = args.parts.split(',') if args.parts else ids
     total = len(root.find('part').findall('measure'))
     plan, n = [], 1
     for f in omrs:
@@ -276,33 +291,37 @@ def main():
     os.makedirs(args.out_dir, exist_ok=True)
     index = []
     with tempfile.TemporaryDirectory() as work:
-        rendered = render_systems(group_score(root, group_ids), work)
-        if len(rendered) != len(plan):
-            sys.exit('MuseScore laid out %d systems, the original has %d' % (len(rendered), len(plan)))
-        for (page, k, first, last, image, interline, s), (xml, xml_bounds) in zip(plan, rendered):
-            if wanted and page not in wanted:
-                continue
-            name = 'p%02d_s%d_%s' % (page, k, args.group)
-            cropped = crop_original(image, interline, s, args.group)
-            if cropped is None:
-                continue
-            orig, orig_bounds = cropped
-            if len(xml_bounds) != len(orig_bounds):
-                sys.exit('%s: %d bars rendered, %d on the original' % (name, len(xml_bounds) - 1, len(orig_bounds) - 1))
-            xml = align(xml, xml_bounds, orig.width, orig_bounds, orig.height)
-            top = label(orig.convert('L'), '原譜 p%02d 第 %d 行  m%d–%d' % (page, k, first, last))
-            bottom = label(xml, 'OMR（MusicXML 經 MuseScore 渲染）  m%d–%d' % (first, last))
-            out = Image.new('L', (WIDTH, top.height + bottom.height + 12), 128)
-            out.paste(top, (0, 0))
-            out.paste(bottom, (0, top.height + 12))
-            out.save(os.path.join(args.out_dir, name + '.png'), optimize=True)
-            with open(os.path.join(args.out_dir, name + '.txt'), 'w', encoding='utf-8') as fh:
-                fh.write('# %s  m%d–%d（音高為譜面書寫音高；beat 從 1 起算；×後面是時值，單位四分音符）\n'
-                         % (name, first, last))
-                fh.write(listing(root, group_ids, names, first, last) + '\n')
-            index.append('%s\tm%d-%d' % (name, first, last))
-            print(name, 'm%d-%d' % (first, last))
-    with open(os.path.join(args.out_dir, 'index.txt'), 'a', encoding='utf-8') as fh:
+        for part_id in chosen:
+            logical_id = ids.index(part_id) + 1
+            rendered = render_systems(group_score(root, [part_id]), work)
+            if len(rendered) != len(plan):
+                sys.exit('%s: MuseScore laid out %d systems, the original has %d' % (part_id, len(rendered), len(plan)))
+            for (page, k, first, last, image, interline, s), (xml, xml_bounds) in zip(plan, rendered):
+                if wanted and page not in wanted:
+                    continue
+                name = 'p%02d_s%d_%s' % (page, k, part_id)
+                cropped = crop_original(image, interline, s, logical_id)
+                if cropped is None:
+                    flag = '  OMR 有音符，原譜沒印這個聲部' if has_notes(root, part_id, first, last) else ''
+                    index.append('%s\tm%d-%d\t%s\t原譜沒印%s' % (name, first, last, names[part_id], flag))
+                    continue
+                orig, orig_bounds = cropped
+                if len(xml_bounds) != len(orig_bounds):
+                    sys.exit('%s: %d bars rendered, %d on the original' % (name, len(xml_bounds) - 1, len(orig_bounds) - 1))
+                xml = align(xml, xml_bounds, orig.width, orig_bounds, orig.height)
+                top = label(orig.convert('L'), '原譜 p%02d 第 %d 行  m%d–%d  %s' % (page, k, first, last, names[part_id]))
+                bottom = label(xml, 'OMR（MusicXML 經 MuseScore 渲染）  m%d–%d  %s' % (first, last, names[part_id]))
+                out = Image.new('L', (WIDTH, top.height + bottom.height + 12), 128)
+                out.paste(top, (0, 0))
+                out.paste(bottom, (0, top.height + 12))
+                out.save(os.path.join(args.out_dir, name + '.png'), optimize=True)
+                with open(os.path.join(args.out_dir, name + '.txt'), 'w', encoding='utf-8') as fh:
+                    fh.write('# %s  m%d–%d  %s（音高為譜面書寫音高；beat 從 1 起算；×後面是時值，單位四分音符）\n'
+                             % (name, first, last, names[part_id]))
+                    fh.write(listing(root, [part_id], names, first, last) + '\n')
+                index.append('%s\tm%d-%d\t%s' % (name, first, last, names[part_id]))
+                print(name, 'm%d-%d' % (first, last))
+    with open(os.path.join(args.out_dir, 'index.txt'), 'w', encoding='utf-8') as fh:
         fh.write('\n'.join(index) + '\n')
 
 

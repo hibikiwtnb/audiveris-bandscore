@@ -15,7 +15,7 @@
 - 授權：與上游相同，[AGPL-3.0](LICENSE)
 - **下載**：macOS（Apple 晶片、Intel）和 Windows 的預編譯 zip 在 [Releases](https://github.com/hibikiwtnb/audiveris-bandscore/releases)（需要 Java 25）；播放與檢查請搭配 [MuseScore-Bandscore](https://github.com/hibikiwtnb/MuseScore/releases)
 - **AI 轉譜流程**：[`skill/`](skill/README.md) 是給 AI agent 的作業手冊和工具，把樂隊總譜 PDF 一路轉成可播放的 MusicXML；圖解說明書可以[線上閱讀](https://hibikiwtnb.github.io/audiveris-bandscore/)（原始檔在 [`skill/docs/guide/`](skill/docs/guide/index.html)）
-- **對照校閱**：[`skill/tools/proof_pairs.py`](skill/tools/proof_pairs.py) 把 OMR 結果切成原譜一行（約 4 小節）一個的單位，上半是原譜、下半是同樣小節的 MusicXML 渲染，小節線上下對齊，`%`、行首譜號調號都和原譜一樣，另附音符清單。校對（人或 AI agent）只要找上下的不同。
+- **對照校閱**：[`skill/tools/proof_pairs.py`](skill/tools/proof_pairs.py) 把 OMR 結果切成「一個聲部 × 原譜一行（約 4 小節）」的單位，上半是原譜、下半是同樣小節的 MusicXML 渲染，小節線上下對齊，`%`、行首譜號調號都和原譜一樣，另附音符清單。校對（人或 AI agent）只要找上下的不同。
 - 回報問題、提議改進：[CONTRIBUTING.md](CONTRIBUTING.md)
 
 ---

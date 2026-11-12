@@ -13,7 +13,7 @@ The goal is OMR that outputs **MusicXML that plays correctly in MuseScore**, fix
 - License: same as upstream, [AGPL-3.0](LICENSE)
 - **Download**: prebuilt zips for macOS (Apple Silicon, Intel) and Windows on the [Releases](https://github.com/hibikiwtnb/audiveris-bandscore/releases) page (needs Java 25). For playback and checking, use [MuseScore-Bandscore](https://github.com/hibikiwtnb/MuseScore/releases).
 - **AI conversion workflow**: [`skill/`](skill/README.md) is a manual and toolset for AI agents that takes a band score PDF all the way to playable MusicXML. Illustrated guide (Chinese): [read online](https://hibikiwtnb.github.io/audiveris-bandscore/)
-- **Side-by-side proofreading**: [`skill/tools/proof_pairs.py`](skill/tools/proof_pairs.py) cuts the OMR result into units of one printed system (about 4 measures): the original on top, the same measures of the MusicXML rendered below, bar lines aligned, `%` and line-start clefs and keys as printed, with a listing of the notes. A proofreader (person or AI agent) only has to spot the differences.
+- **Side-by-side proofreading**: [`skill/tools/proof_pairs.py`](skill/tools/proof_pairs.py) cuts the OMR result into units of one part over one printed system (about 4 measures): the original on top, the same measures of the MusicXML rendered below, bar lines aligned, `%` and line-start clefs and keys as printed, with a listing of the notes. A proofreader (person or AI agent) only has to spot the differences.
 - Reporting problems and proposing changes: [CONTRIBUTING.md](CONTRIBUTING.md)
 
 The detailed setting reference [USAGE.md](USAGE.md) and the skill documents are in Chinese for now.
