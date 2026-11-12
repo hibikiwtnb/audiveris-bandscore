@@ -147,10 +147,9 @@ def render_systems(xml_root, work):
     return out
 
 
-def align(xml, xml_bounds, width, orig_bounds):
-    """Stretch each measure of the rendering to the width it has on the original page."""
-    k = (orig_bounds[-1] - orig_bounds[0]) / (xml_bounds[-1] - xml_bounds[0])
-    height = max(1, round(xml.height * k))
+def align(xml, xml_bounds, width, orig_bounds, height):
+    """Stretch each measure of the rendering to the width it has on the original page, and the
+    whole rendering to the height of the original crop."""
     src = [0] + xml_bounds + [xml.width]
     dst = [0] + orig_bounds + [width]
     out = Image.new('L', (width, height), 255)
@@ -290,7 +289,7 @@ def main():
             orig, orig_bounds = cropped
             if len(xml_bounds) != len(orig_bounds):
                 sys.exit('%s: %d bars rendered, %d on the original' % (name, len(xml_bounds) - 1, len(orig_bounds) - 1))
-            xml = align(xml, xml_bounds, orig.width, orig_bounds)
+            xml = align(xml, xml_bounds, orig.width, orig_bounds, orig.height)
             top = label(orig.convert('L'), '原譜 p%02d 第 %d 行  m%d–%d' % (page, k, first, last))
             bottom = label(xml, 'OMR（MusicXML 經 MuseScore 渲染）  m%d–%d' % (first, last))
             out = Image.new('L', (WIDTH, top.height + bottom.height + 12), 128)
