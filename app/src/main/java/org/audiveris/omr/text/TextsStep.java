@@ -93,6 +93,7 @@ public class TextsStep
 
         if (OcrUtil.getOcr().isAvailable()) {
             lines.addAll(scanner.scanSheet());
+            lines.addAll(scanner.scanStaves()); // Texts printed within staff lines
         } else {
             logger.warn("TEXTS step: {}", OCR.NO_OCR);
         }

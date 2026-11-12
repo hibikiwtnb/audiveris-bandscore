@@ -26,6 +26,7 @@ import org.audiveris.omr.constant.Constant;
 import org.audiveris.omr.constant.ConstantSet;
 import org.audiveris.omr.glyph.Glyph;
 import org.audiveris.omr.glyph.GlyphFactory;
+import org.audiveris.omr.glyph.ShapeSet;
 import org.audiveris.omr.image.ImageUtil;
 import org.audiveris.omr.image.Template;
 import org.audiveris.omr.run.Orientation;
@@ -46,6 +47,7 @@ import org.audiveris.omr.sig.inter.HeadInter;
 import org.audiveris.omr.sig.inter.Inter;
 import org.audiveris.omr.sig.inter.LedgerInter;
 import org.audiveris.omr.ui.BoardsPane;
+import org.audiveris.omr.util.HorizontalSide;
 import org.audiveris.omr.util.StopWatch;
 
 import org.slf4j.Logger;
@@ -63,6 +65,7 @@ import java.awt.geom.Area;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Pattern;
 
 /**
  * Class <code>SheetScanner</code> runs OCR on the whole sheet, where good inters and
@@ -203,6 +206,129 @@ public class SheetScanner
         }
     }
 
+    //------------//
+    // scanStaves //
+    //------------//
+    /**
+     * Run OCR on the inside of the staves, which {@link #scanSheet()} erases, to catch a
+     * text printed within the staff lines (like "Add Sequenced Synth." in an empty measure).
+     * <p>
+     * Staff lines are kept, so the spelling is approximate. A line is kept only if it lies within
+     * the staff lines and contains a run of several letters, since notes give no such word.
+     * For a kept line, the stem-less heads found on its letters are removed and its pixels are
+     * put back into the buffer, for the words glyphs.
+     * To be called after {@link #scanSheet()}.
+     *
+     * @return the text lines found within staves
+     */
+    public List<TextLine> scanStaves ()
+    {
+        final List<TextLine> kept = new ArrayList<>();
+
+        if (!constants.scanStaves.isSet() || (buffer == null)) {
+            return kept;
+        }
+
+        final Picture picture = sheet.getPicture();
+        final ByteProcessor binary = picture.getSource(Picture.SourceKey.BINARY);
+        final int margin = sheet.getScale().getInterline();
+        final Area outside = new Area(new Rectangle(0, 0, binary.getWidth(), binary.getHeight()));
+        final List<Staff> staves = new ArrayList<>();
+
+        for (SystemInfo system : sheet.getSystems()) {
+            for (Staff staff : system.getStaves()) {
+                if (!staff.isTablature()) {
+                    staves.add(staff);
+                    outside.subtract(StaffManager.getCoreArea(staff, 0, margin));
+                }
+            }
+        }
+
+        if (staves.isEmpty()) {
+            return kept;
+        }
+
+        final BufferedImage img = new ByteProcessor(binary.getBufferedImage()).getBufferedImage();
+        final Graphics2D g = img.createGraphics();
+        g.setColor(Color.WHITE);
+        g.fill(outside);
+        g.dispose();
+
+        final List<TextLine> lines = OcrUtil.scan(
+                img,
+                OCR.LayoutMode.MULTI_BLOCK,
+                sheet.getStub().getOcrLanguages(),
+                sheet,
+                sheet.getId() + "-staves");
+        final ByteProcessor noStaff = picture.getSource(Picture.SourceKey.NO_STAFF);
+        final Pattern letterRun = Pattern.compile(
+                "\\p{L}{" + constants.minStaffWordLetters.getValue() + ",}");
+
+        for (TextLine line : lines) {
+            final Rectangle box = line.getBounds();
+            final Staff staff = staffAround(staves, box);
+
+            // Notes can give formula-like garbage ("$b\\frac{}$"), never a run of letters
+            if ((staff == null) || line.getValue().contains("$") || line.getWords().stream()
+                    .noneMatch(w -> letterRun.matcher(w.getValue()).find())) {
+                continue;
+            }
+
+            // Heads found on the letters
+            int heads = 0;
+
+            for (Inter inter : staff.getSystem().getSig().inters(HeadInter.class)) {
+                if (ShapeSet.StemLessHeads.contains(inter.getShape()) && box.contains(
+                        inter.getCenter())) {
+                    inter.remove();
+                    heads++;
+                }
+            }
+
+            // Pixels for the words glyphs
+            final Rectangle clip = box.intersection(
+                    new Rectangle(0, 0, buffer.getWidth(), buffer.getHeight()));
+
+            for (int y = clip.y; y < (clip.y + clip.height); y++) {
+                for (int x = clip.x; x < (clip.x + clip.width); x++) {
+                    buffer.set(x, y, (noStaff.get(x, y) < 127) ? 0 : 255);
+                }
+            }
+
+            logger.info(
+                    "Staff#{} text within staff lines \"{}\", {} stem-less heads removed",
+                    staff.getId(),
+                    line.getValue(),
+                    heads);
+            kept.add(line);
+        }
+
+        return kept;
+    }
+
+    //-------------//
+    // staffAround //
+    //-------------//
+    /**
+     * Report the staff whose lines embrace the center of the provided box, if any.
+     */
+    private static Staff staffAround (List<Staff> staves,
+                                      Rectangle box)
+    {
+        final double x = box.getCenterX();
+        final double y = box.getCenterY();
+
+        for (Staff staff : staves) {
+            if ((x >= staff.getAbscissa(HorizontalSide.LEFT)) && (x <= staff.getAbscissa(
+                    HorizontalSide.RIGHT)) && (y >= staff.getFirstLine().yAt(x)) && (y <= staff
+                            .getLastLine().yAt(x))) {
+                return staff;
+            }
+        }
+
+        return null;
+    }
+
     //~ Inner Classes ------------------------------------------------------------------------------
 
     //-----------//
@@ -222,6 +348,15 @@ public class SheetScanner
         private final Constant.Boolean saveTextsBuffer = new Constant.Boolean(
                 false,
                 "Should we save texts buffer on disk?");
+
+        private final Constant.Boolean scanStaves = new Constant.Boolean(
+                true,
+                "Should we also run OCR on the inside of staves?");
+
+        private final Constant.Integer minStaffWordLetters = new Constant.Integer(
+                "letters",
+                4,
+                "Minimum run of letters in a word to accept a text line found within staff lines");
 
         private final Scale.Fraction staffHorizontalMargin = new Scale.Fraction(
                 0.25,
