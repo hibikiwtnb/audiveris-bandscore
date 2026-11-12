@@ -15,6 +15,20 @@ The goal is OMR that outputs **MusicXML that plays correctly in MuseScore**, fix
 - **AI conversion workflow**: [`skill/`](skill/README.md) is a manual and toolset for AI agents that takes a band score PDF all the way to playable MusicXML. Illustrated guide (Chinese): [read online](https://hibikiwtnb.github.io/audiveris-bandscore/)
 - Reporting problems and proposing changes: [CONTRIBUTING.md](CONTRIBUTING.md)
 
+> [!NOTE]
+> **Recent update: side-by-side proofreading (2026-11)**
+>
+> Proofreading OMR output against the printed page used to be mostly locating and lining things up: the proofreader (a person or an AI agent) cropped, zoomed and counted measures. The new [`skill/tools/proof_pairs.py`](skill/tools/proof_pairs.py) turns it into plain "spot the difference":
+>
+> - **One printed system per unit**: the top half of each image is one system of the original page (about 4 measures), the bottom half the same measures of the MusicXML rendered by MuseScore-Bandscore. The original is cut from the page inside the Audiveris project (`.omr`), at the measure and staff positions OMR found.
+> - **Aligned**: the whole score is rendered once with the printed line breaks and cut system by system, so clefs and keys at line starts, courtesy keys and measure repeats (`%`) look as printed; each measure is stretched to its printed width, so bar lines line up, and part names and time signatures are left out.
+> - **A text listing** of the notes of the same measures (written pitch, beat, duration) comes with each unit, for exact reports.
+> - Piano (grand staff) and the other parts are separate groups; a 21-page keyboard band score makes about 120 units.
+>
+> Pilot (the same 3 units): Gemini 3.8 Flash took about 50 seconds per unit, found 2 real errors and reported nothing false; DeepSeek 4.1 Flash took about 3.5 minutes per unit and reported 1 false difference.
+>
+> The export was fixed in the same round: measure repeats (`%`) now start and stop per staff and per measure, and each staff copies its own last measure without a sign (see 2.9).
+
 The detailed setting reference [USAGE.md](USAGE.md) and the skill documents are in Chinese for now.
 
 ---
@@ -156,7 +170,7 @@ The tables below list the improvements over upstream, by what they deal with. **
 | Whole-measure rests | • When a part has an extra or missing note, the other parts' whole-measure rests no longer get longer or shorter | Default |
 | Rests for empty staves | • A staff with nothing in a measure gets a whole-measure rest, so all staves have the same length | Default |
 | Extra rest voices | • Extra voices with only rests on staves that have notes are dropped; the MuseScore playback cursor and voice order are no longer confused | Default |
-| `%` measure repeats | • Fixed a `%` printed in only some staves being expanded into an 8-beat measure in 4/4<br>• `%` now records how many measures repeat, so software that supports it can show it as a `%` sign<br>• Fixed a `%` at the start of a part copying nothing when the previous part ended with a `%`<br>• Fixed added whole-measure rests overlapping the copied notes | Default |
+| `%` measure repeats | • Fixed a `%` printed in only some staves being expanded into an 8-beat measure in 4/4<br>• `%` now records how many measures repeat, so software that supports it can show it as a `%` sign<br>• Fixed a `%` at the start of a part copying nothing when the previous part ended with a `%`<br>• Fixed added whole-measure rests overlapping the copied notes<br>• `%` is marked per staff and per measure: each staff gets its own start and stop (`measure-style number`), only the staves and measures that show a `%` count, and each copies its own last measure without a sign (before, a part shared one start/stop and every repeat copied the measure before the run) | Default |
 | Second-time notes (2x) | • Notes in brackets marked "2x" are exported as MusicXML `time-only`: the first and second time each have the right length, MuseScore can play them per pass, and the measure is no longer too long<br>• For `D.S.x` or when a measure cannot be filled, the second-time notes can be skipped, keeping only the first time | Default; skipping needs [`dropParenthesized`](USAGE.md#dropparenthesized) |
 
 ### 2.10 Other symbols

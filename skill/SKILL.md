@@ -182,7 +182,14 @@ python3 tools/omr_beat_grid.py S <頁>              # 需要精確位置時：�
 - 小節時值統計（需要時）：`python3 tools/measure_duration_audit.py --files S/raw/*.mxl`
 
 ### 逐頁對圖精修（使用者要求時）
-程式化檢查全過，不代表聽起來對。精修時逐頁把輸出（`mscore -r 100 -o p.png`）和原譜頁面圖對照，修正寫在 song hook，整小節重寫、鼓、反覆、8va 用 `tools/hook_lib.py`。常見錯誤清單和寫法見 [lessons.md](docs/lessons.md) 12。
+程式化檢查全過，不代表聽起來對。精修時把輸出和原譜逐行對照，修正寫在 song hook，整小節重寫、鼓、反覆、8va 用 `tools/hook_lib.py`。常見錯誤清單和寫法見 [lessons.md](docs/lessons.md) 12。
+
+對照圖用 `tools/proof_pairs.py` 產生，不要自己裁圖：
+```bash
+python tools/proof_pairs.py S <merged.musicxml> S/proof_units --group piano    # 第一個聲部（鋼琴大譜表）
+python tools/proof_pairs.py S <merged.musicxml> S/proof_units --group others   # 其他聲部
+```
+每個單位是原譜一行（約 4 小節）：`pNN_sK_<group>.png` 上半原譜、下半 MusicXML 渲染，小節線對齊；`.txt` 是同樣小節的音符清單。需要 Pillow 和 `raw/*.omr`。交給 agent 時只讓它看指定單位的 png 和 txt、不准跑程式，每看完一個單位就寫結果（一次給一頁的單位）。
 
 ### 結果報告 `S/omr_report.md`（每次跑 OMR 都寫）
 跑完 Step 5 後寫（重跑時整份改成這次的結果）。內容：
