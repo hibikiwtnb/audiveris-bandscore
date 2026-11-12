@@ -77,94 +77,17 @@ def crop_original(image, interline, system, group):
     return image.crop(box), [b - box[0] for b in bounds]
 
 
-def attr_state(measures, upto):
-    state = {}
-    for m in measures[:upto]:
-        a = m.find('attributes')
-        if a is None:
-            continue
-        for tag in ('divisions', 'key', 'time', 'staves'):
-            if a.find(tag) is not None:
-                state[tag] = copy.deepcopy(a.find(tag))
-        for c in a.findall('clef'):
-            state['clef' + c.get('number', '1')] = copy.deepcopy(c)
-    return state
-
-
-def staff_content(measure, staff):
-    """What one staff plays in a measure, for comparing with the measure before it."""
-    out, cur, last = [], 0, 0
-    for e in measure:
-        if e.tag == 'backup':
-            cur -= int(e.findtext('duration'))
-        elif e.tag == 'forward':
-            cur += int(e.findtext('duration'))
-        elif e.tag == 'note':
-            dur = int(e.findtext('duration', '0'))
-            chord = e.find('chord') is not None
-            on = last if chord else cur
-            if e.findtext('staff', '1') == staff:
-                pitch = e.find('pitch')
-                out.append((on, dur, None if pitch is None else (pitch.findtext('step'), pitch.findtext('alter'),
-                                                                   pitch.findtext('octave'))))
-            if not chord and e.find('grace') is None:
-                last = cur
-                cur += dur
-    return sorted(out, key=str)
-
-
-def repeat_marks(measure):
-    """[(type, staff or None)] of the measure-repeat marks of a measure."""
-    out = []
-    for ms in measure.iter('measure-style'):
-        for r in ms.findall('measure-repeat'):
-            out.append((r.get('type'), ms.get('number')))
-    return out
-
-
-def carry_repeats(ms, idx, staves):
-    """A one-measure repeat (%) running into the excerpt lost its start mark, and MuseScore cannot
-    draw % on the excerpt's first measure (nothing before it).  Give the excerpt's second measure a
-    start mark on each staff where a repeat is running and the measure equals the one before."""
-    if len(idx) < 2:
-        return
-    first, second = ms[idx[0]], ms[idx[1]]
-    for staff in staves:
-        active = False
-        for m in ms[:idx[1] + 1]:
-            for kind, num in repeat_marks(m):
-                if num in (None, staff):
-                    active = kind == 'start'
-        if not active or staff_content(second, staff) != staff_content(first, staff):
-            continue
-        if any(k == 'start' and n in (None, staff) for k, n in repeat_marks(second)):
-            continue
-        a = second.find('attributes')
-        if a is None:
-            a = ET.Element('attributes')
-            second.insert(0, a)
-        style = ET.SubElement(a, 'measure-style', number=staff)
-        ET.SubElement(style, 'measure-repeat', type='start', slashes='1').text = '1'
-
-
-def excerpt(root, part_ids, first, last):
-    """MusicXML with only part_ids and measures first..last, laid out as one line."""
+def group_score(root, part_ids):
+    """The merged score with only part_ids, its system and page breaks kept (they are the printed
+    ones), no part names, and pages large enough that nothing else breaks a line."""
     root = copy.deepcopy(root)
     for tag in ('credit', 'work', 'movement-title', 'identification'):
         for e in root.findall(tag):
             root.remove(e)
     pl = root.find('part-list')
     for sp in list(pl):
-        if sp.tag == 'score-part' and sp.get('id') not in part_ids:
+        if sp.tag == 'part-group' or (sp.tag == 'score-part' and sp.get('id') not in part_ids):
             pl.remove(sp)
-        elif sp.tag == 'part-group':
-            pl.remove(sp)
-    defaults = root.find('defaults')
-    if defaults is not None:
-        pg = defaults.find('page-layout')
-        if pg is not None:
-            pg.find('page-width').text = str(1500 * (last - first + 1))
-            pg.find('page-height').text = '6000'
     for sp in pl.findall('score-part'):
         for tag in ('part-name', 'part-abbreviation'):
             e = sp.find(tag)
@@ -174,55 +97,54 @@ def excerpt(root, part_ids, first, last):
     for p in root.findall('part'):
         if p.get('id') not in part_ids:
             root.remove(p)
-            continue
-        ms = p.findall('measure')
-        idx = [i for i, m in enumerate(ms) if first <= int(m.get('number')) <= last]
-        state = attr_state(ms, idx[0])
-        nstaves = int(state['staves'].text) if 'staves' in state else 1
-        carry_repeats(ms, idx, [str(i) for i in range(1, nstaves + 1)])
-        for i, m in enumerate(ms):
-            if i not in idx:
-                p.remove(m)
-        firstm = ms[idx[0]]
-        a = firstm.find('attributes')
-        if a is None:
-            a = ET.Element('attributes')
-            firstm.insert(0, a)
-        order = ['divisions', 'key', 'time', 'staves']
-        for tag in order:
-            if a.find(tag) is None and tag in state:
-                a.insert(order.index(tag), state[tag])
-        for k, c in state.items():
-            if k.startswith('clef') and not any(x.get('number', '1') == c.get('number', '1') for x in a.findall('clef')):
-                a.append(c)
-        if a.find('time') is not None:
-            a.find('time').set('print-object', 'no')
-        for m in p.findall('measure'):
-            for pr in m.findall('print'):
-                m.remove(pr)
+    defaults = root.find('defaults')
+    if defaults is not None and defaults.find('page-layout') is not None:
+        pg = defaults.find('page-layout')
+        pg.find('page-width').text = '2000'
+        pg.find('page-height').text = '20000'
+    for t in root.iter('time'):
+        t.set('print-object', 'no')
     return root
 
 
-def render(xml_root, work):
-    """PNG of the excerpt cropped to its content, and the x of its bar lines in that crop."""
+def render_systems(xml_root, work):
+    """Render the whole score once; return per printed system (in order) its image and bar lines."""
     src = os.path.join(work, 'x.musicxml')
     ET.ElementTree(xml_root).write(src, encoding='UTF-8', xml_declaration=True)
     mscore = env.load(('MUSESCORE_BIN',))['MUSESCORE_BIN']
+    for f in os.listdir(work):
+        if f.startswith('x-') and f.endswith('.png'):
+            os.remove(os.path.join(work, f))
     subprocess.run([mscore, '-r', str(DPI), '-o', os.path.join(work, 'x.png'), src], check=True, capture_output=True)
     subprocess.run([mscore, '-o', os.path.join(work, 'x.mpos'), src], check=True, capture_output=True)
-    pages = sorted(f for f in os.listdir(work) if f.startswith('x-') and f.endswith('.png'))
-    img = Image.open(os.path.join(work, pages[0])).convert('RGBA')
-    bg = Image.new('RGBA', img.size, 'white')
-    img = Image.alpha_composite(bg, img).convert('L')
-    for f in pages:
-        os.remove(os.path.join(work, f))
-    text = open(os.path.join(work, 'x.mpos'), encoding='utf-8').read()
-    ms = [(float(x), float(w)) for x, w in re.findall(r'<element id="\d+" x="([\d.]+)" y="[\d.]+" sx="([\d.]+)"', text)]
+    pages = {}
+    for f in os.listdir(work):
+        if f.startswith('x-') and f.endswith('.png'):
+            img = Image.open(os.path.join(work, f)).convert('RGBA')
+            bg = Image.new('RGBA', img.size, 'white')
+            pages[int(f[2:-4]) - 1] = Image.alpha_composite(bg, img).convert('L')
     scale = DPI / MPOS_DPI
-    bounds = [x * scale for x, _ in ms] + [(ms[-1][0] + ms[-1][1]) * scale]
-    box = ImageOps.invert(img).getbbox()
-    box = (max(0, box[0] - 20), max(0, box[1] - 20), box[2] + 20, box[3] + 20)
-    return img.crop(box), [b - box[0] for b in bounds]
+    text = open(os.path.join(work, 'x.mpos'), encoding='utf-8').read()
+    found = re.findall(r'<element id="\d+" x="([\d.]+)" y="([\d.]+)" sx="([\d.]+)" sy="([\d.]+)" page="(\d+)"', text)
+    systems = []
+    for x, y, w, h, page in found:
+        x, y, w, h, page = float(x) * scale, float(y) * scale, float(w) * scale, float(h) * scale, int(page)
+        if not systems or systems[-1]['page'] != page or abs(systems[-1]['y'] - y) > 1:
+            systems.append(dict(page=page, y=y, h=h, bars=[]))
+        systems[-1]['bars'].append((x, x + w))
+    out = []
+    for s in systems:
+        img = pages[s['page']]
+        left, right = s['bars'][0][0], s['bars'][-1][1]
+        top, bottom = s['y'] - 0.5 * DPI, s['y'] + s['h'] + 0.3 * DPI
+        box = (int(max(0, left - 0.4 * DPI)), int(max(0, top)), int(min(img.width, right + 10)), int(min(img.height, bottom)))
+        crop = img.crop(box)
+        inv = ImageOps.invert(crop).getbbox()
+        if inv:  # trim blank rows only
+            crop = crop.crop((0, max(0, inv[1] - 20), crop.width, min(crop.height, inv[3] + 20)))
+        bounds = [b0 - box[0] for b0, _ in s['bars']] + [s['bars'][-1][1] - box[0]]
+        out.append((crop, bounds))
+    return out
 
 
 def align(xml, xml_bounds, width, orig_bounds):
@@ -355,7 +277,10 @@ def main():
     os.makedirs(args.out_dir, exist_ok=True)
     index = []
     with tempfile.TemporaryDirectory() as work:
-        for page, k, first, last, image, interline, s in plan:
+        rendered = render_systems(group_score(root, group_ids), work)
+        if len(rendered) != len(plan):
+            sys.exit('MuseScore laid out %d systems, the original has %d' % (len(rendered), len(plan)))
+        for (page, k, first, last, image, interline, s), (xml, xml_bounds) in zip(plan, rendered):
             if wanted and page not in wanted:
                 continue
             name = 'p%02d_s%d_%s' % (page, k, args.group)
@@ -363,9 +288,9 @@ def main():
             if cropped is None:
                 continue
             orig, orig_bounds = cropped
-            xml, xml_bounds = render(excerpt(root, group_ids, first, last), work)
-            if len(xml_bounds) == len(orig_bounds):
-                xml = align(xml, xml_bounds, orig.width, orig_bounds)
+            if len(xml_bounds) != len(orig_bounds):
+                sys.exit('%s: %d bars rendered, %d on the original' % (name, len(xml_bounds) - 1, len(orig_bounds) - 1))
+            xml = align(xml, xml_bounds, orig.width, orig_bounds)
             top = label(orig.convert('L'), '原譜 p%02d 第 %d 行  m%d–%d' % (page, k, first, last))
             bottom = label(xml, 'OMR（MusicXML 經 MuseScore 渲染）  m%d–%d' % (first, last))
             out = Image.new('L', (WIDTH, top.height + bottom.height + 12), 128)
