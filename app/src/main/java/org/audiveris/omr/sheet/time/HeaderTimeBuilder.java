@@ -42,12 +42,17 @@ import org.audiveris.omr.sheet.header.StaffHeader;
 import static org.audiveris.omr.sheet.time.TimeBuilder.TimeKind.DEN;
 import static org.audiveris.omr.sheet.time.TimeBuilder.TimeKind.NUM;
 import static org.audiveris.omr.sheet.time.TimeBuilder.TimeKind.WHOLE;
+import org.audiveris.omr.score.TimeRational;
+import org.audiveris.omr.sig.inter.AbstractNumberInter;
 import org.audiveris.omr.sig.inter.AbstractTimeInter;
 import org.audiveris.omr.sig.inter.BarlineInter;
 import org.audiveris.omr.sig.inter.Inter;
 import org.audiveris.omr.sig.inter.Inters;
 import org.audiveris.omr.sig.inter.TimeNumberInter;
 import org.audiveris.omr.sig.inter.TimeWholeInter;
+import org.audiveris.omr.text.OcrUtil;
+import org.audiveris.omr.text.TextLine;
+import org.audiveris.omr.text.paddle.PaddleOCR;
 import org.audiveris.omr.util.ChartPlotter;
 
 import org.slf4j.Logger;
@@ -62,6 +67,7 @@ import java.awt.Color;
 import java.awt.Rectangle;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
@@ -270,6 +276,179 @@ public class HeaderTimeBuilder
             processHalf(NUM); // Look for top halves      (like 6/)
             processHalf(DEN); // Look for bottom halves   (like /8)
         }
+    }
+
+    //----------//
+    // halfArea //
+    //----------//
+    /**
+     * Report the staff area of the top or bottom number, with some margin around.
+     */
+    private Rectangle halfArea (TimeKind half)
+    {
+        final int il = staff.getSpecificInterline();
+        final int xMid = (range.getStart() + range.getStop()) / 2;
+        final int top = staff.getFirstLine().yAt(xMid);
+        final int bottom = staff.getLastLine().yAt(xMid);
+        final int mid = (top + bottom) / 2;
+        final int y1 = (half == NUM) ? (top - (il / 3)) : (mid - 1);
+        final int y2 = (half == NUM) ? (mid + 1) : (bottom + (il / 3));
+
+        return system.getSheet().clamp(
+                new Rectangle(range.getStart() - il, y1, range.getWidth() + (2 * il), y2 - y1 + 1));
+    }
+
+    //------------//
+    // imposeTime //
+    //------------//
+    /**
+     * Keep only the candidates that match the num/den pair read by the OCR in the column, and
+     * create the number candidates that the classifier did not find.
+     *
+     * @param num   top number
+     * @param den   bottom number
+     * @param grade grade for the created candidates
+     */
+    void imposeTime (int num,
+                     int den,
+                     double grade)
+    {
+        if (!range.hasStart() || (range.getWidth() < params.minTimeWidth)) {
+            return;
+        }
+
+        final TimeRational rational = new TimeRational(num, den);
+
+        for (Iterator<Inter> it = wholes.iterator(); it.hasNext();) {
+            final Inter whole = it.next();
+            final Shape shape = whole.getShape();
+
+            if ((shape == Shape.COMMON_TIME) || (shape == Shape.CUT_TIME) || !rational.equals(
+                    AbstractTimeInter.rationalOf(shape))) {
+                logger.debug("Staff#{} OCR {} discards {}", staff.getId(), rational, whole);
+                whole.remove();
+                it.remove();
+            }
+        }
+
+        for (TimeKind half : new TimeKind[] { NUM, DEN }) {
+            final List<Inter> inters = (half == NUM) ? nums : dens;
+            final int value = (half == NUM) ? num : den;
+
+            for (Iterator<Inter> it = inters.iterator(); it.hasNext();) {
+                final TimeNumberInter number = (TimeNumberInter) it.next();
+
+                if (number.getValue() != value) {
+                    logger.debug("Staff#{} OCR {} discards {}", staff.getId(), rational, number);
+                    number.remove();
+                    it.remove();
+                }
+            }
+
+            if (!inters.isEmpty()) {
+                continue;
+            }
+
+            // Create the missing number out of the glyph parts found in this half
+            Shape shape = null;
+
+            for (Shape s : halfShapes) {
+                final Integer v = AbstractNumberInter.valueOf(s);
+
+                if ((v != null) && (v == value)) {
+                    shape = s;
+                }
+            }
+
+            final int top = roi.y + ((half == NUM) ? 0 : (roi.height - (roi.height / 2)));
+            final Rectangle rect = new Rectangle(
+                    range.getStart(),
+                    top,
+                    range.getWidth(),
+                    roi.height / 2);
+            rect.grow(0, -params.yMargin);
+            final List<Glyph> parts = getParts(rect);
+
+            if ((shape == null) || parts.isEmpty()) {
+                continue;
+            }
+
+            final Glyph glyph = system.registerGlyph(GlyphFactory.buildGlyph(parts), null);
+            final TimeNumberInter inter = TimeNumberInter.create(glyph, shape, grade, staff);
+
+            if (inter != null) {
+                inter.setBounds(inter.getSymbolBounds(staff.getSpecificInterline()));
+                sig.addVertex(inter);
+                inters.add(inter);
+                logger.debug("Staff#{} OCR {} creates {}", staff.getId(), rational, inter);
+            }
+        }
+    }
+
+    //-----------//
+    // ocrHalves //
+    //-----------//
+    /**
+     * Read the top and bottom numbers of this staff with the OCR, digits only.
+     * <p>
+     * The gray image with its staff lines is read, as the server reads it best (the binary image
+     * gave a few wrong bottom numbers). Nothing is read if the classifier found no time candidate
+     * at all here: restricted to digits, the OCR would report digits for any ink.
+     *
+     * @return num and den values, null if not both read
+     */
+    int[] ocrHalves ()
+    {
+        if (wholes.isEmpty() && nums.isEmpty() && dens.isEmpty()) {
+            return null;
+        }
+
+        if (!(OcrUtil.getOcr() instanceof PaddleOCR paddle)) {
+            return null;
+        }
+
+        final Sheet sheet = system.getSheet();
+        ByteProcessor source = sheet.getPicture().getSource(Picture.SourceKey.GRAY);
+
+        if (source == null) {
+            source = sheet.getPicture().getSource(Picture.SourceKey.BINARY);
+        }
+
+        final int[] values = new int[2];
+
+        for (TimeKind half : new TimeKind[] { NUM, DEN }) {
+            final Rectangle area = halfArea(half);
+            final ByteProcessor buf = new ByteProcessor(area.width, area.height);
+            buf.copyBits(source, -area.x, -area.y, Blitter.COPY);
+
+            final StringBuilder sb = new StringBuilder();
+
+            try {
+                for (TextLine line : paddle.recognizeLyrics(
+                        sheet,
+                        buf.getBufferedImage(),
+                        area.getLocation(),
+                        "digits",
+                        "Staff#" + staff.getId() + " time " + half)) {
+                    sb.append(line.getValue().trim());
+                }
+            } catch (IllegalStateException ex) {
+                logger.warn("Staff#{} time signature not read by OCR: {}", staff.getId(), ex
+                        .toString());
+
+                return null;
+            }
+
+            logger.debug("Staff#{} OCR {} \"{}\" in {}", staff.getId(), half, sb, area);
+
+            if (!sb.toString().matches("\\d{1,2}")) {
+                return null;
+            }
+
+            values[(half == NUM) ? 0 : 1] = Integer.parseInt(sb.toString());
+        }
+
+        return values;
     }
 
     //----------//

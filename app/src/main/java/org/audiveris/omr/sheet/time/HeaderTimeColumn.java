@@ -21,10 +21,22 @@
 // </editor-fold>
 package org.audiveris.omr.sheet.time;
 
+import org.audiveris.omr.constant.Constant;
+import org.audiveris.omr.constant.ConstantSet;
+import org.audiveris.omr.glyph.Grades;
+import org.audiveris.omr.score.TimeRational;
 import org.audiveris.omr.sheet.Staff;
 import org.audiveris.omr.sheet.SystemInfo;
 import org.audiveris.omr.sig.inter.AbstractTimeInter;
+import org.audiveris.omr.text.OcrUtil;
+import org.audiveris.omr.text.paddle.PaddleOCR;
 import org.audiveris.omr.util.ChartPlotter;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * A subclass of {@link TimeColumn}, specifically meant for managing times in a system
@@ -35,6 +47,12 @@ import org.audiveris.omr.util.ChartPlotter;
 public class HeaderTimeColumn
         extends TimeColumn
 {
+    //~ Static fields/initializers -----------------------------------------------------------------
+
+    private static final Constants constants = new Constants();
+
+    private static final Logger logger = LoggerFactory.getLogger(HeaderTimeColumn.class);
+
     //~ Constructors -------------------------------------------------------------------------------
 
     /**
@@ -102,6 +120,66 @@ public class HeaderTimeColumn
         for (TimeBuilder builder : builders.values()) {
             builder.cleanup();
         }
+    }
+
+    //------------------//
+    // refineCandidates //
+    //------------------//
+    /**
+     * Read the top and bottom numbers of every staff with the OCR (digits only) and, when more
+     * than half of the staves agree on a supported num/den pair, impose it on all staves.
+     * <p>
+     * The glyph classifier misreads blurred low-resolution numbers (a filled 4 seen as 6, a whole
+     * 4/4 seen as 2/4, the same way in every staff), which the OCR reads right. Only staves where
+     * the classifier found some time candidate are read.
+     */
+    @Override
+    protected void refineCandidates ()
+    {
+        if (!constants.useOcr.isSet() || !(OcrUtil.getOcr() instanceof PaddleOCR)) {
+            return;
+        }
+
+        final Map<Integer, Integer> numVotes = new HashMap<>();
+        final Map<Integer, Integer> denVotes = new HashMap<>();
+
+        for (TimeBuilder builder : builders.values()) {
+            final int[] nd = ((HeaderTimeBuilder) builder).ocrHalves();
+
+            if (nd != null) {
+                numVotes.merge(nd[0], 1, Integer::sum);
+                denVotes.merge(nd[1], 1, Integer::sum);
+            }
+        }
+
+        final Map.Entry<Integer, Integer> num = best(numVotes);
+        final Map.Entry<Integer, Integer> den = best(denVotes);
+        final int staves = builders.size();
+        logger.debug("System#{} OCR time votes num:{} den:{}", system.getId(), numVotes, denVotes);
+
+        if ((num == null) || (den == null) || (2 * num.getValue() <= staves)
+                || (2 * den.getValue() <= staves) || (num.getKey() <= 0) || (den.getKey() <= 0)) {
+            return;
+        }
+
+        if (!AbstractTimeInter.isSupported(new TimeRational(num.getKey(), den.getKey()))) {
+            return;
+        }
+
+        // Confidence is the share of staves that agree
+        final double grade = Grades.intrinsicRatio * Math.min(num.getValue(), den.getValue())
+                / staves;
+        logger.info("System#{} OCR reads time signature {}/{} in {} of {} staves", system.getId(),
+                num.getKey(), den.getKey(), Math.min(num.getValue(), den.getValue()), staves);
+
+        for (TimeBuilder builder : builders.values()) {
+            ((HeaderTimeBuilder) builder).imposeTime(num.getKey(), den.getKey(), grade);
+        }
+    }
+
+    private static Map.Entry<Integer, Integer> best (Map<Integer, Integer> votes)
+    {
+        return votes.entrySet().stream().max(Map.Entry.comparingByValue()).orElse(null);
     }
 
     //------------//
@@ -178,5 +256,18 @@ public class HeaderTimeColumn
         } else {
             return -1;
         }
+    }
+
+    //~ Inner Classes ------------------------------------------------------------------------------
+
+    //-----------//
+    // Constants //
+    //-----------//
+    private static final class Constants
+            extends ConstantSet
+    {
+        private final Constant.Boolean useOcr = new Constant.Boolean(
+                true,
+                "Should the OCR (PaddleOCR, digits only) read the numbers of header time signatures?");
     }
 }

@@ -359,7 +359,12 @@ public abstract class TimeColumn
         for (TimeBuilder builder : builders.values()) {
             // Retrieve candidates for time items
             builder.findCandidates();
+        }
 
+        // Cross-check the candidates of the whole column
+        refineCandidates();
+
+        for (TimeBuilder builder : builders.values()) {
             // This fails if no candidate at all is kept in staff after filtering
             if (!builder.filterCandidates()) {
                 cleanup(); // Clean up what has been constructed
@@ -379,6 +384,17 @@ public abstract class TimeColumn
         }
 
         return -1; // Failed
+    }
+
+    //------------------//
+    // refineCandidates //
+    //------------------//
+    /**
+     * Cross-check the candidates found in all staves of the column, before they are filtered.
+     * Void by default.
+     */
+    protected void refineCandidates ()
+    {
     }
 
     //----------------//
