@@ -214,8 +214,8 @@ public class SheetScanner
      * text printed within the staff lines (like "Add Sequenced Synth." in an empty measure).
      * <p>
      * Staff lines are kept, so the spelling is approximate. A line is kept only if it lies within
-     * the staff lines and contains a run of several letters, since notes give no such word. The letters that look
-     * like notes (o, d, b, p, q) are ignored in this count.
+     * the staff lines and contains a run of several letters, since notes give no such word.
+     * The letters that look like notes (o, d, b, p, q) are ignored in this count.
      * For a kept line, the stem-less heads found on its letters are removed and its pixels are
      * put back into the buffer, for the words glyphs.
      * To be called after {@link #scanSheet()}.
@@ -364,7 +364,7 @@ public class SheetScanner
         private final Constant.Integer minStaffWordLetters = new Constant.Integer(
                 "letters",
                 4,
-                "Minimum run of (not note-like) letters in a word to accept a text line within staff lines");
+                "Minimum run of (not note-like) letters to accept a text line within staff lines");
 
         private final Scale.Fraction staffHorizontalMargin = new Scale.Fraction(
                 0.25,
