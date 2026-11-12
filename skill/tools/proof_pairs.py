@@ -91,6 +91,62 @@ def attr_state(measures, upto):
     return state
 
 
+def staff_content(measure, staff):
+    """What one staff plays in a measure, for comparing with the measure before it."""
+    out, cur, last = [], 0, 0
+    for e in measure:
+        if e.tag == 'backup':
+            cur -= int(e.findtext('duration'))
+        elif e.tag == 'forward':
+            cur += int(e.findtext('duration'))
+        elif e.tag == 'note':
+            dur = int(e.findtext('duration', '0'))
+            chord = e.find('chord') is not None
+            on = last if chord else cur
+            if e.findtext('staff', '1') == staff:
+                pitch = e.find('pitch')
+                out.append((on, dur, None if pitch is None else (pitch.findtext('step'), pitch.findtext('alter'),
+                                                                   pitch.findtext('octave'))))
+            if not chord and e.find('grace') is None:
+                last = cur
+                cur += dur
+    return sorted(out, key=str)
+
+
+def repeat_marks(measure):
+    """[(type, staff or None)] of the measure-repeat marks of a measure."""
+    out = []
+    for ms in measure.iter('measure-style'):
+        for r in ms.findall('measure-repeat'):
+            out.append((r.get('type'), ms.get('number')))
+    return out
+
+
+def carry_repeats(ms, idx, staves):
+    """A one-measure repeat (%) running into the excerpt lost its start mark, and MuseScore cannot
+    draw % on the excerpt's first measure (nothing before it).  Give the excerpt's second measure a
+    start mark on each staff where a repeat is running and the measure equals the one before."""
+    if len(idx) < 2:
+        return
+    first, second = ms[idx[0]], ms[idx[1]]
+    for staff in staves:
+        active = False
+        for m in ms[:idx[1] + 1]:
+            for kind, num in repeat_marks(m):
+                if num in (None, staff):
+                    active = kind == 'start'
+        if not active or staff_content(second, staff) != staff_content(first, staff):
+            continue
+        if any(k == 'start' and n in (None, staff) for k, n in repeat_marks(second)):
+            continue
+        a = second.find('attributes')
+        if a is None:
+            a = ET.Element('attributes')
+            second.insert(0, a)
+        style = ET.SubElement(a, 'measure-style', number=staff)
+        ET.SubElement(style, 'measure-repeat', type='start', slashes='1').text = '1'
+
+
 def excerpt(root, part_ids, first, last):
     """MusicXML with only part_ids and measures first..last, laid out as one line."""
     root = copy.deepcopy(root)
@@ -122,6 +178,8 @@ def excerpt(root, part_ids, first, last):
         ms = p.findall('measure')
         idx = [i for i, m in enumerate(ms) if first <= int(m.get('number')) <= last]
         state = attr_state(ms, idx[0])
+        nstaves = int(state['staves'].text) if 'staves' in state else 1
+        carry_repeats(ms, idx, [str(i) for i in range(1, nstaves + 1)])
         for i, m in enumerate(ms):
             if i not in idx:
                 p.remove(m)
