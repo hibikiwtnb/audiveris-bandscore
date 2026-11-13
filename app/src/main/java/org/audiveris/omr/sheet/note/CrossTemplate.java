@@ -126,7 +126,7 @@ public class CrossTemplate
      * minimum grade): the heads touching it in a chord keep it lower than the core (whole
      * notes 0.71 and up, other symbols 0.64 at most on a whole score).
      */
-    private static final double MIN_HOLLOW_FULL = 0.67;
+    private static final double MIN_HOLLOW_FULL = 0.65;
 
     /** Minimum mean darkness on (a sample of) the body of a hollow head, to try a place. */
     private static final double MIN_HOLLOW_INK = 0.35;
