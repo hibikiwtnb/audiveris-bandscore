@@ -97,6 +97,7 @@ import java.awt.geom.Rectangle2D;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -250,6 +251,15 @@ public class NoteHeadsBuilder
             constants.templateDir.getValue(),
             Shape.NOTEHEAD_SLASH);
 
+    /**
+     * Book-made hollow head templates (whole note, half note head), if any: they then find these
+     * heads of 5-line staves on the gray image, instead of the binary matching.
+     */
+    private final Map<Shape, CrossTemplate> hollowTemplates = new EnumMap<>(Shape.class);
+
+    /** Gray image, when hollow templates are used. */
+    private ByteProcessor hollowGray;
+
     /** Head templates for these staves: the sheet ones plus cross heads. */
     private final EnumSet<Shape> drumTemplateNotesAll;
 
@@ -316,6 +326,23 @@ public class NoteHeadsBuilder
         drumTemplateNotesHollow = withCrosses(
                 sheetTemplateNotesHollow,
                 ShapeSet.getTemplateNotesHollow(null));
+
+        for (Shape shape : new Shape[] { Shape.WHOLE_NOTE, Shape.NOTEHEAD_VOID }) {
+            final CrossTemplate t = CrossTemplate.getLoaded(constants.templateDir.getValue(), shape);
+
+            if (t != null) {
+                hollowTemplates.put(shape, t);
+            }
+        }
+
+        if (!hollowTemplates.isEmpty()) {
+            hollowGray = sheet.getPicture().getSource(Picture.SourceKey.GRAY);
+
+            if (hollowGray == null) {
+                logger.warn("No gray image, hollow head templates not used");
+                hollowTemplates.clear();
+            }
+        }
 
         params = new Parameters(scale);
 
@@ -465,6 +492,37 @@ public class NoteHeadsBuilder
                         ch.add(head);
                         tallyStem(head);
                     }
+                }
+            }
+
+            // Hollow heads of a 5-line staff, by the book templates if any (on the gray image)
+            for (Map.Entry<Shape, CrossTemplate> e : hollowTemplates.entrySet()) {
+                if (!usesHollowTemplate(staff, e.getKey())) {
+                    continue;
+                }
+
+                watch.start("Staff #" + staff.getId() + " " + e.getKey());
+
+                for (HeadInter head : e.getValue().lookup(
+                        staff,
+                        hollowGray,
+                        constants.hollowMinGrade.getValue(),
+                        CrossTemplate.hollowPitches(constants.hollowLedgers.getValue()))) {
+                    // A head of another shape found by the binary matching on it is the same
+                    // symbol misread (a whole note chord read as a half note with a stem)
+                    for (Iterator<HeadInter> it = ch.iterator(); it.hasNext();) {
+                        final HeadInter other = it.next();
+
+                        if ((other.getShape() != head.getShape()) && head.getBounds().contains(
+                                other.getCenter())) {
+                            other.remove();
+                            it.remove();
+                        }
+                    }
+
+                    sig.addVertex(head);
+                    ch.add(head);
+                    tallyStem(head);
                 }
             }
 
@@ -1356,6 +1414,20 @@ public class NoteHeadsBuilder
         return staff.isDrum() || hintedDrumStaves.contains(staff);
     }
 
+    //--------------------//
+    // usesHollowTemplate //
+    //--------------------//
+    /**
+     * Tell whether the heads of this shape are found on the staff by the book template (gray),
+     * rather than by the binary matching.
+     */
+    private boolean usesHollowTemplate (Staff staff,
+                                        Shape shape)
+    {
+        return hollowTemplates.containsKey(shape) && !isDrumStaff(staff)
+                && (staff.getLineCount() == 5);
+    }
+
     //~ Static Methods -----------------------------------------------------------------------------
 
     //-------------------//
@@ -2009,6 +2081,15 @@ public class NoteHeadsBuilder
                 0.8,
                 "Minimum correlation for a slash found by the book template");
 
+        private final Constant.Ratio hollowMinGrade = new Constant.Ratio(
+                0.6,
+                "Minimum correlation for a hollow head (whole, half) found by the book template");
+
+        private final Constant.Integer hollowLedgers = new Constant.Integer(
+                "ledgers",
+                3,
+                "How many ledgers above and below the staff to look for hollow heads by template");
+
         private final Constant.Boolean dumpTemplateNotes = new Constant.Boolean(
                 false,
                 "Should we dump the template notes for standard and drum staves?");
@@ -2401,6 +2482,15 @@ public class NoteHeadsBuilder
             scannerTemplateNotesHollow = scannerShapes.clone();
             scannerTemplateNotesHollow.retainAll(
                     hinted ? drumTemplateNotesHollow : sheetTemplateNotesHollow);
+
+            // Hollow heads found by the book templates are not looked for here
+            for (Shape shape : hollowTemplates.keySet()) {
+                if (usesHollowTemplate(line.getStaff(), shape)) {
+                    scannerTemplateNotesAll.remove(shape);
+                    scannerTemplateNotesStem.remove(shape);
+                    scannerTemplateNotesHollow.remove(shape);
+                }
+            }
 
             if (constants.dumpTemplateNotes.isSet()) {
                 if (!isDrumStaff(line.getStaff())) {
@@ -2942,6 +3032,10 @@ public class NoteHeadsBuilder
                             Shape newShape = evalBlackAsVoid(bestLoc.x, bestLoc.y, MIDDLE_LEFT);
 
                             if (newShape != null) {
+                                if (usesHollowTemplate(line.getStaff(), newShape)) {
+                                    continue; // Found by the book template
+                                }
+
                                 shape = newShape;
                             }
                         }
@@ -3071,6 +3165,10 @@ public class NoteHeadsBuilder
                             final Shape newShape = evalBlackAsVoid(bestLoc.x, bestLoc.y, anchor);
 
                             if (newShape != null) {
+                                if (usesHollowTemplate(line.getStaff(), newShape)) {
+                                    continue; // Found by the book template
+                                }
+
                                 shape = newShape;
                             }
                         }

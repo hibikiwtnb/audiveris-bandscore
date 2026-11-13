@@ -12,7 +12,8 @@ flat: narrow, so that the next one of the key signature stays out).  For a chord
 IL is the height of the root letter instead.
 
 Each example is cut out of its page's gray darkness (3x3 median, staff and ledger lines erased
-where white above and below, as Audiveris does before matching), aligned on the first example
+where white above and below, as Audiveris does before matching; kept with --keep-lines, for the
+hollow heads whole and whole_line: a whole note between two lines touches both), aligned on the first example
 (within 2 pixels) and averaged.  Writes into templates/<book>/:
     NAME.png        the template: average gray, ink dark, scaled to an interline of 20 pixels;
                     every pixel of the square is matched
@@ -30,12 +31,14 @@ from PIL import Image
 INTERLINE = 20  # template scale, in pixels
 
 
-def darkness(path, il):
+def darkness(path, il, keep_lines=False):
     """Gray darkness (0 white .. 1 black) of the page at INTERLINE, horizontal line pixels erased
-    (made white) where white above and below; and the scale factor."""
+    (made white) where white above and below unless keep_lines; and the scale factor."""
     g = np.asarray(Image.open(path).convert('L'))
     s = INTERLINE / il
     g = cv2.medianBlur(cv2.resize(g, None, fx=s, fy=s, interpolation=cv2.INTER_CUBIC), 3)
+    if keep_lines:
+        return 1 - g.astype(np.float32) / 255, s
     ink = g < 160
     line = cv2.morphologyEx((g < 200).astype(np.uint8), cv2.MORPH_OPEN,  # pale lines too
                             np.ones((1, int(1.2 * INTERLINE)), np.uint8)) > 0
@@ -66,6 +69,8 @@ def main():
     ap.add_argument('book')
     ap.add_argument('--name', required=True, help='template name: cross, cross_line, slash ...')
     ap.add_argument('--box', type=float, required=True, help='side of the square, in interlines')
+    ap.add_argument('--keep-lines', action='store_true',
+                    help='keep staff lines and ledgers (hollow heads: whole, whole_line)')
     ap.add_argument('--height', type=float, help='height of the box (then --box is its width)')
     ap.add_argument('--from', dest='pages', nargs='+', action='append', required=True,
                     metavar='PAGE IL X,Y', help='a page, its staff interline, example centers')
@@ -75,7 +80,7 @@ def main():
     h = w if args.height is None else int(round(args.height * INTERLINE / 2))
     cells = []
     for page, il, *xys in args.pages:
-        a, s = darkness(page, float(il))
+        a, s = darkness(page, float(il), args.keep_lines)
         for xy in xys:
             x, y = (int(round(float(v) * s)) for v in xy.split(','))
             if not cells:

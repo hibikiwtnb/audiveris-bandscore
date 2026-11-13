@@ -76,6 +76,15 @@ import javax.imageio.ImageIO;
  * <p>
  * The same matching finds the slashes of a guitar staff (the previous chord again, with the
  * slash rhythm) with <code>slash.png</code>, around the pitches given by the caller.
+ * <p>
+ * It also finds the hollow heads of a 5-line staff: whole notes with <code>whole.png</code>
+ * (and <code>whole_line.png</code>, crossed by a line), half note heads with
+ * <code>void.png</code> (and <code>void_line.png</code>). The notches are then the hole of the
+ * head, which a black head fills. These heads are looked for at every ordinate of the staff band,
+ * a place being first checked on a few of its pixels (some ink on the head body, a white hole).
+ * Their lines are not erased (a whole note between two staff lines touches both): the templates
+ * hold them, made by <code>tools/learn_template.py --keep-lines</code>, and only the core of the
+ * head (its sides and hole) is matched, since the heads of a chord touch it above and below.
  */
 public class CrossTemplate
 {
@@ -100,6 +109,9 @@ public class CrossTemplate
 
     /** Maximum mean darkness in the notches of the X. */
     private static final double MAX_NOTCH_INK = 0.25;
+
+    /** Minimum mean darkness on (a sample of) the body of a hollow head, to try a place. */
+    private static final double MIN_HOLLOW_INK = 0.35;
 
     /** Loaded templates, per folder and shape (null when the folder has no such template). */
     private static final Map<String, CrossTemplate> loaded = new HashMap<>();
@@ -163,12 +175,48 @@ public class CrossTemplate
                 staff.pitchToOrdinate(x0, pitches.iterator().next()) - il) - h;
         final int bot = (int) Math.ceil(
                 staff.pitchToOrdinate(x0, ((TreeSet<Integer>) pitches).last()) + il) + h;
-        final Band band = new Band(image, staff, x0, x1, top, bot);
+        final Band band = new Band(image, staff, x0, x1, top, bot, !isHollow());
 
         // Correlation around every cross pitch row, with each template
         final List<double[]> found = new ArrayList<>(); // x, y, corr, pitch, template
         final double[] best = { 0, 0, 0, 0 }; // corr, notch ink, x, y: for the log line
-        for (int x = x0 + h; x < x1 - h; x++) {
+
+        if (isHollow()) {
+            // Hollow heads: every ordinate of the band, a place first checked on a few pixels
+            final int pMin = pitches.iterator().next();
+            final int pMax = ((TreeSet<Integer>) pitches).last();
+
+            for (int x = x0 + h; x < x1 - h; x++) {
+                final int yTop = (int) Math.round(staff.pitchToOrdinate(x, pMin)) - il / 3;
+                final int yBot = (int) Math.round(staff.pitchToOrdinate(x, pMax)) + il / 3;
+
+                for (int y = yTop; y <= yBot; y++) {
+                    for (int i = 0; i < ts.size(); i++) {
+                        final Scaled t = ts.get(i);
+
+                        if ((t.bodyInk(band, x, y) < MIN_HOLLOW_INK)
+                                || (t.notchInk(band, x, y) > MAX_NOTCH_INK)) {
+                            continue;
+                        }
+
+                        final double c = t.correlation(band, x, y);
+
+                        if (c > best[0]) {
+                            best[0] = c;
+                            best[1] = t.notchInk(band, x, y);
+                            best[2] = x;
+                            best[3] = y;
+                        }
+
+                        if (c >= minGrade) {
+                            found.add(new double[] { x, y, c, 0, i });
+                        }
+                    }
+                }
+            }
+        }
+
+        for (int x = x0 + h; !isHollow() && (x < x1 - h); x++) {
             for (int p : pitches) {
                 final int yc = (int) Math.round(staff.pitchToOrdinate(x, p));
 
@@ -239,6 +287,12 @@ public class CrossTemplate
                     (shape == Shape.NOTEHEAD_SLASH) ? 0 : pitch, // A slash has no pitch
                     sheet);
 
+            // A hollow head looked for far from its staff may belong to the next one
+            if ((head != null) && isHollow() && (sheet.getStaffManager().getClosestStaff(
+                    head.getCenter2D()) != staff)) {
+                continue;
+            }
+
             if (head != null) {
                 heads.add(head);
             }
@@ -288,6 +342,34 @@ public class CrossTemplate
         return set;
     }
 
+    //----------//
+    // isHollow //
+    //----------//
+    private boolean isHollow ()
+    {
+        return (shape == Shape.WHOLE_NOTE) || (shape == Shape.NOTEHEAD_VOID);
+    }
+
+    //---------------//
+    // hollowPitches //
+    //---------------//
+    /**
+     * Pitch positions where hollow heads are looked for on a 5-line staff, ascending.
+     *
+     * @param ledgers how many ledgers above and below the staff
+     * @return the pitch positions
+     */
+    public static Set<Integer> hollowPitches (int ledgers)
+    {
+        final Set<Integer> set = new TreeSet<>();
+
+        for (int p = -4 - (2 * ledgers); p <= 4 + (2 * ledgers); p++) {
+            set.add(p);
+        }
+
+        return set;
+    }
+
     //-----------//
     // getLoaded //
     //-----------//
@@ -295,7 +377,7 @@ public class CrossTemplate
      * Report the cross or slash template of the provided folder.
      *
      * @param dir   the template folder (empty for none)
-     * @param shape NOTEHEAD_CROSS or NOTEHEAD_SLASH
+     * @param shape NOTEHEAD_CROSS, NOTEHEAD_SLASH, WHOLE_NOTE or NOTEHEAD_VOID
      * @return the template, or null if none
      */
     public static synchronized CrossTemplate getLoaded (String dir,
@@ -325,8 +407,12 @@ public class CrossTemplate
                                        Shape shape)
     {
         final List<Image> images = new ArrayList<>();
-        final String[] names = (shape == Shape.NOTEHEAD_SLASH) ? new String[] { "slash" }
-                : new String[] { "cross", "cross_line", "cross_ledger" };
+        final String[] names = switch (shape) {
+            case NOTEHEAD_SLASH -> new String[] { "slash" };
+            case WHOLE_NOTE -> new String[] { "whole", "whole_line" };
+            case NOTEHEAD_VOID -> new String[] { "void", "void_line" };
+            default -> new String[] { "cross", "cross_line", "cross_ledger" };
+        };
 
         for (String name : names) {
             final File inkFile = new File(dir, name + ".png");
@@ -347,7 +433,8 @@ public class CrossTemplate
                 }
 
                 logger.info("Template {} {}x{} from {}", name, n, n, dir.getAbsolutePath());
-                images.add(new Image(ink));
+                images.add(new Image(ink, (shape == Shape.WHOLE_NOTE)
+                        || (shape == Shape.NOTEHEAD_VOID)));
             } catch (Exception ex) {
                 logger.warn("Cannot read {} template in {}", name, dir.getAbsolutePath(), ex);
                 return null;
@@ -385,6 +472,21 @@ public class CrossTemplate
               int top,
               int bot)
         {
+            this(image, staff, x0, x1, top, bot, true);
+        }
+
+        /**
+         * @param eraseLines false to keep the lines: a whole note between two staff lines
+         *                   touches both, its top and bottom arcs would be erased with them
+         */
+        public Band (ByteProcessor image,
+                     Staff staff,
+                     int x0,
+                     int x1,
+                     int top,
+                     int bot,
+                     boolean eraseLines)
+        {
             // clipped to the image: a staff band can reach past the page edge (empty if outside)
             this.x0 = Math.max(x0, 0);
             this.y0 = Math.max(top, 0);
@@ -401,6 +503,10 @@ public class CrossTemplate
                     orig[y][x] = g < INK_GRAY;
                     line[y][x] = g < LINE_GRAY;
                 }
+            }
+
+            if (!eraseLines) {
+                return;
             }
 
             // Lines: runs of a row at least 1.2 interline long, erased where white above and
@@ -487,17 +593,24 @@ public class CrossTemplate
     {
         final float[][] ink;
 
+        /** Matched within the head ellipse only (a hollow head), else the whole square. */
+        final boolean ellipse;
+
         /** Scaled versions, per staff interline. */
         final Map<Integer, Scaled> scaled = new HashMap<>();
 
-        Image (float[][] ink)
+        Image (float[][] ink,
+               boolean ellipse)
         {
             this.ink = ink;
+            this.ellipse = ellipse;
         }
 
         synchronized Scaled scaledFor (int il)
         {
-            return scaled.computeIfAbsent(il, k -> new Scaled(ink, (double) k / INTERLINE));
+            return scaled.computeIfAbsent(
+                    il,
+                    k -> new Scaled(ink, (double) k / INTERLINE, ellipse));
         }
     }
 
@@ -533,7 +646,8 @@ public class CrossTemplate
         final int[] wdx, wdy;
 
         Scaled (float[][] ink,
-                double s)
+                double s,
+                boolean ellipse)
         {
             final int n0 = ink.length;
             final int h0 = n0 / 2;
@@ -546,6 +660,7 @@ public class CrossTemplate
             final List<int[]> fore = new ArrayList<>();
             final List<int[]> whole = new ArrayList<>();
             final double r = 0.6 * INTERLINE * s;
+            final Map<Integer, Integer> edgeInk = new HashMap<>(); // per row, dark square edges
             float top = 0; // Darkest template pixel: the template is as pale as its page
 
             for (float[] row : ink) {
@@ -574,11 +689,61 @@ public class CrossTemplate
 
                     if (val >= (0.5 * top)) {
                         fore.add(new int[] { x - half, y - half });
+
+                        if ((x == 0) || (x == n - 1)) {
+                            edgeInk.merge(y - half, 1, Integer::sum);
+                        }
                     }
 
                     if (val >= (0.1 * top)) {
                         whole.add(new int[] { x - half, y - half });
                     }
+                }
+            }
+
+            // Head body only: drop the rows as thin as a stem (a stem the seeds shared, going
+            // up or down from the head, would else enlarge the head and shift its stem anchors)
+            final Map<Integer, Integer> perRow = new HashMap<>();
+            fore.forEach(a -> perRow.merge(a[1], 1, Integer::sum));
+            final int widest = perRow.values().stream().max(Integer::compare).orElse(0);
+            final List<int[]> body = new ArrayList<>();
+
+            for (int[] a : fore) {
+                if (perRow.get(a[1]) >= (widest / 4.0)) {
+                    body.add(a);
+                }
+            }
+
+            if (ellipse && !body.isEmpty()) {
+                // Only the core of the head (its sides and hole, an ellipse 0.6 of its height):
+                // the heads touching it above and below in a chord stay out
+                final double ra = body.stream().mapToInt(a -> Math.abs(a[0])).max().getAsInt()
+                        + 1.5;
+                final double rb = (body.stream().mapToInt(a -> Math.abs(a[1])).max().getAsInt()
+                        + 1.5) * 0.6;
+
+                for (int i = m.size() - 1; i >= 0; i--) {
+                    final double ex = m.get(i)[0] / ra;
+                    final double ey = m.get(i)[1] / rb;
+
+                    if ((ex * ex) + (ey * ey) > 1) {
+                        m.remove(i);
+                        v.remove(i);
+                    }
+                }
+
+                // The lines the template holds (rows dark at a square edge: the head never reaches
+                // them) are not the head: out of its body (bounds) and of its glyph, which stays
+                // within its ellipse
+                body.removeIf(a -> edgeInk.containsKey(a[1]));
+
+                if (!body.isEmpty()) {
+                    final double ha = body.stream().mapToInt(a -> Math.abs(a[0])).max()
+                            .getAsInt() + 1.5;
+                    final double hb = body.stream().mapToInt(a -> Math.abs(a[1])).max()
+                            .getAsInt() + 3.5;
+                    whole.removeIf(
+                            a -> (((a[0] / ha) * (a[0] / ha)) + ((a[1] / hb) * (a[1] / hb))) > 1);
                 }
             }
 
@@ -598,18 +763,6 @@ public class CrossTemplate
             tNorm = Math.sqrt(norm);
             ndx = notch.stream().mapToInt(a -> a[0]).toArray();
             ndy = notch.stream().mapToInt(a -> a[1]).toArray();
-            // Head body only: drop the rows as thin as a stem (a stem the seeds shared, going
-            // up or down from the head, would else enlarge the head and shift its stem anchors)
-            final Map<Integer, Integer> perRow = new HashMap<>();
-            fore.forEach(a -> perRow.merge(a[1], 1, Integer::sum));
-            final int widest = perRow.values().stream().max(Integer::compare).orElse(0);
-            final List<int[]> body = new ArrayList<>();
-
-            for (int[] a : fore) {
-                if (perRow.get(a[1]) >= (widest / 4.0)) {
-                    body.add(a);
-                }
-            }
 
             idx = body.stream().mapToInt(a -> a[0]).toArray();
             idy = body.stream().mapToInt(a -> a[1]).toArray();
@@ -640,6 +793,26 @@ public class CrossTemplate
             }
 
             return num / (Math.sqrt(var) * tNorm);
+        }
+
+        /** Mean darkness on every 4th pixel of the head body at (x, y). */
+        double bodyInk (Band b,
+                        int x,
+                        int y)
+        {
+            if (idx.length == 0) {
+                return 0;
+            }
+
+            double sum = 0;
+            int n = 0;
+
+            for (int i = 0; i < idx.length; i += 4) {
+                sum += b.at(x + idx[i], y + idy[i]);
+                n++;
+            }
+
+            return sum / n;
         }
 
         /** Mean darkness in the notches of the X at (x, y). */
