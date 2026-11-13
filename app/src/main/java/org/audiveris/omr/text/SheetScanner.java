@@ -358,7 +358,7 @@ public class SheetScanner
                 "Should we save texts buffer on disk?");
 
         private final Constant.Boolean scanStaves = new Constant.Boolean(
-                true,
+                false, // Off: one more OCR request per sheet, whole notes come from a template
                 "Should we also run OCR on the inside of staves?");
 
         private final Constant.String noteLikeLetters = new Constant.String(
