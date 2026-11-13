@@ -1,12 +1,12 @@
 # 符號模板庫（每本樂譜集一個資料夾）
 
 同一本樂譜集的字型相同，模板學一次，整本書的曲子共用。
-曲子屬於哪一本記在資料庫的 `docs/books.md`（曲子資料夾的編號是書的頁碼）；表裡沒有就看書的目錄、比對 PDF，查到補進表。程式不判斷。
+曲子屬於哪一本記在資料庫的 `docs/books.md`（曲子資料夾的編號是書的頁碼）；表裡沒有就上網查那本書的收錄曲，查到補進表。程式不判斷。
 
 | 資料夾 | 樂譜集 |
 |---|---|
 | `lovelive_sunshine_best` | BAND SCORE Lovelive!Sunshine!! BEST SCORE（Aqours）<br>https://sheetmusic.jp.yamaha.com/products/4513870050250 |
-| `lovelive_muse_4513870037718` | μ's 樂團譜（收錄「夏色えがおで1,2,Jump!」；書名未查到，先用商品碼）<br>https://sheetmusic.jp.yamaha.com/products/4513870037718 |
+| `lovelive_muse_4513870037718` | バンドスコア ラブライブ！BEST SCORE（μ's，KMP 3771；資料夾名是它的 JAN）<br>https://sheetmusic.jp.yamaha.com/products/4513870037718 |
 
 ## 模板是什麼
 

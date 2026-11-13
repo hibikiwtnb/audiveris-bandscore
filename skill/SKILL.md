@@ -52,7 +52,7 @@ songs/<輸入 PDF 檔名>.musicxml（審查用，在 songs/ 根目錄）  +  S/<
    內容：A 區（曲名、作詞作曲）、B 區（樂器全名／縮寫）、C 區（頁碼）的 OCR，各區邊界、每行譜表（system、y 範圍、線數）、每個詞的外框座標，以及 `partsHint` 草稿和 doubts。
 2. 以這份檔為依據寫 `context/audiveris_hints.txt`：草稿沒有疑點時直接採用，自己補 `:lyrics`（人聲）、`:drums`（鼓）和每個非鼓聲部的開頭音色 `:gmN`（看第一頁的音色標示，見 formats.md）；有 `:lyrics` 時看一段歌詞，寫 `lyricsScripts`（歌詞用到的字種，見 formats.md）。拍號等檔裡沒有的資訊，或有疑點時，用檔裡的座標自己決定要看圖的哪裡。
 3. A 區的曲名、作詞作曲順手寫進 `song_metadata.md`。
-4. 查這首屬於哪本樂譜集：先看資料庫的 `docs/books.md`（曲子資料夾的編號是書的頁碼；表裡沒有就看書的目錄、比對 PDF，查到補進表，不要問使用者），在 `audiveris_hints.txt` 加一行
+4. 查這首屬於哪本樂譜集：先看資料庫的 `docs/books.md`（曲子資料夾的編號是書的頁碼；表裡沒有就上網查那本書的收錄曲（樂譜店商品頁），查到補進表；不要問使用者，也不要看圖），在 `audiveris_hints.txt` 加一行
    `org.audiveris.omr.sheet.note.NoteHeadsBuilder.templateDir=templates/<書名>`（相對於 repo 根目錄，`run_audiveris.py` 換成完整路徑）（鼓的叉頭改用該書模板找）。
    開頭是降號調、而且該書資料夾有和弦模板（`chord_<根音>b.png`）時，加 `org.audiveris.omr.text.ChordFlats.openingFifths=<負的降記號數>`（照 `song_metadata.md` 的開頭調號），OCR 漏掉的和弦 ♭ 由模板補上。
    書名與資料夾對照見 [templates/README.md](templates/README.md)；資料夾不存在時照 templates/README.md 挑例子學一次，把 `check_<名稱>.png` 給使用者確認。不是出自書的（單曲總譜）就不加。
