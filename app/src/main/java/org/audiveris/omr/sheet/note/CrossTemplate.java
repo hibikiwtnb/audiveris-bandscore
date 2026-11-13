@@ -121,6 +121,12 @@ public class CrossTemplate
      */
     private static final double MAX_HOLE_INK = 0.5;
 
+    /**
+     * Minimum correlation on the whole ellipse of a hollow head (its core has to reach the
+     * minimum grade): the heads touching it in a chord keep it lower than the core.
+     */
+    private static final double MIN_HOLLOW_FULL = 0.6;
+
     /** Minimum mean darkness on (a sample of) the body of a hollow head, to try a place. */
     private static final double MIN_HOLLOW_INK = 0.35;
 
@@ -220,8 +226,12 @@ public class CrossTemplate
                         }
 
                         // The whole head too (a natural sign next to a black head can give a core)
-                        if ((c >= minGrade) && (t.fullCorrelation(band, x, y) >= minGrade)) {
-                            found.add(new double[] { x, y, c, 0, i });
+                        if (c >= minGrade) {
+                            final double fc = t.fullCorrelation(band, x, y);
+
+                            if (fc >= MIN_HOLLOW_FULL) {
+                                found.add(new double[] { x, y, c, 0, i, fc });
+                            }
                         }
                     }
                 }
@@ -274,6 +284,7 @@ public class CrossTemplate
         }
 
         final Sheet sheet = staff.getSystem().getSheet();
+        final StringBuilder scores = new StringBuilder();
 
         for (double[] f : peaks) {
             int pitch = (int) f[3];
@@ -307,7 +318,16 @@ public class CrossTemplate
 
             if (head != null) {
                 heads.add(head);
+
+                if (isHollow()) {
+                    scores.append(String.format(" %.2f/%.2f@%d,%d", f[2], f[5], (int) f[0],
+                            (int) f[1]));
+                }
             }
+        }
+
+        if (scores.length() > 0) {
+            logger.info("Staff#{} {} core/whole correlations:{}", staff.getId(), shape, scores);
         }
 
         logger.info(
