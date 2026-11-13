@@ -123,9 +123,10 @@ public class CrossTemplate
 
     /**
      * Minimum correlation on the whole ellipse of a hollow head (its core has to reach the
-     * minimum grade): the heads touching it in a chord keep it lower than the core.
+     * minimum grade): the heads touching it in a chord keep it lower than the core (whole
+     * notes 0.71 and up, other symbols 0.64 at most on a whole score).
      */
-    private static final double MIN_HOLLOW_FULL = 0.6;
+    private static final double MIN_HOLLOW_FULL = 0.67;
 
     /** Minimum mean darkness on (a sample of) the body of a hollow head, to try a place. */
     private static final double MIN_HOLLOW_INK = 0.35;

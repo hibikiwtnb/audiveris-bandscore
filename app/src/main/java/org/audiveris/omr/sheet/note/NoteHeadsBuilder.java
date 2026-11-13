@@ -2503,6 +2503,14 @@ public class NoteHeadsBuilder
                 }
             }
 
+            // A one-line staff (percussion) has no whole notes: its measure repeat signs and
+            // slashes were taken for some
+            if (line.getStaff().getLineCount() == 1) {
+                scannerTemplateNotesAll.remove(Shape.WHOLE_NOTE);
+                scannerTemplateNotesStem.remove(Shape.WHOLE_NOTE);
+                scannerTemplateNotesHollow.remove(Shape.WHOLE_NOTE);
+            }
+
             if (constants.dumpTemplateNotes.isSet()) {
                 if (!isDrumStaff(line.getStaff())) {
                     dumpShapeList(null, "all", scannerTemplateNotesAll);
@@ -3042,7 +3050,9 @@ public class NoteHeadsBuilder
                         if (shape == Shape.NOTEHEAD_BLACK) {
                             Shape newShape = evalBlackAsVoid(bestLoc.x, bestLoc.y, MIDDLE_LEFT);
 
-                            if (newShape != null) {
+                            // No whole note on a one-line staff: the head stays black
+                            if ((newShape != null) && ((newShape != Shape.WHOLE_NOTE) || (line
+                                    .getStaff().getLineCount() != 1))) {
                                 if (usesHollowTemplate(line.getStaff(), newShape)) {
                                     continue; // Found by the book template
                                 }
@@ -3175,7 +3185,9 @@ public class NoteHeadsBuilder
                         if (shape == Shape.NOTEHEAD_BLACK) {
                             final Shape newShape = evalBlackAsVoid(bestLoc.x, bestLoc.y, anchor);
 
-                            if (newShape != null) {
+                            // No whole note on a one-line staff: the head stays black
+                            if ((newShape != null) && ((newShape != Shape.WHOLE_NOTE) || (line
+                                    .getStaff().getLineCount() != 1))) {
                                 if (usesHollowTemplate(line.getStaff(), newShape)) {
                                     continue; // Found by the book template
                                 }
