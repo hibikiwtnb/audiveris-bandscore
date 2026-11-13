@@ -33,7 +33,9 @@ import org.audiveris.omr.score.DrumSet;
 import org.audiveris.omr.sheet.Sheet;
 import org.audiveris.omr.sheet.Staff;
 import org.audiveris.omr.sig.inter.HeadInter;
+import org.audiveris.omr.WellKnowns;
 import org.audiveris.omr.util.ByteUtil;
+import org.audiveris.omr.util.UriUtil;
 import org.audiveris.omr.util.HorizontalSide;
 
 import org.slf4j.Logger;
@@ -44,6 +46,8 @@ import ij.process.ByteProcessor;
 import java.awt.Rectangle;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.io.InputStream;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -51,6 +55,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Function;
 
 import javax.imageio.ImageIO;
 
@@ -401,7 +406,48 @@ public class CrossTemplate
         final String key = dir + "|" + shape;
 
         if (!loaded.containsKey(key)) {
-            loaded.put(key, load(new File(dir), shape));
+            final File folder = new File(dir);
+            loaded.put(key, load(name -> {
+                final File file = new File(folder, name + ".png");
+
+                try {
+                    return file.isFile() ? file.toURI().toURL() : null;
+                } catch (Exception ex) {
+                    return null;
+                }
+            }, folder.getAbsolutePath(), shape));
+        }
+
+        return loaded.get(key);
+    }
+
+    //------------//
+    // getDefault //
+    //------------//
+    /**
+     * Report the default template of the shape, shipped with Audiveris (res/templates), used
+     * when the book has none: printed whole notes look alike in every book.
+     *
+     * @param shape WHOLE_NOTE
+     * @return the template, or null if none
+     */
+    public static synchronized CrossTemplate getDefault (Shape shape)
+    {
+        final String key = "res|" + shape;
+
+        if (!loaded.containsKey(key)) {
+            loaded.put(key, load(name -> {
+                try {
+                    final URL url = UriUtil.toURI(WellKnowns.RES_URI, "templates/" + name + ".png")
+                            .toURL();
+
+                    try (InputStream in = url.openStream()) {
+                        return url;
+                    }
+                } catch (Exception ex) {
+                    return null;
+                }
+            }, "res/templates", shape));
         }
 
         return loaded.get(key);
@@ -410,7 +456,16 @@ public class CrossTemplate
     //------//
     // load //
     //------//
-    private static CrossTemplate load (File dir,
+    /**
+     * Load the template images of the shape.
+     *
+     * @param locate where a template image is, by name (null when none)
+     * @param where  the templates location, for the log
+     * @param shape  the shape
+     * @return the template, or null if its first image is missing
+     */
+    private static CrossTemplate load (Function<String, URL> locate,
+                                       String where,
                                        Shape shape)
     {
         final List<Image> images = new ArrayList<>();
@@ -421,15 +476,20 @@ public class CrossTemplate
             default -> new String[] { "cross", "cross_line", "cross_ledger" };
         };
 
-        for (String name : names) {
-            final File inkFile = new File(dir, name + ".png");
+        if (locate.apply(names[0]) == null) {
+            logger.info("No {} template in {}", names[0], where);
+            return null;
+        }
 
-            if (!inkFile.isFile()) {
+        for (String name : names) {
+            final URL url = locate.apply(name);
+
+            if (url == null) {
                 continue;
             }
 
             try {
-                final BufferedImage ii = ImageIO.read(inkFile);
+                final BufferedImage ii = ImageIO.read(url);
                 final int n = ii.getWidth();
                 final float[][] ink = new float[n][n];
 
@@ -439,18 +499,13 @@ public class CrossTemplate
                     }
                 }
 
-                logger.info("Template {} {}x{} from {}", name, n, n, dir.getAbsolutePath());
+                logger.info("Template {} {}x{} from {}", name, n, n, where);
                 images.add(new Image(ink, (shape == Shape.WHOLE_NOTE)
                         || (shape == Shape.NOTEHEAD_VOID)));
             } catch (Exception ex) {
-                logger.warn("Cannot read {} template in {}", name, dir.getAbsolutePath(), ex);
+                logger.warn("Cannot read {} template in {}", name, where, ex);
                 return null;
             }
-        }
-
-        if (images.isEmpty() || !new File(dir, names[0] + ".png").isFile()) {
-            logger.info("No {} template in {}", names[0], dir.getAbsolutePath());
-            return null;
         }
 
         return new CrossTemplate(images, shape);

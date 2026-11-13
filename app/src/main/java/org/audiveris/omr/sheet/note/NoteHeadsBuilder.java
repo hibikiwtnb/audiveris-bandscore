@@ -252,8 +252,9 @@ public class NoteHeadsBuilder
             Shape.NOTEHEAD_SLASH);
 
     /**
-     * Book-made hollow head templates (whole note, half note head), if any: they then find these
-     * heads of 5-line staves on the gray image, instead of the binary matching.
+     * Hollow head templates: whole note (the book's, else the default one shipped in
+     * res/templates), half note head (the book's, if any). They find these heads of 5-line staves
+     * on the gray image, instead of the binary matching.
      */
     private final Map<Shape, CrossTemplate> hollowTemplates = new EnumMap<>(Shape.class);
 
@@ -328,7 +329,13 @@ public class NoteHeadsBuilder
                 ShapeSet.getTemplateNotesHollow(null));
 
         for (Shape shape : new Shape[] { Shape.WHOLE_NOTE, Shape.NOTEHEAD_VOID }) {
-            final CrossTemplate t = CrossTemplate.getLoaded(constants.templateDir.getValue(), shape);
+            CrossTemplate t = CrossTemplate.getLoaded(constants.templateDir.getValue(), shape);
+
+            // Whole notes: the default template when the book has none (they look alike)
+            if ((t == null) && (shape == Shape.WHOLE_NOTE) && constants.defaultWholeTemplate
+                    .isSet()) {
+                t = CrossTemplate.getDefault(shape);
+            }
 
             if (t != null) {
                 hollowTemplates.put(shape, t);
@@ -2084,6 +2091,10 @@ public class NoteHeadsBuilder
         private final Constant.Ratio hollowMinGrade = new Constant.Ratio(
                 0.6,
                 "Minimum correlation for a hollow head (whole, half) found by the book template");
+
+        private final Constant.Boolean defaultWholeTemplate = new Constant.Boolean(
+                true,
+                "Should whole notes be found by the default template when the book has none?");
 
         private final Constant.Integer hollowLedgers = new Constant.Integer(
                 "ledgers",
