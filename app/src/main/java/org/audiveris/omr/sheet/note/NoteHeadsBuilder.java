@@ -2089,7 +2089,7 @@ public class NoteHeadsBuilder
                 "Minimum correlation for a slash found by the book template");
 
         private final Constant.Ratio hollowMinGrade = new Constant.Ratio(
-                0.6,
+                0.85,
                 "Minimum correlation for a hollow head (whole, half) found by the book template");
 
         private final Constant.Boolean defaultWholeTemplate = new Constant.Boolean(

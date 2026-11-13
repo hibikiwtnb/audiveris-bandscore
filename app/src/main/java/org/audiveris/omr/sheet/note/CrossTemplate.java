@@ -784,6 +784,13 @@ public class CrossTemplate
             }
 
             if (ellipse && !body.isEmpty()) {
+                // The lines the template holds (rows dark at a square edge: the head never reaches
+                // them) are not the head: out of its size, its body (bounds) and its glyph, which
+                // stays within its ellipse
+                body.removeIf(a -> edgeInk.containsKey(a[1]));
+            }
+
+            if (ellipse && !body.isEmpty()) {
                 // Only the core of the head (its sides and hole, an ellipse 0.6 of its height):
                 // the heads touching it above and below in a chord stay out
                 final double ra = body.stream().mapToInt(a -> Math.abs(a[0])).max().getAsInt()
@@ -819,19 +826,10 @@ public class CrossTemplate
                     }
                 }
 
-                // The lines the template holds (rows dark at a square edge: the head never reaches
-                // them) are not the head: out of its body (bounds) and of its glyph, which stays
-                // within its ellipse
-                body.removeIf(a -> edgeInk.containsKey(a[1]));
-
-                if (!body.isEmpty()) {
-                    final double ha = body.stream().mapToInt(a -> Math.abs(a[0])).max()
-                            .getAsInt() + 1.5;
-                    final double hb = body.stream().mapToInt(a -> Math.abs(a[1])).max()
-                            .getAsInt() + 3.5;
-                    whole.removeIf(
-                            a -> (((a[0] / ha) * (a[0] / ha)) + ((a[1] / hb) * (a[1] / hb))) > 1);
-                }
+                // Glyph: the head ellipse, 2 pixels higher for the arcs merged into the lines
+                final double hb = (rb / 0.6) + 2;
+                whole.removeIf(
+                        a -> (((a[0] / ra) * (a[0] / ra)) + ((a[1] / hb) * (a[1] / hb))) > 1);
             }
 
             final double mean = v.stream().mapToDouble(d -> d).average().orElse(0);
