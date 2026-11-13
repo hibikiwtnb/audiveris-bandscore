@@ -22,7 +22,9 @@ Page-level fixes (a measure never gets longer than its time signature, except a 
   * under-full voices are padded with rests up to the measure length of the time signature,
     also when the whole measure is short (a short measure would shift all following
     downbeats; otherwise the barline of that staff is drawn inside the measure); a last note
-    tied over the barline is extended instead, so that its tie stays valid;
+    tied over the barline is extended instead, so that its tie stays valid; the padding rests
+    are hidden where another voice of the staff sounds (one line split into two voices: a
+    printed rest there is not in the score);
   * lyrics of instrumental parts (misread staff text; open syllables draw hyphen dashes
     across systems) become below-staff words, OCR fragments (va, **, b) are dropped;
   * source paths (which may contain the user name) are reduced to file names.
@@ -400,7 +402,8 @@ def pad_measure(part, m, div, bar, report, page):
     target = bar
     targets = backup_targets(m, div)
     changed = False
-    for v, evs in voices_of(m, div).items():
+    voices = voices_of(m, div)
+    for v, evs in voices.items():
         end = max(e.end for e in evs)
         if end >= target:
             continue
@@ -423,6 +426,11 @@ def pad_measure(part, m, div, bar, report, page):
             staff = last.el.findtext('staff')
             idx = list(m).index(last.members[-1]) + 1
             rests = rests_for(target - end, div, v, staff)
+            if any((not e.is_rest) and e.start < target and e.end > end
+                   for v2, evs2 in voices.items() if v2 != v
+                   for e in evs2 if e.el.findtext('staff') == staff):
+                for r in rests:
+                    r.set('print-object', 'no')
             for k, r in enumerate(rests):
                 m.insert(idx + k, r)
             keep_cursor(m, rests[-1], target - end, div)
