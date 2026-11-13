@@ -110,6 +110,12 @@ public class CrossTemplate
     /** Maximum mean darkness in the notches of the X. */
     private static final double MAX_NOTCH_INK = 0.25;
 
+    /**
+     * Maximum mean darkness in the hole of a hollow head: on the gray page a small hole is never
+     * white (a black head, its hole filled, is far darker; the correlation tells them apart too).
+     */
+    private static final double MAX_HOLE_INK = 0.5;
+
     /** Minimum mean darkness on (a sample of) the body of a hollow head, to try a place. */
     private static final double MIN_HOLLOW_INK = 0.35;
 
@@ -195,7 +201,7 @@ public class CrossTemplate
                         final Scaled t = ts.get(i);
 
                         if ((t.bodyInk(band, x, y) < MIN_HOLLOW_INK)
-                                || (t.notchInk(band, x, y) > MAX_NOTCH_INK)) {
+                                || (t.notchInk(band, x, y) > MAX_HOLE_INK)) {
                             continue;
                         }
 
@@ -208,7 +214,8 @@ public class CrossTemplate
                             best[3] = y;
                         }
 
-                        if (c >= minGrade) {
+                        // The whole head too (a natural sign next to a black head can give a core)
+                        if ((c >= minGrade) && (t.fullCorrelation(band, x, y) >= minGrade)) {
                             found.add(new double[] { x, y, c, 0, i });
                         }
                     }
@@ -633,6 +640,13 @@ public class CrossTemplate
 
         final double tNorm;
 
+        /** For a hollow head: offsets and centered values in its whole ellipse, else null. */
+        int[] fdx, fdy;
+
+        double[] ftc;
+
+        double ftNorm;
+
         /** Notch offsets: pixels left white by the template near the center. */
         final int[] ndx, ndy;
 
@@ -721,6 +735,24 @@ public class CrossTemplate
                         + 1.5;
                 final double rb = (body.stream().mapToInt(a -> Math.abs(a[1])).max().getAsInt()
                         + 1.5) * 0.6;
+                final List<int[]> fm = new ArrayList<>();
+                final List<Double> fv = new ArrayList<>();
+
+                for (int i = 0; i < m.size(); i++) {
+                    final double ex = m.get(i)[0] / ra;
+                    final double ey = (m.get(i)[1] / rb) * 0.6;
+
+                    if ((ex * ex) + (ey * ey) <= 1) {
+                        fm.add(m.get(i));
+                        fv.add(v.get(i));
+                    }
+                }
+
+                final double fmean = fv.stream().mapToDouble(d -> d).average().orElse(0);
+                fdx = fm.stream().mapToInt(a -> a[0]).toArray();
+                fdy = fm.stream().mapToInt(a -> a[1]).toArray();
+                ftc = fv.stream().mapToDouble(d -> d - fmean).toArray();
+                ftNorm = Math.sqrt(java.util.Arrays.stream(ftc).map(d -> d * d).sum());
 
                 for (int i = m.size() - 1; i >= 0; i--) {
                     final double ex = m.get(i)[0] / ra;
@@ -774,6 +806,26 @@ public class CrossTemplate
         double correlation (Band b,
                             int x,
                             int y)
+        {
+            return correlation(b, x, y, dx, dy, tc, tNorm);
+        }
+
+        /** Normalized correlation on the whole ellipse of a hollow head (core alone else). */
+        double fullCorrelation (Band b,
+                                int x,
+                                int y)
+        {
+            return (fdx == null) ? correlation(b, x, y)
+                    : correlation(b, x, y, fdx, fdy, ftc, ftNorm);
+        }
+
+        private static double correlation (Band b,
+                                           int x,
+                                           int y,
+                                           int[] dx,
+                                           int[] dy,
+                                           double[] tc,
+                                           double tNorm)
         {
             double num = 0;
             double sum = 0;
