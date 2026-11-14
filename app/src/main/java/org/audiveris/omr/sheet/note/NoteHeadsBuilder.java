@@ -514,7 +514,8 @@ public class NoteHeadsBuilder
                         staff,
                         hollowGray,
                         constants.hollowMinGrade.getValue(),
-                        CrossTemplate.hollowPitches(constants.hollowLedgers.getValue()))) {
+                        (staff.getLineCount() == 1) ? new TreeSet<>(Set.of(-1, 0, 1)) // On or by the line
+                                : CrossTemplate.hollowPitches(constants.hollowLedgers.getValue()))) {
                     // A head of another shape found by the binary matching on it is the same
                     // symbol misread (a whole note chord read as a half note with a stem)
                     for (Iterator<HeadInter> it = ch.iterator(); it.hasNext();) {
@@ -1426,13 +1427,14 @@ public class NoteHeadsBuilder
     //--------------------//
     /**
      * Tell whether the heads of this shape are found on the staff by the book template (gray),
-     * rather than by the binary matching.
+     * rather than by the binary matching: 5-line staves but drums, and one-line staves (whose
+     * measure repeat signs the binary matching takes for whole notes).
      */
     private boolean usesHollowTemplate (Staff staff,
                                         Shape shape)
     {
-        return hollowTemplates.containsKey(shape) && !isDrumStaff(staff)
-                && (staff.getLineCount() == 5);
+        return hollowTemplates.containsKey(shape) && ((staff.getLineCount() == 1) || (!isDrumStaff(
+                staff) && (staff.getLineCount() == 5)));
     }
 
     //~ Static Methods -----------------------------------------------------------------------------
@@ -2503,14 +2505,6 @@ public class NoteHeadsBuilder
                 }
             }
 
-            // A one-line staff (percussion) has no whole notes: its measure repeat signs and
-            // slashes were taken for some
-            if (line.getStaff().getLineCount() == 1) {
-                scannerTemplateNotesAll.remove(Shape.WHOLE_NOTE);
-                scannerTemplateNotesStem.remove(Shape.WHOLE_NOTE);
-                scannerTemplateNotesHollow.remove(Shape.WHOLE_NOTE);
-            }
-
             if (constants.dumpTemplateNotes.isSet()) {
                 if (!isDrumStaff(line.getStaff())) {
                     dumpShapeList(null, "all", scannerTemplateNotesAll);
@@ -3050,9 +3044,7 @@ public class NoteHeadsBuilder
                         if (shape == Shape.NOTEHEAD_BLACK) {
                             Shape newShape = evalBlackAsVoid(bestLoc.x, bestLoc.y, MIDDLE_LEFT);
 
-                            // No whole note on a one-line staff: the head stays black
-                            if ((newShape != null) && ((newShape != Shape.WHOLE_NOTE) || (line
-                                    .getStaff().getLineCount() != 1))) {
+                            if (newShape != null) {
                                 if (usesHollowTemplate(line.getStaff(), newShape)) {
                                     continue; // Found by the book template
                                 }
@@ -3185,9 +3177,7 @@ public class NoteHeadsBuilder
                         if (shape == Shape.NOTEHEAD_BLACK) {
                             final Shape newShape = evalBlackAsVoid(bestLoc.x, bestLoc.y, anchor);
 
-                            // No whole note on a one-line staff: the head stays black
-                            if ((newShape != null) && ((newShape != Shape.WHOLE_NOTE) || (line
-                                    .getStaff().getLineCount() != 1))) {
+                            if (newShape != null) {
                                 if (usesHollowTemplate(line.getStaff(), newShape)) {
                                     continue; // Found by the book template
                                 }
