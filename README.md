@@ -170,7 +170,7 @@ Audiveris 是最常用的開源 OMR 引擎，但拿來處理日式樂團譜、�
 | 演奏記號歸屬修正 | • 重音、斷音等記號不再連到遠處別的聲部的音符 | 預設 |
 | 房子誤認修正 | • 現在可以關閉房子偵測，避免 `— pizz. —↓` 之類的延續線被當成 1、2 房子<br>• 修正了沒被認出的 TAB 或一線譜的線被當成房子，搶走各聲部小節線的問題 | 關閉偵測需要 [`endings`](USAGE.md#endings) |
 | 八度線匯出 | • 8va／8vb 現在會照虛線的實際結束位置，在最後一個涵蓋的音符之後匯出 `stop`；整段播放維持移八度，後處理也不會再把它當成沒有結尾的碎片刪掉<br>• 只印「8va →」而沒有虛線的指示，不再被當成八度線 | 預設 |
-| D.S.／Coda 播放結構 | • 本書有 `segno.png`、`coda.png` 時，系統最上方的導返與 Coda 記號用模板確認，分類器沒認出也能匯出 `<segno>`／`<coda>` 和具名的 `<sound segno=...>`／`<sound coda=...>`<br>• 記號在譜表上方、不一定正好壓在小節線上時，接到最近的譜表小節線<br>• `D.S.`、`D.C.`、`To Coda`／`to ⊕`、`Fine` 在該小節尾匯出 `dalsegno`、`dacapo`、`tocoda`、`fine`<br>• `D.S.①x`、`2x` 這類第幾遍才演奏的文字不當成跳轉 | [`templateDir`](USAGE.md#templatedir)（記號模板） |
+| D.S.／Coda 播放結構 | • 本書有 `segno.png`、`coda.png` 時，系統最上方的導返與 Coda 記號用模板確認，分類器沒認出也能匯出 `<segno>`／`<coda>` 和具名的 `<sound segno=...>`／`<sound coda=...>`<br>• 記號在譜表上方、不一定正好壓在小節線上時，接到最近的譜表小節線<br>• `D.S.`、`D.C.`、`To Coda`／`to ⊕`、`Fine` 在該小節尾匯出 `dalsegno`、`dacapo`、`tocoda`、`fine`<br>• `D.S.①x`、`2x` 這類第幾遍才演奏的文字不當成跳轉<br>• `D sus 4`、`Dcm7` 這類 D 開頭的和弦名稱不當成 D.S.／D.C. | [`templateDir`](USAGE.md#templatedir)（記號模板） |
 
 ### 2.11 穩定性
 

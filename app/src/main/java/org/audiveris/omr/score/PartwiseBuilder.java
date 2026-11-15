@@ -2497,13 +2497,13 @@ public class PartwiseBuilder
         final int group = Math.max(1, groupOf(text));
         final Map<String, String> attrs = new LinkedHashMap<>();
 
-        if (u.startsWith("DS")) {
+        if (isJumpText(u, "DS")) {
             attrs.put("dalsegno", "segno" + group);
 
             if (u.contains("CODA")) {
                 attrs.put("tocoda", "coda" + group);
             }
-        } else if (u.startsWith("DC")) {
+        } else if (isJumpText(u, "DC")) {
             attrs.put("dacapo", "yes");
 
             if (u.contains("CODA")) {
@@ -2522,6 +2522,35 @@ public class PartwiseBuilder
         queueJump(attrs, text);
 
         return true;
+    }
+
+    //------------//
+    // isJumpText //
+    //------------//
+    /**
+     * Whether a text (upper case, without dots and spaces) is the D.S. or D.C. given as prefix.
+     * <p>
+     * After the prefix comes nothing, "AL..." / "CODA" / "FINE" or only a group mark (②, II, 1):
+     * a chord name such as "D sus 4" (DSUS4) or "Dcm7" is not a jump.
+     *
+     * @param u      the text, upper case, dots and spaces removed
+     * @param prefix "DS" or "DC"
+     */
+    private static boolean isJumpText (String u,
+                                       String prefix)
+    {
+        if (!u.startsWith(prefix)) {
+            return false;
+        }
+
+        final String rest = u.substring(prefix.length());
+
+        if (rest.isEmpty() || rest.startsWith("AL") || rest.startsWith("CODA")
+                || rest.startsWith("FINE")) {
+            return true;
+        }
+
+        return rest.replace("I", "").chars().noneMatch(c -> (c >= 'A') && (c <= 'Z'));
     }
 
     //--------------//
