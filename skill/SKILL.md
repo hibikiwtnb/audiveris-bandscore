@@ -117,6 +117,7 @@ python tools/bandscore_postprocess.py S
    - 有 `context/instrument_changes.txt` / `context/ottava.txt` 時接著自動套用（兩支都有防重複套用）。
    - 有 `context/song_metadata.md` 時接著由 `apply_score_hints.py` 套用拍號、速度與排練記號（格式見 Step 1）。
    - 有 `context/hook.py` 時接著執行 `python hook.py <preview>`（只放資料檔表達不了的逐曲修正，如 216 的 `<transpose>`）；沒有就跳過。
+   - 調號統一之前先跑 `tools/fix_guitar_clefs.py`：吉他（名稱含 guitar、不含 bass）的第一譜表一律是高音譜號；Audiveris 偶爾把一個系統讀成低音譜號（F4）而整段音高掉一個八度加五度。工具移除中途的非高音譜號，並把受影響音符的音高移回（臨時記號保留在原寫的音名上）。無高音譜號的純 TAB 聲部不動；`score_quality.py` 的 `guitar_clef_misread` 列出仍殘留的位置。
    - 接著由 `tools/unify_keys.py` 統一調號：樂隊轉調是全體一起，單一聲部調號不同視為 OMR 錯誤。某小節有聲部換到調號 v 時，至少一半聲部同時換、或其他聲部下次換的也是 v 就採用；孤立、沒人跟上的（如誤讀成 0 的還原記號）丟棄；採用的時間線寫進所有聲部。有 `<transpose>` 的聲部與打擊樂不動，所以要保留不同寫法的聲部（如 capo 吉他）必須在這一步之前已帶 `<transpose>`（216 由 `apply_216_global_fixes.py` 加）。輸出會列出被丟棄或延後採用的變化，以及只持續一小節的調號（`check:` 行，需對照原譜）。
    - 最後 `tools/apply_tab_octave.py` 對沒有八度移調的吉他、貝斯聲部補 `<octave-change>-1</octave-change>`（吉他與貝斯吉他的記譜比實音高一個八度；capo／降半音的 `<chromatic>` 保留，只補八度）。放在調號統一之後，讓這些聲部仍參與調號比對。
 6. **歌詞與路徑**：

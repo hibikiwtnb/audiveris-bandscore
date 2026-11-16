@@ -17,7 +17,9 @@ concert key moved by its transposition; out_of_range = notes whose sounding pitc
 pitch moved by the part's <transpose>) is outside the usual range of the part's General MIDI
 program (approximate ranges, MuseScore marks such notes);
 harmony_root_without_key_accidental = chord roots written natural on a letter that the key
-signature alters (a flat or sharp the OCR may have dropped).
+signature alters (a flat or sharp the OCR may have dropped);
+guitar_clef_misread = guitar parts with a bass or other low clef on their first staff (guitar is
+always written in treble clef; tools/fix_guitar_clefs.py reverts it).
 """
 import collections
 import copy
@@ -30,6 +32,7 @@ from fractions import Fraction as F
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fix_rehearsal_marks import rehearsal_suspects  # noqa: E402
+from fix_guitar_clefs import is_guitar  # noqa: E402
 
 if sys.platform == 'win32':
     try:
@@ -538,6 +541,17 @@ def main(path):
         low, high = gm_range(program)
         line(f'  {pid} "{names.get(pid) or ""}" program={program} range={midi_name(low)}-{midi_name(high)} '
              f'outside={d["out"]}/{d["total"]} lowest={midi_name(d["lo"])} highest={midi_name(d["hi"])}')
+
+    misread = []
+    for p in parts:
+        name = names.get(p.get('id')) or ''
+        if not is_guitar(name, ''):
+            continue
+        for m in p.findall('measure'):
+            for c in m.findall('attributes/clef'):
+                if (c.get('number') or '1') == '1' and c.findtext('sign') not in ('G', 'TAB', None):
+                    misread.append(f'{p.get("id")}:m{m.get("number")}')
+    line(f'guitar_clef_misread count={len(misread)}' + (' at=' + ' '.join(misread) if misread else ''))
 
     roots = roots_without_key_accidental(parts)
     line(f'harmony_root_without_key_accidental count={len(roots)}' +

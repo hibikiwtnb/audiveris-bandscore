@@ -693,6 +693,9 @@ def main(song_dir):
         env = dict(os.environ, PYTHONPATH=os.pathsep.join(
             filter(None, [HERE, os.environ.get('PYTHONPATH')])))
         subprocess.run([sys.executable, song_fix, merged], check=True, env=env)
+    # guitar staves Audiveris read with a bass clef go back to treble before keys are unified
+    subprocess.run([sys.executable, os.path.join(HERE, 'fix_guitar_clefs.py'), merged],
+                   check=True)
     # last, so that parts a song hook marked with <transpose> are left alone
     subprocess.run([sys.executable, os.path.join(HERE, 'unify_keys.py'), merged], check=True)
     # guitar / bass-guitar notation is written an octave above sounding: add the octave after
