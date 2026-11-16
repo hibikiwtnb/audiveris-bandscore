@@ -258,6 +258,7 @@ def repair_zero_divisions(root, report):
 def fill_empty_measures(root, report):
     for part in root.findall('part'):
         div, staves, bar = 1, 1, F(4)
+        tab_staves = set()
         for m in part.findall('measure'):
             a = m.find('attributes')
             if a is not None:
@@ -268,20 +269,41 @@ def fill_empty_measures(root, report):
                 tm = a.find('time')
                 if tm is not None and tm.find('beats') is not None:
                     bar = F(int(tm.findtext('beats')) * 4, int(tm.findtext('beat-type')))
-            if m.find('note') is not None:
+                for c in a.findall('clef'):
+                    sn = c.get('number') or '1'
+                    if c.findtext('sign') == 'TAB':
+                        tab_staves.add(sn)
+                    else:
+                        tab_staves.discard(sn)
+                for sd in a.findall('staff-details'):
+                    if sd.findtext('staff-type') == 'tablature':
+                        tab_staves.add(sd.get('number') or '1')
+            present = {n.findtext('staff') or '1' for n in m.findall('note')}
+            missing = [st for st in range(1, staves + 1)
+                       if str(st) not in present and str(st) not in tab_staves]
+            if not missing:
                 continue
+            kids = list(m)
+            idx = next((i for i, k in enumerate(kids)
+                        if k.tag == 'barline' and k.get('location') == 'right'), len(kids))
+            cursor = 0
+            for k in kids[:idx]:
+                if k.tag == 'note' and k.find('grace') is None and k.find('chord') is None:
+                    cursor += int(k.findtext('duration') or 0)
+                elif k.tag == 'forward':
+                    cursor += int(k.findtext('duration') or 0)
+                elif k.tag == 'backup':
+                    cursor -= int(k.findtext('duration') or 0)
             new = []
-            for st in range(1, staves + 1):
-                if st > 1:
+            for st in missing:
+                if cursor > 0:
                     b = ET.Element('backup')
-                    ET.SubElement(b, 'duration').text = str(int(bar * div))
+                    ET.SubElement(b, 'duration').text = str(cursor)
                     new.append(b)
                 n = make_rest(bar, div, str(1 + 4 * (st - 1)), str(st) if staves > 1 else None)
                 n.find('rest').set('measure', 'yes')
                 new.append(n)
-            kids = list(m)
-            idx = next((i for i, k in enumerate(kids)
-                        if k.tag == 'barline' and k.get('location') == 'right'), len(kids))
+                cursor = int(bar * div)
             for k, e in enumerate(new):
                 m.insert(idx + k, e)
             report['empty_filled'] += 1
@@ -453,6 +475,72 @@ def trim_and_pad(root, report, page):
             pad_measure(part, m, div, bar, report, page)
 
 
+def merge_double_dot_splits(root, report, page):
+    """Merge a double-dotted half + eighth split across two voices on the same staff."""
+    for part, m, div, bar in part_measures(root):
+        if m.get('implicit') == 'yes' or bar != F(4):
+            continue
+        by_staff = {}
+        for v, evs in voices_of(m, div).items():
+            staves = {e.el.findtext('staff') or '1' for e in evs}
+            if len(staves) == 1:
+                by_staff.setdefault(next(iter(staves)), []).append((v, evs))
+        for st, vs in by_staff.items():
+            if len(vs) < 2:
+                continue
+            merged = False
+            for v1, ev1 in vs:
+                if len(ev1) != 2:
+                    continue
+                e0, e1 = ev1
+                if e0.is_rest or e0.start != 0 or e0.el.findtext('type') != 'half' or not e1.is_rest:
+                    continue
+                d0 = len(e0.el.findall('dot'))
+                for v2, ev2 in vs:
+                    if v2 == v1 or len(ev2) != 1 or ev2[0].is_rest:
+                        continue
+                    e2 = ev2[0]
+                    case_a = (d0 == 1 and e0.dur == F(3) and e1.start == F(3) and e1.dur == F(1)
+                              and e2.start == F(7, 2) and e2.dur == F(1, 2))
+                    case_b = (d0 == 2 and e0.dur == F(7, 2) and e1.start == F(7, 2) and e1.dur == F(1, 2)
+                              and e2.start == F(3) and e2.dur == F(1))
+                    if not (case_a or case_b):
+                        continue
+                    targets = backup_targets(m, div)
+                    if case_a:
+                        for el in e0.members:
+                            set_value(el, F(7, 2), div)
+                    else:
+                        for el in e2.members:
+                            set_value(el, F(1, 2), div)
+                    for el in e1.members:
+                        m.remove(el)
+                    fwd = leading_forward(m, e2.el)
+                    if fwd is not None:
+                        m.remove(fwd)
+                    for el in e2.members:
+                        vel = el.find('voice')
+                        if vel is not None:
+                            vel.text = v1
+                        m.remove(el)
+                    anchor = list(m).index(e0.members[-1]) + 1
+                    for k, el in enumerate(e2.members):
+                        m.insert(anchor + k, el)
+                    fix_backups(m, targets)
+                    kids = list(m)
+                    for i, el in enumerate(kids):
+                        if el.tag == 'backup':
+                            nxt = next((k for k in kids[i + 1:] if k.tag != 'barline'), None)
+                            if nxt is None or nxt.tag == 'backup':
+                                m.remove(el)
+                    report['double_dot_merged'].append(
+                        f'{page} m{m.get("number")} {part.get("id")} st{st} v{v2}->v{v1}')
+                    merged = True
+                    break
+                if merged:
+                    break
+
+
 def rehearsals_from_credits(root, omr_path, report, page):
     """Move rehearsal-like page credits back into boxed rehearsal directions."""
     credits = []
@@ -594,7 +682,7 @@ def main(song_dir):
     out_pages = os.path.join(song_dir, 'pages')
     os.makedirs(out_pages, exist_ok=True)
     report = {k: [] for k in ('drop_dot', 'overflow_cut', 'trim_gap', 'trim_rest', 'trim_note', 'padded',
-                              'extended',
+                              'extended', 'double_dot_merged',
                               'rehearsal', 'lyric_words', 'lyric_dropped')}
     report['empty_filled'] = 0
     report['zero_divisions'] = 0
@@ -626,6 +714,7 @@ def main(song_dir):
         repair_zero_divisions(root, report)
         fill_empty_measures(root, report)
         trim_and_pad(root, report, page)
+        merge_double_dot_splits(root, report, page)
         lyrics_to_words(root, report, page)
         scrub_paths(root)
         tree = ET.ElementTree(root)
@@ -707,7 +796,7 @@ def main(song_dir):
     # Report
     print(f'pages: {len(mxls)}  empty measures filled: {report["empty_filled"]}  zero divisions fixed: {report["zero_divisions"]}')
     for k in ('rehearsal', 'lyric_words', 'lyric_dropped', 'drop_dot', 'trim_gap', 'trim_rest', 'trim_note', 'padded', 'extended',
-              'overflow_cut'):
+              'double_dot_merged', 'overflow_cut'):
         print(f'{k}: {len(report[k])}')
         for line in report[k]:
             print('   ', line)

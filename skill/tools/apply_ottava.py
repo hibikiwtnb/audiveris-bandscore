@@ -195,16 +195,11 @@ def main(score, hints):
                     for tag in ('beam', 'lyric', 'accidental', 'stem', 'notations'):
                         for e in c.findall(tag):
                             c.remove(e)
-                    # ties only inside the range
+                    # ties only inside the range (playback only: invisible doubling notes must not draw visible <tied> arcs)
                     for e in c.findall('tie'):
                         if (e.get('type') == 'stop' and k == 0) or \
                                 (e.get('type') == 'start' and k == len(covered) - 1):
                             c.remove(e)
-                    if c.findall('tie'):
-                        nt = ET.Element('notations')
-                        for e in c.findall('tie'):
-                            ET.SubElement(nt, 'tied', type=e.get('type'))
-                        insert_ordered(c, nt)
                     if c.find('chord') is None:
                         insert_ordered(c, ET.Element('chord'))
                     for a in ('default-x', 'default-y'):
