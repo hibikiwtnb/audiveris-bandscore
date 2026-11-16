@@ -8,12 +8,12 @@
 A fork of [Audiveris](https://github.com/Audiveris/audiveris) for **band scores and keyboard scores** (Japanese-style "bandscore" books).
 The goal is OMR that outputs **MusicXML that plays correctly in MuseScore**, fixing inside the Audiveris core the problems that used to need hand repair after recognition.
 
-- **Current version**: [v5.12.0-bandscore.2](https://github.com/hibikiwtnb/audiveris-bandscore/releases/tag/v5.12.0-bandscore.2), with 55 commits since the previous release. This release provides source code; the prebuilt zips on Releases are still bandscore.1.
+- **Current version**: [v5.12.0-bandscore.2](https://github.com/hibikiwtnb/audiveris-bandscore/releases/tag/v5.12.0-bandscore.2), with 55 commits since the previous release. This release ships source code plus prebuilt macOS and Windows zips.
 - **Release highlights**: grayscale whole-note templates; OCR consensus for header time signatures; improved tuplets, per-staff measure repeats, octave shifts and D.S./Coda export; original-score/MusicXML proofreading pairs. The workflow also adds conservative rehearsal-mark repairs, key hints and audits, and merged output inside each song directory. In-staff text OCR remains off by default and can be enabled when needed.
 - Base: upstream Audiveris **5.12.0** (`598d16410`); the changes are listed in section 2
 - Branch: `bandscore` (default branch)
 - License: same as upstream, [AGPL-3.0](LICENSE)
-- **Download**: prebuilt zips for macOS (Apple Silicon, Intel) and Windows on the [Releases](https://github.com/hibikiwtnb/audiveris-bandscore/releases) page (needs Java 25). For playback and checking, use [MuseScore-Bandscore](https://github.com/hibikiwtnb/MuseScore/releases).
+- **Download**: prebuilt macOS and Windows zips on the [Releases](https://github.com/hibikiwtnb/audiveris-bandscore/releases) page (needs Java 25). For playback and checking, use [MuseScore-Bandscore](https://github.com/hibikiwtnb/MuseScore/releases).
 - **AI conversion workflow**: [`skill/`](skill/README.md) is a manual and toolset for AI agents that takes a band score PDF all the way to playable MusicXML. Illustrated guide (Chinese): [read online](https://hibikiwtnb.github.io/audiveris-bandscore/)
 - **Side-by-side proofreading**: [`skill/tools/proof_pairs.py`](skill/tools/proof_pairs.py) cuts the OMR result into units of at most two staves over one printed system (about 4 measures): the original on top, the same measures of the MusicXML rendered below, bar lines aligned, `%` and line-start clefs and keys as printed, with a listing of the notes. A proofreader (person or AI agent) only has to spot the differences.
 - Reporting problems and proposing changes: [CONTRIBUTING.md](CONTRIBUTING.md)
