@@ -59,7 +59,7 @@ GM_RANGES = [
     (range(12, 13), 53, 89),     # vibraphone
     (range(13, 14), 45, 96),     # marimba
     (range(14, 15), 65, 108),    # xylophone
-    (range(15, 16), 60, 77),     # tubular bells
+    (range(15, 16), 60, 89),     # tubular bells, written C4-F5 sounding C5-F6
     (range(17, 22), 36, 96),     # organs
     (range(25, 33), 40, 88),     # guitars
     (range(33, 41), 28, 67),     # basses
