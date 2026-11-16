@@ -8,6 +8,8 @@
 A fork of [Audiveris](https://github.com/Audiveris/audiveris) for **band scores and keyboard scores** (Japanese-style "bandscore" books).
 The goal is OMR that outputs **MusicXML that plays correctly in MuseScore**, fixing inside the Audiveris core the problems that used to need hand repair after recognition.
 
+- **Current version**: [v5.12.0-bandscore.2](https://github.com/hibikiwtnb/audiveris-bandscore/releases/tag/v5.12.0-bandscore.2), with 55 commits since the previous release. This release provides source code; the prebuilt zips on Releases are still bandscore.1.
+- **Release highlights**: grayscale whole-note templates; OCR consensus for header time signatures; improved tuplets, per-staff measure repeats, octave shifts and D.S./Coda export; original-score/MusicXML proofreading pairs. The workflow also adds conservative rehearsal-mark repairs, key hints and audits, and merged output inside each song directory. In-staff text OCR remains off by default and can be enabled when needed.
 - Base: upstream Audiveris **5.12.0** (`598d16410`); the changes are listed in section 2
 - Branch: `bandscore` (default branch)
 - License: same as upstream, [AGPL-3.0](LICENSE)

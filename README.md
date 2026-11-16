@@ -10,6 +10,8 @@
 針對**樂團譜／鍵盤譜（bandscore）**改修的 [Audiveris](https://github.com/Audiveris/audiveris) 分支。
 目標是讓 OMR 直接輸出**可以在 MuseScore 正確播放的 MusicXML**，把原本辨識完還得手動修補的問題，移到 Audiveris 核心裡一次解決。
 
+- **目前版本**：[v5.12.0-bandscore.2](https://github.com/hibikiwtnb/audiveris-bandscore/releases/tag/v5.12.0-bandscore.2)，在上一版之後新增 55 個提交。本版提供原始碼；Releases 上的預編譯 zip 仍是 bandscore.1。
+- **本版重點**：全音符改用灰階模板辨識；開頭拍號以 OCR 多數結果確認；改善連音、逐譜表小節反覆、八度線及 D.S.／Coda 匯出；新增原譜與 MusicXML 對照校閱。流程另有排練記號保守修正、調號提示與稽核，合併結果統一存於歌曲目錄。譜線內文字 OCR 預設關閉，需要時才啟用。
 - 基底：上游 Audiveris **5.12.0**（`598d16410`），改動見第 2 節
 - 分支：`bandscore`（預設分支）
 - 授權：與上游相同，[AGPL-3.0](LICENSE)
