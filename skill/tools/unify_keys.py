@@ -118,9 +118,11 @@ def main(path):
     for i, v, ps, what in log:
         if what != 'accepted':
             print(f'  m{numbers[i]} key {v} from {" ".join(ps)}: {what}')
-    for (i, v), (j, _) in zip(timeline, timeline[1:]):
-        if j == i + 1:
-            print(f'  check: key {v} at m{numbers[i]} lasts a single measure')
+    ends = [j for j, _ in timeline[1:]] + [len(numbers)]
+    for (i, v), j in zip(timeline, ends):
+        if i > 0 and j - i <= 2:
+            span = 'a single measure' if j - i == 1 else f'{j - i} measures'
+            print(f'  check: key {v} at m{numbers[i]} lasts {span}')
     print('  parts changed: ' + (' '.join(changed) or 'none'))
     if changed:
         tree.write(path, encoding='UTF-8', xml_declaration=True)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Apply opening tempo, tempo changes, time signature and rehearsal marks from a song's
+"""Apply opening tempo, tempo changes, time signature, rehearsal marks and key fixes from a song's
 context/song_metadata.md.  Idempotent.
 
 The md carries these lines (anywhere in the file, everything else is free text):
@@ -7,6 +7,7 @@ The md carries these lines (anywhere in the file, everything else is free text):
     - tempo: 182 ca.                  (first measure: printed metronome + playable tempo)
     - tempo_changes: 194=120 195=80   (measure=bpm, playable only, nothing printed)
     - rehearsals: 2=A1 11=B1 19=C1    (measure=mark, boxed, on the first part)
+    - keys: 48=4 74=1                 (measure=fifths concert key, fixes OMR key misreads)
 Without any of these lines nothing is changed.
 
 Usage: python tools/apply_score_hints.py <score.musicxml> <song_metadata.md>
@@ -32,7 +33,7 @@ def reorder(el, order):
 def read_hints(md_path):
     hints = {}
     for line in open(md_path, encoding='utf-8'):
-        m = re.match(r'\s*[-*]\s*(time|tempo_changes|tempo|rehearsals)\s*[:：]\s*(.+?)\s*$', line)
+        m = re.match(r'\s*[-*]\s*(time|tempo_changes|tempo|rehearsals|keys)\s*[:：]\s*(.+?)\s*$', line)
         if m:
             hints[m.group(1)] = m.group(2)
     return hints
@@ -132,6 +133,81 @@ def main(score_path, md_path):
             reorder(d, DIRECTION_ORDER)
             m.append(d)
         done.append('tempo changes')
+
+    if 'keys' in hints:
+        key_fixes = {int(k): int(v) for k, v in pairs(hints['keys']).items()}
+        c_ms = parts[0].findall('measure')
+        c_measures = {int(m.get('number')): i for i, m in enumerate(c_ms)}
+        c_fifths_orig = []
+        cur = 0
+        for m in c_ms:
+            k = m.findtext('attributes/key/fifths')
+            if k is not None:
+                cur = int(k)
+            c_fifths_orig.append(cur)
+        for part in parts:
+            if (part.find('.//clef/sign[.="percussion"]') is not None
+                    or part.find('.//unpitched') is not None):
+                continue
+            p_ms = part.findall('measure')
+            p_fifths = []
+            cur = None
+            for m in p_ms:
+                k = m.findtext('attributes/key/fifths')
+                if k is not None:
+                    cur = int(k)
+                p_fifths.append(cur)
+            if all(x is None for x in p_fifths):
+                continue
+            c_fifths = list(c_fifths_orig)
+            tr = part.find('.//transpose')
+            is_trans = (tr is not None and int(float(tr.findtext('chromatic', '0'))) != 0) or (
+                p_fifths[0] is not None and p_fifths[0] != c_fifths[0])
+            for n, target_c in sorted(key_fixes.items(), reverse=True):
+                if n not in c_measures:
+                    continue
+                idx = c_measures[n]
+                if not is_trans:
+                    target_p = target_c
+                elif idx > 0 and target_c == c_fifths[idx - 1]:
+                    target_p = p_fifths[idx - 1]
+                else:
+                    next_idx = next((j for j in range(idx + 1, len(c_fifths))
+                                     if c_fifths[j] != c_fifths[idx]), None)
+                    if next_idx is not None and target_c == c_fifths[next_idx]:
+                        target_p = p_fifths[next_idx]
+                    else:
+                        shift = (c_fifths[0] - p_fifths[0]) if p_fifths[0] is not None else 0
+                        target_p = (target_c - shift + 6) % 12 - 6
+                old_p = p_fifths[idx]
+                for j in range(idx, len(p_ms)):
+                    if j > idx and (p_fifths[j] != old_p or int(p_ms[j].get('number')) in key_fixes):
+                        break
+                    p_fifths[j] = target_p
+                c_old = c_fifths[idx]
+                for j in range(idx, len(c_fifths)):
+                    if j > idx and (c_fifths[j] != c_old or int(c_ms[j].get('number')) in key_fixes):
+                        break
+                    c_fifths[j] = target_c
+            prev_k = None
+            for m, kv in zip(p_ms, p_fifths):
+                for attrs in list(m.findall('attributes')):
+                    for key_el in list(attrs.findall('key')):
+                        attrs.remove(key_el)
+                    if len(attrs) == 0:
+                        m.remove(attrs)
+                if kv is not None and kv != prev_k:
+                    attr = m.find('attributes')
+                    if attr is None:
+                        attr = ET.Element('attributes')
+                        pos = next((i for i, el in enumerate(m) if el.tag not in ('print', 'barline')), len(m))
+                        m.insert(pos, attr)
+                    key_el = ET.Element('key')
+                    ET.SubElement(key_el, 'fifths').text = str(kv)
+                    attr.append(key_el)
+                    reorder(attr, ATTR_ORDER)
+                    prev_k = kv
+        done.append(f'{len(key_fixes)} key fix(es)')
 
     tree.write(score_path, encoding='UTF-8', xml_declaration=True)
     print('apply_score_hints:', ', '.join(done))

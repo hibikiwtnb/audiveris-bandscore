@@ -308,6 +308,22 @@ def roots_without_key_accidental(parts):
     return out
 
 
+def short_key_changes(pm, compared, pids, numbers, N):
+    """[(measure_num, fifths, duration_measures), ...] for key changes lasting <= 2 measures."""
+    ref = compared[0] if compared else next((p for p in pids if any(d['key'] is not None for d in pm[p])), None)
+    if ref is None or N == 0:
+        return []
+    fifths = [d['key'] for d in pm[ref]]
+    events = [(0, fifths[0])] + [(i, fifths[i]) for i in range(1, N) if fifths[i] != fifths[i - 1]]
+    out = []
+    for idx in range(1, len(events)):
+        i, k = events[idx]
+        j = events[idx + 1][0] if idx + 1 < len(events) else N
+        if j - i <= 2:
+            out.append((numbers[i], key_text(k), j - i))
+    return out
+
+
 def main(path):
     root = ET.parse(path).getroot()
     parts = root.findall('part')
@@ -513,6 +529,9 @@ def main(path):
     suspects = rehearsal_suspects(parts[0])
     line(f'rehearsal_mark_suspects count={len(suspects)}' +
          (' at=' + ' '.join(f'm{num}:{txt}({reason})' for num, txt, reason in suspects) if suspects else ''))
+    short_keys = short_key_changes(pm, compared, pids, numbers, N)
+    line(f'short_key_changes count={len(short_keys)}' +
+         (' at=' + ' '.join(f'm{num}:{k}({dur}m)' for num, k, dur in short_keys) if short_keys else ''))
     print('\n'.join(out))
 
 

@@ -10,6 +10,7 @@
 - tempo: 182 ca.                          第 1 小節：印出的速度記號 + 播放速度（ca. 可省）
 - tempo_changes: 194=120 195=80           小節=BPM，只影響播放、不印出
 - rehearsals: 2=A1 11=B1 19=C1            小節=標記，加方框，排在第一個聲部；先清掉 OCR 產生的排練記號
+- keys: 48=4 74=1                         小節=fifths（實音調號升降數），修正該小節起的 OMR 調號誤讀
 ```
 由 `tools/apply_score_hints.py` 套用（後處理自動執行）。
 
