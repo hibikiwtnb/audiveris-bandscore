@@ -124,6 +124,7 @@ Str. I	Arco
 
 - **資料行不能加行內註解**（解析器按 tab 切欄）；註解只能整行以 `#` 開頭。
 
+- 可由 `python3 tools/labels_to_hints.py "<song dir>" --part=<縮寫>` 依 `locate_labels.py` 的印刷標示產生草稿（含譜表欄與 `# check:` 提醒）；草稿要對照譜面補上 `-X` 結束記號後的返回音色，再存成 `context/instrument_changes.txt`。
 做法（已定，不用再試）：每種音色一個 instrument，**每個音符（含休止符）**帶 `<instrument id>`；八度用 `<octave-shift>`，不用樂器移調（MuseScore 只在換樂器時才套 transpose）；標示區段內 Audiveris 自己產生的 octave-shift 是把標示括號誤判成 8va 線，先移除並還原音高。
 
 ## `context/ottava.txt`
