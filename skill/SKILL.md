@@ -9,7 +9,7 @@ description: 基於改修版 Audiveris（audiveris-bandscore 分支）的樂譜 
 檔案格式 → [docs/formats.md](docs/formats.md)；出問題 → [docs/lessons.md](docs/lessons.md)；已知缺口 → [docs/known-gaps.md](docs/known-gaps.md)。
 
 前置：以下命令都在 `skill/` 目錄下執行；`environment.txt` 存在（沒有就照 `requirements.txt` 末尾的模板建立並填寫）；Audiveris 用本 repo 最新版編譯。
-曲子資料夾 `songs/<編號_羅馬字>/`，下文記作 `S`，編號記作 `<id>`。
+曲子資料夾 `songs/<系列>/<編號_羅馬字>/`（或 `songs/<編號_羅馬字>/`），下文記作 `S`，編號記作 `<id>`。
 
 ```
 S/input/score.pdf        ← 使用者給的樂譜 PDF（檔名寫在 song_metadata.md 的 "- pdf:"）
@@ -22,7 +22,7 @@ S/input/omr_in/<id>_pNN.png   (+ S/crop_meta/*.json)
 S/raw/*.mxl + *.omr
    │ python tools/bandscore_postprocess.py S                   Step 3
    ▼
-songs/<輸入 PDF 檔名>.musicxml（審查用，在 songs/ 根目錄）  +  S/<id>_quality.txt  (+ S/pages/)
+S/<id>_<曲名>.musicxml（審查用，在 S/ 內）  +  S/<id>_quality.txt  (+ S/pages/)
    │ 需要時：page_ocr → locate_labels → 寫 instrument_changes / ottava → 重跑 Step 3   Step 4
    │ DTD + MuseScore + verify_musescore + 讀 quality.txt       Step 5
    │ 寫 S/omr_report.md（每次跑 OMR 都寫）
@@ -125,7 +125,7 @@ python tools/bandscore_postprocess.py S
    - 真正的最後一步是 `tools/clamp_offsets.py`：和弦代號、文字指示的位置是「前面的音＋offset」，前面的音被後處理或 hook 改短、改寫後，offset 可能指到小節開頭之前（MuseScore 畫在譜號左邊，整行排版被撐壞）。這一步把它拉回小節內，並列出移動了哪些。`quality.txt` 的 `offset_outside_measure` 應該是 0。
    - 後處理最後對 preview 跑一次 `tools/score_quality.py`，印在輸出末尾並寫成 `S/<song>_quality.txt`（不含時間戳，重跑沒變化時檔案不變，和上一份比就看得出這次修改讓哪些項目變好或變差）。
    - 每次修改工具或提示檔後重跑，把新舊 `_quality.txt` 的 `[issues]` 比一下，再決定要不要交付。
-   - **重跑後一定要跑對照**：重跑前先把 `<id>_quality.txt` 複製成 `<id>_quality.prev.txt`，重跑後 `python3 tools/compare_quality.py songs/<曲>/<id>_quality.prev.txt songs/<曲>/<id>_quality.txt`（在 git 裡管理曲子時，舊檔也可以寫 `HEAD:<路徑>`）。它列出樂譜結構的變化：頁數、小節數（每頁）、聲部、譜線數、各聲部的調號時間線與移調、排練記號、反覆與房子。有變化時 exit 1：逐項對照原譜，寫進 `omr_report.md`（變好／變壞／未確認）。DTD 和 `verify_musescore` 全過不代表沒有退步（曾發生：五線譜變一線譜、吉他調號被蓋掉、轉調位置延後，這些檢查全部通過）。
+   - **重跑後一定要跑對照**：重跑前先把 `<id>_quality.txt` 複製成 `<id>_quality.prev.txt`，重跑後 `python3 tools/compare_quality.py S/<id>_quality.prev.txt S/<id>_quality.txt`（在 git 裡管理曲子時，舊檔也可以寫 `HEAD:<路徑>`）。它列出樂譜結構的變化：頁數、小節數（每頁）、聲部、譜線數、各聲部的調號時間線與移調、排練記號、反覆與房子。有變化時 exit 1：逐項對照原譜，寫進 `omr_report.md`（變好／變壞／未確認）。DTD 和 `verify_musescore` 全過不代表沒有退步（曾發生：五線譜變一線譜、吉他調號被蓋掉、轉調位置延後，這些檢查全部通過）。
    - `[issues]` 最後四項是要對照原譜的清單，不是錯誤：`staff_lines_change`（譜表中途換線數）、`transposing_key_mismatch`（有 `<transpose>` 的聲部調號和其他聲部對不上）、`out_of_range`（音符超出開頭音色的常用音域，音域表是近似值）、`harmony_root_without_key_accidental`（和弦根音沒有升降記號，但調號裡這個音有：可能是 OCR 漏了 ♭／♯）。
 
 ---
@@ -157,15 +157,15 @@ python3 tools/omr_beat_grid.py S <頁>              # 需要精確位置時：�
 ### 1. 程式化檢查（Agent 交付標準）
 - **結構與 DTD 檢查（0 violations）**：
   ```bash
-  python tools/dtd_order_check.py songs/<輸入 PDF 檔名>.musicxml
-  java tools/DtdValidate.java songs/<輸入 PDF 檔名>.musicxml tools/dtd
+  python tools/dtd_order_check.py S/<merged>.musicxml
+  java tools/DtdValidate.java S/<merged>.musicxml tools/dtd
   ```
   preview 沒有 DOCTYPE，`DtdValidate` 會自動補上 3.1 的再驗證（回報的行號會比檔案多 1）。
   確保所有 `<barline>`、`<ending>`、`<attributes>` 等元素符合 MusicXML 3.1 DTD 規範。
 - **MuseScore 開啟／轉檔檢查（0 errors / warnings）**：
   以 MuseScore headless 執行無頭轉檔，檢查日誌：
   ```bash
-  <MUSESCORE_BIN> -o /tmp/test.pdf songs/<輸入 PDF 檔名>.musicxml
+  <MUSESCORE_BIN> -o /tmp/test.pdf S/<merged>.musicxml
   ```
   - **常見報錯排查**：不能出現 `要素 rest がこのスコープ内で定義されていません`（元素順序錯誤）、`不完全小節 / 長すぎます`（時值不對齊）、`spanner already started` 等。
   - **死鎖排查**：轉檔進度必須順利完成，不能因 0 duration 空小節卡住。
@@ -173,10 +173,10 @@ python3 tools/omr_beat_grid.py S <頁>              # 需要精確位置時：�
 
 - **MuseScore 實際結果檢查**（顯示音高、換樂器、8va；exit 0 才算過）：
   ```bash
-  python3 tools/verify_musescore.py songs/<輸入 PDF 檔名>.musicxml
+  python3 tools/verify_musescore.py S/<merged>.musicxml
   ```
   逐譜表、逐小節比對 MuseScore `.mscx` 的顯示音高與「XML 音高 − 該譜表 8va 線」，並列出每譜表 InstrumentChange / Ottava / 隱形音數；同一聲部兩譜表間移動的音標為 cross-staff，不算錯。8va 之後才開始的差異，通常是各聲部小節長度不一致（見避坑 4）。
-- 事實報告（後處理已自動產生 `<id>_quality.txt`；`tools/score_quality.py` 只印事實、不下判斷、永遠 exit 0，輸出給 agent 讀；手動重跑：`python3 tools/score_quality.py songs/<輸入 PDF 檔名>.musicxml`）：
+- 事實報告（後處理已自動產生 `<id>_quality.txt`；`tools/score_quality.py` 只印事實、不下判斷、永遠 exit 0，輸出給 agent 讀；手動重跑：`python3 tools/score_quality.py S/<merged>.musicxml`）：
   前段是基本資訊（頁數、小節數、音符數、速度、排練記號、反覆記號、房子、Segno/Coda/D.S./D.C.、各聲部音符數與調號）；`[issues]` 段列出樂理上的不一致（小節長度不符拍號、非標準時值、tie／八度線不成對、各聲部調號不一致、反覆記號與房子不完整或各聲部不一致），每項給次數與小節位置。`[issues]` 只是「檢查到什麼」，是否真的錯要對照譜面判斷。交付時在回報裡附上 `[issues]` 各項次數，說明哪些已對照譜面確認是原譜本來如此、哪些是未處理的已知缺口。移調樂器（有 `<transpose>`）不參與調號比對。
   - **排練標記常識檢查**：審視報告中的 `rehearsal_marks` 序列是否連續（如 A->B->C... 或 A1->B1->C1...）；若出現跳字母（如 A->C、A1->D1），視為 OMR 漏識或認偏異常，建議優先以低成本手段修復（見避坑指南 8）。
 - 小節時值統計（需要時）：`python3 tools/measure_duration_audit.py --files S/raw/*.mxl`

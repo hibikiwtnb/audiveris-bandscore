@@ -2,6 +2,11 @@
 
 這裡只記 `skill/`（AI agent 用的 BandScore 流程、工具、模板、文件）的變更。Audiveris 本體（Java）的改進見根目錄 README 第 2 節。日期是同步到本 repo 的日期，括號裡是 commit。
 
+## 2026-11-16：merged MusicXML 輸出位置與命名統一
+
+- **`bandscore_postprocess.py`**：merged `.musicxml` 改寫入各曲資料夾 `<song_dir>/` 內，不再寫到上層 `songs/` 根目錄；檔名改優先依 `song_metadata.md` 的 `- Title:` 統一為 `<id>_<title>[_Keyboard].musicxml`（`songs/<series>/<song>/` 分層時各曲檔案皆自成目錄）。
+- **`SKILL.md`**：更新 `songs/<系列>/<編號_羅馬字>/` 路徑範例與驗收指令。
+
 ## 2026-11-13：全音符模板門檻
 
 - **`bandscore_postprocess.py`：補滿小節的休止符，在同一譜表另一個聲部有音的地方隱藏**。Audiveris 常把一行旋律拆成兩個聲部（前半在一個、後半在另一個），補拍數時印出來的二分、八分休止符原譜沒有，校對時被報成「多出休止符」。

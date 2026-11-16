@@ -4,7 +4,7 @@
     python3 tools/bandscore_postprocess.py "<song dir>"
 
 Reads <song dir>/raw/*.mxl (+ .omr), writes
-<song dir>/pages/*.musicxml and <songs dir>/<input pdf name>.musicxml (next to the song dir, for review).
+<song dir>/pages/*.musicxml and <song dir>/<id>_<title>[_Keyboard].musicxml (for review).
 
 Page-level fixes (a measure never gets longer than its time signature, except a pickup):
 
@@ -626,20 +626,23 @@ def main(song_dir):
     subprocess.run([sys.executable, os.path.join(tmp, 'Tools', 'merge_pages.py'), base,
                     str(len(mxls))] + (['--continues=' + ','.join(continues)] if continues else []),
                    check=True, cwd=tmp, stdout=subprocess.DEVNULL)
-    # review file lives in songs/ and is named after the input PDF (the '- pdf:' line of song_metadata.md);
-    # a song from page images (no PDF) is named <id>_<title> from the '- Title:' line
+    # review file lives inside <song_dir>/ and is named <id>_<title>[_Keyboard].musicxml
+    # from the '- Title:' line of song_metadata.md (falling back to '- pdf:' or song_dir basename)
     name = base
     meta_path = os.path.join(song_dir, 'context', 'song_metadata.md')
     if os.path.exists(meta_path):
         with open(meta_path, encoding='utf-8') as f:
             meta = f.read()
-        m = re.search(r'^- pdf:\s*(.+?)\s*$', meta, re.M)
         t = re.search(r'^- Title:\s*(.+?)\s*(?:[（(].*)?$', meta, re.M)
-        if m:
+        m = re.search(r'^- pdf:\s*(.+?)\s*$', meta, re.M)
+        if t:
+            title = t.group(1)
+            if base.endswith('_keyboard') and 'keyboard' not in title.lower():
+                title = re.sub(r'[/?:]', '_', title).rstrip('_') + '_Keyboard'
+            name = base.split('_')[0] + '_' + title
+        elif m:
             name = os.path.splitext(m.group(1))[0]
-        elif t:
-            name = base.split('_')[0] + '_' + t.group(1)
-    merged = os.path.join(os.path.dirname(os.path.abspath(song_dir)), re.sub(r'[/?:]', '_', name) + '.musicxml')
+    merged = os.path.join(os.path.abspath(song_dir), re.sub(r'[/?:]', '_', name) + '.musicxml')
     shutil.move(os.path.join(tmp, base, f'{base}_merged.musicxml'), merged)
     shutil.rmtree(tmp)
     subprocess.run([sys.executable, os.path.join(HERE, 'fill_measure_repeats.py'), merged],
