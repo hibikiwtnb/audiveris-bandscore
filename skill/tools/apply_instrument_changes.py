@@ -170,8 +170,10 @@ PART_LIST_ORDER = ['identification', 'part-link', 'part-name', 'part-name-displa
 
 
 def read_hints(path):
+    """Parse the hint file. Staff fields are optional; when absent a change applies to the whole
+    part (legacy behaviour)."""
     timbres = dict(DEFAULT_TIMBRES)
-    defaults, changes, sec = {}, [], None
+    defaults, staff_defaults, changes, sec = {}, {}, [], None
     for line in open(path, encoding='utf-8'):
         line = line.rstrip('\n')
         if not line.strip() or line.startswith('#'):
@@ -183,15 +185,24 @@ def read_hints(path):
         if sec == 'timbres':
             timbres[f[0]] = (int(f[1]), f[2] if len(f) > 2 else f[0])
         elif sec == 'defaults':
-            defaults[f[0]] = f[1]
+            if len(f) >= 3:      # part, timbre, staff
+                staff_defaults.setdefault(f[0], {})[f[2]] = f[1]
+            else:
+                defaults[f[0]] = f[1]
         elif sec == 'changes':
-            if len(f) >= 7:  # coordinate mode: page, system, idx, part, label, timbre, octave
+            if len(f) >= 8:      # page, system, idx, part, staff, label, timbre, octave
                 changes.append(dict(page=int(f[0]), system=int(f[1]), idx=int(f[2]), part=f[3],
-                                    label=f[4], timbre=f[5], octave=int(f[6])))
-            elif len(f) >= 5:  # measure mode: measure, part, label, timbre, octave
-                changes.append(dict(measure=f[0], part=f[1], label=f[2], timbre=f[3],
+                                    staff=f[4], label=f[5], timbre=f[6], octave=int(f[7])))
+            elif len(f) >= 7:    # page, system, idx, part, label, timbre, octave
+                changes.append(dict(page=int(f[0]), system=int(f[1]), idx=int(f[2]), part=f[3],
+                                    staff=None, label=f[4], timbre=f[5], octave=int(f[6])))
+            elif len(f) >= 6:    # measure, part, staff, label, timbre, octave
+                changes.append(dict(measure=f[0], part=f[1], staff=f[2], label=f[3],
+                                    timbre=f[4], octave=int(f[5])))
+            elif len(f) >= 5:    # measure, part, label, timbre, octave
+                changes.append(dict(measure=f[0], part=f[1], staff=None, label=f[2], timbre=f[3],
                                     octave=int(f[4])))
-    return timbres, defaults, changes
+    return timbres, defaults, staff_defaults, changes
 
 
 def insert_ordered(parent, el, order):
@@ -292,8 +303,232 @@ def resolve_part(name, part_map):
     return None
 
 
+ALL_STAFF = {None, '', '0', '-', '*'}
+OCTAVE_NUMBER = {'1': '5', '2': '6', '3': '7'}
+
+
+def note_staff(note):
+    return note.findtext('staff') or '1'
+
+
+def pitched_staff(measure, staff):
+    return [n for n in measure.iter('note')
+            if n.find('pitch') is not None and note_staff(n) == staff]
+
+
+def shift_dir_staff(kind, size, staff):
+    d = ET.Element('direction', placement='above')
+    ET.SubElement(ET.SubElement(d, 'direction-type'), 'octave-shift',
+                  type=kind, size=str(size), number=OCTAVE_NUMBER.get(staff, '7'))
+    ET.SubElement(d, 'staff').text = staff
+    return d
+
+
+def restore_omr_shifts_staff(ab, measures, octaves, staff):
+    """Undo Audiveris' own octave lines inside one staff's labelled region."""
+    out, active = [], None
+    for m, octv in zip(measures, octaves):
+        for el in list(m):
+            if el.tag == 'direction':
+                osh = el.find('direction-type/octave-shift')
+                if osh is None:
+                    continue
+                st = el.findtext('staff')
+                if st not in (None, staff):
+                    continue
+                if osh.get('type') in ('up', 'down') and octv > 0:
+                    size = 2 if osh.get('size') == '15' else 1
+                    active = size if osh.get('type') == 'down' else -size
+                    m.remove(el)
+                    out.append(f'{ab} staff {staff} m{m.get("number")}: removed OMR '
+                               f'{osh.get("size")}va line inside labelled octave region')
+                elif osh.get('type') == 'stop' and active is not None:
+                    m.remove(el)
+                    active = None
+            elif el.tag == 'note' and active is not None and note_staff(el) == staff \
+                    and el.find('pitch') is not None:
+                shift_pitch(el, -active)
+    return out
+
+
+def octave_lines_staff(ab, measures, octaves, staff):
+    out, runs, cur = [], [], None
+    for m, octv in zip(measures, octaves):
+        if octv > 0:
+            if cur and cur[0] == octv:
+                cur[1].append(m)
+            else:
+                cur = (octv, [m])
+                runs.append(cur)
+        else:
+            cur = None
+    for octv, ms in runs:
+        noted = [m for m in ms if pitched_staff(m, staff)]
+        if not noted:
+            continue
+        for m in ms:
+            for n in pitched_staff(m, staff):
+                shift_pitch(n, octv)
+        size = 8 if octv == 1 else 15
+        first, last = noted[0], ms[-1]
+        first.insert(list(first).index(pitched_staff(first, staff)[0]),
+                     shift_dir_staff('down', size, staff))
+        nxt = measures.index(last) + 1
+        if nxt < len(measures):
+            m2 = measures[nxt]
+            kids = list(m2)
+            m2.insert(next((i for i, x in enumerate(kids) if x.tag not in ('print', 'attributes')),
+                           len(kids)), shift_dir_staff('stop', size, staff))
+        else:
+            last.insert(list(last).index(pitched_staff(last, staff)[-1]) + 1,
+                        shift_dir_staff('stop', size, staff))
+        out.append(f'{ab} staff {staff} m{first.get("number")}-m{last.get("number")}: '
+                   f'{"8va" if size == 8 else "15ma"} line')
+    return out
+
+
+def add_instruments(sp, pid, used, timbres, warnings, key):
+    """Replace the part-list instruments of one part with the union ``used``."""
+    old_vol = sp.findtext('midi-instrument/volume') or '78'
+    for e in sp.findall('score-instrument') + sp.findall('midi-instrument'):
+        sp.remove(e)
+    ids = {}
+    for k, t in enumerate(used, 1):
+        iid = f'{pid}-I{k}'
+        ids[t] = iid
+        if t not in timbres:
+            warnings.append(f'{key}: unknown timbre {t!r} (not in built-in table or [timbres]): '
+                            f'falls back to GM program 1')
+        t_info = timbres.get(t, (1, t))
+        si = ET.Element('score-instrument', id=iid)
+        ET.SubElement(si, 'instrument-name').text = t_info[1].split('（')[0]
+        insert_ordered(sp, si, PART_LIST_ORDER)
+        mi = ET.Element('midi-instrument', id=iid)
+        ET.SubElement(mi, 'midi-program').text = str(t_info[0])
+        ET.SubElement(mi, 'volume').text = old_vol
+        insert_ordered(sp, mi, PART_LIST_ORDER)
+    return ids
+
+
+def apply_part_wide(key, sp, part, cs, defaults, order, timbres, warnings):
+    """Legacy path: one instrument timeline for the whole part (all staves)."""
+    pid = sp.get('id')
+    swaps = [c for c in cs if c['timbre'] != '-']
+    first = defaults.get(key) or (swaps[0]['timbre'] if swaps else None)
+    if first is None:
+        return [], []
+    used = list(dict.fromkeys([first] + [c['timbre'] for c in swaps]))
+    ids = add_instruments(sp, pid, used, timbres, warnings, key)
+
+    report = []
+    timbre, octave, k = first, 0, 0
+    measures = part.findall('measure')
+    octaves = []
+    for m in measures:
+        while k < len(cs) and order.get(cs[k]['measure'], 0) <= order.get(m.get('number'), 0):
+            c = cs[k]
+            k += 1
+            if c['label'] != '-':
+                d = ET.Element('direction', placement='above')
+                ET.SubElement(ET.SubElement(d, 'direction-type'), 'words').text = c['label']
+                if c['timbre'] != '-':
+                    ET.SubElement(ET.SubElement(d, 'sound'), 'midi-instrument', id=ids[c['timbre']])
+                kids = list(m)
+                idx = next((i for i, x in enumerate(kids)
+                            if x.tag not in ('print', 'attributes', 'barline')), len(kids))
+                m.insert(idx, d)
+            if c['timbre'] != '-':
+                if c['timbre'] != timbre:
+                    report.append(f'{key} m{m.get("number")}: {timbre} -> {c["timbre"]}')
+                timbre, octave = c['timbre'], c['octave']
+        octaves.append(octave)
+        active_iid = ids.get(timbre, ids[first])
+        for n in m.iter('note'):
+            for e in n.findall('instrument'):
+                n.remove(e)
+            insert_ordered(n, ET.Element('instrument', id=active_iid), NOTE_ORDER)
+
+    report.extend(restore_omr_shifts(key, measures, octaves))
+    report.extend(octave_lines(key, measures, octaves))
+    report.append(f'{key}: {len(used)} timbres {used}')
+    return report
+
+
+def apply_per_staff(key, sp, part, cs, defaults, staff_defaults, order, timbres, warnings):
+    """New path: an instrument / octave timeline per staff of one part (grand staff)."""
+    pid = sp.get('id')
+    measures = part.findall('measure')
+    staff_ids = sorted({note_staff(n) for m in measures for n in m.iter('note')},
+                       key=lambda s: int(s) if s.isdigit() else 1)
+    expanded = []
+    for c in cs:
+        if c.get('staff') in ALL_STAFF:
+            expanded.extend(dict(c, staff=s) for s in staff_ids)
+        else:
+            expanded.append(c)
+    per_staff = {s: sorted([c for c in expanded if c['staff'] == s],
+                           key=lambda c: order.get(c['measure'], 0)) for s in staff_ids}
+
+    firsts = {}
+    used = []
+    for s in staff_ids:
+        dmap = staff_defaults.get(key, {})
+        first = dmap.get(s) or dmap.get('0') or defaults.get(key)
+        swaps = [c for c in per_staff[s] if c['timbre'] != '-']
+        first = first or (swaps[0]['timbre'] if swaps else None)
+        firsts[s] = first
+        for t in ([first] if first else []) + [c['timbre'] for c in swaps]:
+            if t not in used:
+                used.append(t)
+    if not used:
+        return [], []
+    ids = add_instruments(sp, pid, used, timbres, warnings, key)
+
+    report = []
+    octaves = {}
+    for s in staff_ids:
+        timbre, octv, k = firsts[s], 0, 0
+        octaves[s] = []
+        for m in measures:
+            while k < len(per_staff[s]) and \
+                    order.get(per_staff[s][k]['measure'], 0) <= order.get(m.get('number'), 0):
+                c = per_staff[s][k]
+                k += 1
+                if c['label'] != '-':
+                    d = ET.Element('direction', placement='above')
+                    ET.SubElement(ET.SubElement(d, 'direction-type'), 'words').text = c['label']
+                    ET.SubElement(d, 'staff').text = s
+                    if c['timbre'] != '-':
+                        ET.SubElement(ET.SubElement(d, 'sound'), 'midi-instrument',
+                                      id=ids[c['timbre']])
+                    kids = list(m)
+                    idx = next((i for i, x in enumerate(kids)
+                                if x.tag not in ('print', 'attributes', 'barline')), len(kids))
+                    m.insert(idx, d)
+                if c['timbre'] != '-':
+                    if timbre and c['timbre'] != timbre:
+                        report.append(f'{key} staff {s} m{m.get("number")}: '
+                                      f'{timbre} -> {c["timbre"]}')
+                    timbre, octv = c['timbre'], c['octave']
+            octaves[s].append(octv)
+            if timbre:
+                iid = ids.get(timbre, ids.get(firsts[s]))
+                for n in [x for x in m.iter('note') if note_staff(x) == s]:
+                    for e in n.findall('instrument'):
+                        n.remove(e)
+                    insert_ordered(n, ET.Element('instrument', id=iid), NOTE_ORDER)
+
+    for s in staff_ids:
+        if not firsts[s]:
+            continue
+        report.extend(restore_omr_shifts_staff(key, measures, octaves[s], s))
+        report.extend(octave_lines_staff(key, measures, octaves[s], s))
+    report.append(f'{key}: {len(used)} timbres {used} on staves {staff_ids}')
+    return report
+
+
 def main(score, hints):
-    timbres, defaults, changes = read_hints(hints)
+    timbres, defaults, staff_defaults, changes = read_hints(hints)
     tree = ET.parse(score)
     root = tree.getroot()
     if any(o.get('number') == SHIFT_NUMBER and o.get('type') == 'down' and o.get('default-y') is None
@@ -327,73 +562,20 @@ def main(score, hints):
 
     report = []
     warnings = []
-    for key in sorted(set(per_part) | set(defaults)):
+    for key in sorted(set(per_part) | set(defaults) | set(staff_defaults)):
         sp = resolve_part(key, part_map)
         if sp is None:
             warnings.append(f'part {key!r} not found in score: its hint lines are ignored')
             continue
         pid = sp.get('id')
         part = parts[pid]
-        cs = sorted(per_part.get(key, []), key=lambda c: order.get(c['measure'], 0))
-        swaps = [c for c in cs if c['timbre'] != '-']
-        first = defaults.get(key) or (swaps[0]['timbre'] if swaps else None)
-        if first is None:
-            continue
-        used = list(dict.fromkeys([first] + [c['timbre'] for c in swaps]))
-
-        # Update part-list instruments
-        old_vol = sp.findtext('midi-instrument/volume') or '78'
-        for e in sp.findall('score-instrument') + sp.findall('midi-instrument'):
-            sp.remove(e)
-        ids = {}
-        for k, t in enumerate(used, 1):
-            iid = f'{pid}-I{k}'
-            ids[t] = iid
-            if t not in timbres:
-                warnings.append(f'{key}: unknown timbre {t!r} (not in built-in table or [timbres]): '
-                                f'falls back to GM program 1')
-            t_info = timbres.get(t, (1, t))
-            si = ET.Element('score-instrument', id=iid)
-            ET.SubElement(si, 'instrument-name').text = t_info[1].split('（')[0]
-            insert_ordered(sp, si, PART_LIST_ORDER)
-            mi = ET.Element('midi-instrument', id=iid)
-            ET.SubElement(mi, 'midi-program').text = str(t_info[0])
-            ET.SubElement(mi, 'volume').text = old_vol
-            insert_ordered(sp, mi, PART_LIST_ORDER)
-
-        # Timeline: instrument, labels, octave per measure
-        timbre, octave, k = first, 0, 0
-        measures = part.findall('measure')
-        octaves = []
-        for m in measures:
-            while k < len(cs) and order.get(cs[k]['measure'], 0) <= order.get(m.get('number'), 0):
-                c = cs[k]
-                k += 1
-                if c['label'] != '-':
-                    d = ET.Element('direction', placement='above')
-                    ET.SubElement(ET.SubElement(d, 'direction-type'), 'words').text = c['label']
-                    if c['timbre'] != '-':
-                        # The label is the printed mark of the change: our MuseScore import shows
-                        # the instrument change with this text instead of an invisible name over it
-                        ET.SubElement(ET.SubElement(d, 'sound'), 'midi-instrument', id=ids[c['timbre']])
-                    kids = list(m)
-                    idx = next((i for i, x in enumerate(kids)
-                                if x.tag not in ('print', 'attributes', 'barline')), len(kids))
-                    m.insert(idx, d)
-                if c['timbre'] != '-':
-                    if c['timbre'] != timbre:
-                        report.append(f'{key} m{m.get("number")}: {timbre} -> {c["timbre"]}')
-                    timbre, octave = c['timbre'], c['octave']
-            octaves.append(octave)
-            active_iid = ids.get(timbre, ids[first])
-            for n in m.iter('note'):
-                for e in n.findall('instrument'):
-                    n.remove(e)
-                insert_ordered(n, ET.Element('instrument', id=active_iid), NOTE_ORDER)
-
-        report.extend(restore_omr_shifts(key, measures, octaves))
-        report.extend(octave_lines(key, measures, octaves))
-        report.append(f'{key}: {len(used)} timbres {used}')
+        cs = sorted(per_part.get(key, []), key=lambda c: order.get(c.get('measure'), 0))
+        staffed = key in staff_defaults or any(c.get('staff') for c in cs)
+        if staffed:
+            report.extend(apply_per_staff(key, sp, part, cs, defaults, staff_defaults, order,
+                                          timbres, warnings))
+        else:
+            report.extend(apply_part_wide(key, sp, part, cs, defaults, order, timbres, warnings))
 
     tree.write(score, encoding='UTF-8', xml_declaration=True)
     print(f'instrument changes: {len(changes)} hints, {dropped} misplaced label words dropped')
@@ -406,7 +588,7 @@ def main(score, hints):
 def link_labels(score, hints):
     """Link the timbre labels of a score where the changes are already applied (made before the
     labels carried their instrument): add sound/midi-instrument to each label, nothing else."""
-    timbres, _, changes = read_hints(hints)
+    timbres, _, _, changes = read_hints(hints)
     tree = ET.parse(score)
     root = tree.getroot()
     rows = systems(root)
