@@ -127,6 +127,7 @@ python tools/bandscore_postprocess.py S
    - 每次修改工具或提示檔後重跑，把新舊 `_quality.txt` 的 `[issues]` 比一下，再決定要不要交付。
    - **重跑後一定要跑對照**：重跑前先把 `<id>_quality.txt` 複製成 `<id>_quality.prev.txt`，重跑後 `python3 tools/compare_quality.py S/<id>_quality.prev.txt S/<id>_quality.txt`（在 git 裡管理曲子時，舊檔也可以寫 `HEAD:<路徑>`）。它列出樂譜結構的變化：頁數、小節數（每頁）、聲部、譜線數、各聲部的調號時間線與移調、排練記號、反覆與房子。有變化時 exit 1：逐項對照原譜，寫進 `omr_report.md`（變好／變壞／未確認）。DTD 和 `verify_musescore` 全過不代表沒有退步（曾發生：五線譜變一線譜、吉他調號被蓋掉、轉調位置延後，這些檢查全部通過）。
    - `[issues]` 最後四項是要對照原譜的清單，不是錯誤：`staff_lines_change`（譜表中途換線數）、`transposing_key_mismatch`（有 `<transpose>` 的聲部調號和其他聲部對不上）、`out_of_range`（音符換算實際音高後超出開頭音色的常用音域，音域表是近似值）、`harmony_root_without_key_accidental`（和弦根音沒有升降記號，但調號裡這個音有：可能是 OCR 漏了 ♭／♯）。
+   - 反覆與房子有疑問時跑 `python3 tools/audit_repeats.py <merged.musicxml>`（或 `--all --table`）：列出每首的反覆／房子時間線、頁碼與右小節線樣式。`light-heavy` 帶 `<repeat>` 才是印譜的反覆線；`light-light`／`regular` 的「1.」房子常是印譜的第一次限定寫法，不要盲補反覆線。
 
 ---
 

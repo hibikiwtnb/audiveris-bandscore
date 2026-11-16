@@ -2,6 +2,11 @@
 
 這裡只記 `skill/`（AI agent 用的 BandScore 流程、工具、模板、文件）的變更。Audiveris 本體（Java）的改進見根目錄 README 第 2 節。日期是同步到本 repo 的日期，括號裡是 commit。
 
+## 2026-11-16：反覆與房子稽核工具
+
+- **`tools/audit_repeats.py`**：唯讀稽核 merged MusicXML 的反覆與房子。逐首列出 forward／backward 反覆、房子時間線與頁碼，重現 `score_quality.py` 的五項反覆標記，並印出被標記小節的右小節線樣式、印刷文字與附近的 segno／coda／D.S.／D.C. 供對照原譜。`--all` 掃 `songs/`（略過 `pages/`），`--table` 每首一行 TSV。
+- **`SKILL.md`**：Step 7 補上使用時機與判讀原則（只有 `light-heavy` 帶 `<repeat>` 才是印譜的反覆線）。
+
 ## 2026-11-16：merged MusicXML 輸出位置與命名統一
 
 - **`bandscore_postprocess.py`**：merged `.musicxml` 改寫入各曲資料夾 `<song_dir>/` 內，不再寫到上層 `songs/` 根目錄；檔名改優先依 `song_metadata.md` 的 `- Title:` 統一為 `<id>_<title>[_Keyboard].musicxml`（`songs/<series>/<song>/` 分層時各曲檔案皆自成目錄）。
