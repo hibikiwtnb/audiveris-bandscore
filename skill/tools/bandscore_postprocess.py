@@ -36,8 +36,9 @@ prunes invalid ties, ...), then tools/apply_instrument_changes.py when
 <song dir>/context/instrument_changes.txt exists (printed timbre changes -> real instrument changes),
 and tools/apply_ottava.py when <song dir>/context/ottava.txt exists (8va / 15ma / coll'8va);
 tools/apply_capo.py writes <transpose> on the parts flagged ":capoN" in audiveris_hints.txt;
-finally tools/unify_keys.py makes key changes score-wide (a part whose key differs from the
-others is an OMR mistake).
+tools/unify_keys.py makes key changes score-wide (a part whose key differs from the others is an
+OMR mistake); finally tools/apply_tab_octave.py adds the octave that guitar and bass-guitar
+notation sounds below its written pitch.
 """
 import copy
 import glob
@@ -694,6 +695,10 @@ def main(song_dir):
         subprocess.run([sys.executable, song_fix, merged], check=True, env=env)
     # last, so that parts a song hook marked with <transpose> are left alone
     subprocess.run([sys.executable, os.path.join(HERE, 'unify_keys.py'), merged], check=True)
+    # guitar / bass-guitar notation is written an octave above sounding: add the octave after
+    # key unification, so these parts still take part in it (an octave does not change the key)
+    subprocess.run([sys.executable, os.path.join(HERE, 'apply_tab_octave.py'), merged],
+                   check=True)
     # very last: chord names / directions whose notes were shortened or rewritten above
     subprocess.run([sys.executable, os.path.join(HERE, 'clamp_offsets.py'), merged], check=True)
     # Report

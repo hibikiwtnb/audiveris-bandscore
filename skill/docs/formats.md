@@ -82,6 +82,7 @@ org.audiveris.omr.sheet.grid.StaffProjector.gapThreshold=0.8
 - **`:capoN`（夾 capo 的吉他）**：譜上寫的音比實際音高低 N 個半音（1–11），例如 216 的 `A.Guitar|A.G.:1:capo1`（寫 G 調，實際 A♭）。Audiveris 保留這個聲部自己寫的調號（不會被其他聲部的調號蓋掉），後處理的 `tools/apply_capo.py` 依同一個標記寫 `<transpose>`。一定要寫名稱。
 - **`:downN`（降音調弦的吉他、貝斯）**：譜上寫的音比實際音高高 N 個半音（1–11），例如 140 的 `E.Bass|E.B.:2:tab4:gm34:down1`（歌寫 A♭ 的 4 降，吉他、貝斯寫 A 的 3 升；歌轉到 A 時吉他寫 B♭）。判斷方法：p01 歌和吉他、貝斯的調號不同，和弦名也差半音（歌 D♭、吉他 D）。處理和 `:capo` 相同、方向相反。一定要寫名稱。
 - **`:tab`／`:tab4`**：這個樂器的最後一行是 6 線（4 線）TAB，譜表數至少 2。TAB 沒被認出來時，匯出仍有這一行。
+- **吉他與貝斯吉他的八度**：這兩種樂器的記譜比實音高一個八度，後處理的 `tools/apply_tab_octave.py` 會自動補 `<transpose>` 的 `<octave-change>-1</octave-change>`；`:capoN`／`:downN` 的 `<chromatic>` 保留，只補八度。合成貝斯、低音管、長號、低音號、低音提琴不會被套用。
 - **`:gmN`**：這個樂器開頭的音色，N 是 General MIDI 音色編號（1–128），寫進匯出的 `midi-program`。例如 `E.Guitar I|E.G. I:2:tab:gm30`。
   - 每個非鼓聲部都要寫。照譜上第一個音色標示（例如 `(Strings)`、`(Distortion)`、`5st. Bass`）選；沒有標示時照樂器名稱選。曲中的音色變更另外用 `instrument_changes.txt`。
   - 沒寫時照譜表數用預設音色（1 行 54 Voice Oohs，其他 1 Acoustic Grand Piano），電吉他會變成鋼琴。

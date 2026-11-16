@@ -51,6 +51,7 @@
 - `<instrument id>` 一變才建 InstrumentChange；**休止符沒帶 id 會在同一音色間反覆切換**（297：Str. I 切了 88 次）。
 - 八度必須用 `<octave-shift>`。`<transpose>` 寫在聲部開頭時 MuseScore 會套用（2026-10-08 用 3.6.2 實測：216 A.Guitar capo 1，記譜 G 播成 A♭；140、226 降半音的吉他、貝斯也對），舊的「沒有換樂器就不生效、播放低半音」不成立。`<pitch>` 是**記譜音高**，實音 = 記譜 + `<chromatic>`。`score_quality.py` 與 `unify_keys.py` 不檢查／不動有 `<transpose>` 的聲部。
 - 降半音的 `<transpose>` 要寫 `<diatonic>0</diatonic><chromatic>-1</chromatic>`（記譜 A、實音 A♭）。3.7 Evolution 曾把明寫的 diatonic 0 改算成 -1，實音拼成 G♯；我們的 MuseScore fork 已修（e15c0f445）。
+- **吉他與貝斯吉他的記譜比實音高一個八度**（吉他低音 E 寫 E3、實音 E2；貝斯低音 E 寫 E2、實音 E1）。TAB 的弦與格直接對應實音，可以拿來核對：原譜 TAB 的 0（空弦）如果在 XML 裡是寫出來的 E3，就表示缺了這個八度。`tools/apply_tab_octave.py` 對沒有八度移調的吉他、貝斯聲部補 `<transpose><diatonic>0</diatonic><chromatic>0</chromatic><octave-change>-1</octave-change></transpose>`；已有 capo／降半音的聲部保留原 `<chromatic>`，只補 `<octave-change>-1</octave-change>`。合成貝斯、低音管、長號、低音號、低音提琴不套用（本來就按實音或已自帶移調）。MuseScore 以 sounding pitch 播放、譜面維持記譜音高；TAB 若沒有弦／格資料就只是空譜表，不受影響。降半音、Drop C 等調弦的低音會低於標準調弦的音域表而被 `out_of_range` 標出，那是調弦差異，不是八度錯誤。
 - 做不到：換樂器後譜表名稱變成樂器庫縮寫（Cel.、Glock.、Hch.、St.），`<instrument-abbreviation>` 無效；`pizz.`/`arco` 文字與 `<sound>` 內的 `midi-program` 都被忽略，要切只能換樂器。
 - 器樂 `<lyric>` 的 begin/middle 沒收尾 → 一路畫連字號（「選不中、刪不掉的短橫線」）。
 - `6(9)` 若寫 `parentheses-degrees` 會被讀成 `69()`（fork 已修匯出）。

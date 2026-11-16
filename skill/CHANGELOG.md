@@ -2,6 +2,11 @@
 
 這裡只記 `skill/`（AI agent 用的 BandScore 流程、工具、模板、文件）的變更。Audiveris 本體（Java）的改進見根目錄 README 第 2 節。日期是同步到本 repo 的日期，括號裡是 commit。
 
+## 2026-11-16：吉他與貝斯八度移調
+
+- **`tools/apply_tab_octave.py`（新）**：吉他與貝斯吉他的記譜比實音高一個八度，轉出的 MusicXML 少了 `<transpose>`，播放與音域檢查都高一個八度。對沒有八度移調的吉他、貝斯聲部補 `<octave-change>-1`；已有 capo／降半音的 `<chromatic>` 保留，只補八度。合成貝斯、低音管、長號、低音號、低音提琴不套用。
+- **`bandscore_postprocess.py`**：在 `unify_keys.py` 之後自動執行這支工具（放在調號統一之後，吉他、貝斯仍參與調號比對；八度不改變調號）。
+
 ## 2026-11-16：反覆與房子稽核工具
 
 - **`tools/audit_repeats.py`**：唯讀稽核 merged MusicXML 的反覆與房子。逐首列出 forward／backward 反覆、房子時間線與頁碼，重現 `score_quality.py` 的五項反覆標記，並印出被標記小節的右小節線樣式、印刷文字與附近的 segno／coda／D.S.／D.C. 供對照原譜。`--all` 掃 `songs/`（略過 `pages/`），`--table` 每首一行 TSV。

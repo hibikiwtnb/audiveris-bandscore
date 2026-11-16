@@ -435,7 +435,10 @@ def main(path):
 
     percussion = {p.get('id') for p in parts
                   if p.find('.//clef/sign[.="percussion"]') is not None or p.find('.//unpitched') is not None}
-    compared = [p for p in pids if transposing[p] is None and p not in percussion
+    # a pure octave transposition (chromatic 0) keeps the written key, so it can be compared
+    key_transposing = {p: transposing[p] is not None and transposition_fifths(transposing[p]) != 0
+                       for p in pids}
+    compared = [p for p in pids if not key_transposing[p] and p not in percussion
                 and any(k is not None for k in key_of[p])]
     excluded = [p for p in pids if p not in compared]
     bad = [i for i in range(N) if len({key_of[p][i] for p in compared}) > 1]
