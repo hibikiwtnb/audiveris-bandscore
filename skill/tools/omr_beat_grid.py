@@ -15,20 +15,15 @@ import glob
 import io
 import os
 import re
+import sys
 import zipfile
 import xml.etree.ElementTree as ET
 from fractions import Fraction as F
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
-
-def font(size, bold=False):
-    for name in (('Arial Bold.ttf' if bold else 'Arial.ttf'),):
-        for d in ('/System/Library/Fonts/Supplemental', '/usr/share/fonts/truetype/dejavu'):
-            p = os.path.join(d, name)
-            if os.path.exists(p):
-                return ImageFont.truetype(p, size)
-    return ImageFont.load_default()
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from fonts import sans as font  # noqa: E402
 
 
 def measure_rows(song_dir):

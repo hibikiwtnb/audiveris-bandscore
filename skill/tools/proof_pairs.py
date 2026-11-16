@@ -33,10 +33,11 @@ import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
 
-from PIL import Image, ImageDraw, ImageFont, ImageOps
+from PIL import Image, ImageDraw, ImageOps
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import env  # noqa: E402
+import fonts  # noqa: E402
 
 STEPS = dict(C=0, D=2, E=4, F=5, G=7, A=9, B=11)
 NAMES = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B']
@@ -193,11 +194,7 @@ def label(img, text):
     img = img.resize((WIDTH, max(1, round(img.height * WIDTH / img.width))))
     bar = Image.new('L', (WIDTH, 44), 255)
     d = ImageDraw.Draw(bar)
-    try:
-        font = ImageFont.truetype('/System/Library/Fonts/Hiragino Sans GB.ttc', 30)
-    except OSError:
-        font = ImageFont.load_default()
-    d.text((10, 6), text, fill=0, font=font)
+    fonts.draw_text(d, (10, 6), text, 30)
     out = Image.new('L', (WIDTH, img.height + 44), 255)
     out.paste(bar, (0, 0))
     out.paste(img, (0, 44))

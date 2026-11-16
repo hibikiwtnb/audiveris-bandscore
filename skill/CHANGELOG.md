@@ -2,6 +2,13 @@
 
 這裡只記 `skill/`（AI agent 用的 BandScore 流程、工具、模板、文件）的變更。Audiveris 本體（Java）的改進見根目錄 README 第 2 節。日期是同步到本 repo 的日期，括號裡是 commit。
 
+## 2026-11-17：中文字型自動尋找
+
+- **`tools/fonts.py`（新）**：`proof_pairs.py` 與 `omr_beat_grid.py` 共用的字型解析。依序找 macOS（Hiragino Sans GB、PingFang、STHeiti、Arial Unicode）、Linux（Droid Sans Fallback、Noto CJK、文泉驛、AR PL UMing）、Windows（微軟正黑、黑體、宋體），再問 fontconfig 與系統字型資料夾。載入後先確認畫得出「中」才採用：`fc-match ':lang=zh'` 常指到只有拉丁字的 DejaVu Sans，用下去標籤就變方框。中文與拉丁字在同一顆字型時整串用它；分開時逐段換字型，像 Linux 的 Droid Sans Fallback 沒有數字和拉丁字母，混排也不會出現方框。真的找不到中文字型時在 stderr 印一次警告，不再默默產出方框標籤。
+- **`tools/proof_pairs.py`**：標籤改用共用的解析；macOS 行為不變，Linux 上「原譜／第 N 行／OMR／小節範圍」等中文標籤正常，圖寬、標籤條高度與小節對齊都不變。
+- **`tools/omr_beat_grid.py`**：移除自己的 Arial 硬編碼路徑清單，改用共用的拉丁字型解析（以前在 Linux 掉回點陣字，小節號和拍點數字很小）。
+- **`SKILL.md`**：對照圖一節註明字型是自動找的。
+
 ## 2026-11-16：吉他與貝斯八度移調
 
 - **`tools/apply_tab_octave.py`（新）**：吉他與貝斯吉他的記譜比實音高一個八度，轉出的 MusicXML 少了 `<transpose>`，播放與音域檢查都高一個八度。對沒有八度移調的吉他、貝斯聲部補 `<octave-change>-1`；已有 capo／降半音的 `<chromatic>` 保留，只補八度。合成貝斯、低音管、長號、低音號、低音提琴不套用。
