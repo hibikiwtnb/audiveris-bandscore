@@ -126,7 +126,7 @@ python tools/bandscore_postprocess.py S
    - 後處理最後對 preview 跑一次 `tools/score_quality.py`，印在輸出末尾並寫成 `S/<song>_quality.txt`（不含時間戳，重跑沒變化時檔案不變，和上一份比就看得出這次修改讓哪些項目變好或變差）。
    - 每次修改工具或提示檔後重跑，把新舊 `_quality.txt` 的 `[issues]` 比一下，再決定要不要交付。
    - **重跑後一定要跑對照**：重跑前先把 `<id>_quality.txt` 複製成 `<id>_quality.prev.txt`，重跑後 `python3 tools/compare_quality.py S/<id>_quality.prev.txt S/<id>_quality.txt`（在 git 裡管理曲子時，舊檔也可以寫 `HEAD:<路徑>`）。它列出樂譜結構的變化：頁數、小節數（每頁）、聲部、譜線數、各聲部的調號時間線與移調、排練記號、反覆與房子。有變化時 exit 1：逐項對照原譜，寫進 `omr_report.md`（變好／變壞／未確認）。DTD 和 `verify_musescore` 全過不代表沒有退步（曾發生：五線譜變一線譜、吉他調號被蓋掉、轉調位置延後，這些檢查全部通過）。
-   - `[issues]` 最後四項是要對照原譜的清單，不是錯誤：`staff_lines_change`（譜表中途換線數）、`transposing_key_mismatch`（有 `<transpose>` 的聲部調號和其他聲部對不上）、`out_of_range`（音符超出開頭音色的常用音域，音域表是近似值）、`harmony_root_without_key_accidental`（和弦根音沒有升降記號，但調號裡這個音有：可能是 OCR 漏了 ♭／♯）。
+   - `[issues]` 最後四項是要對照原譜的清單，不是錯誤：`staff_lines_change`（譜表中途換線數）、`transposing_key_mismatch`（有 `<transpose>` 的聲部調號和其他聲部對不上）、`out_of_range`（音符換算實際音高後超出開頭音色的常用音域，音域表是近似值）、`harmony_root_without_key_accidental`（和弦根音沒有升降記號，但調號裡這個音有：可能是 OCR 漏了 ♭／♯）。
 
 ---
 

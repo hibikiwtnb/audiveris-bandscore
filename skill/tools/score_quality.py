@@ -13,8 +13,9 @@ do, out of all of them: finer than the measure count, use it on the raw Audiveri
 The last issues are lists to check against the printed score, not errors:
 staff_lines_change = a staff changes its number of lines inside the score (a 5-line staff read
 as a one-line staff); transposing_key_mismatch = a part with <transpose> whose key is not the
-concert key moved by its transposition; out_of_range = notes outside the usual range of the
-part's General MIDI program (approximate ranges, MuseScore marks such notes);
+concert key moved by its transposition; out_of_range = notes whose sounding pitch (written
+pitch moved by the part's <transpose>) is outside the usual range of the part's General MIDI
+program (approximate ranges, MuseScore marks such notes);
 harmony_root_without_key_accidental = chord roots written natural on a letter that the key
 signature alters (a flat or sharp the OCR may have dropped).
 """
@@ -259,8 +260,19 @@ def staff_line_changes(parts):
     return out
 
 
-def notes_out_of_range(root, parts):
-    """Per (part, program): pitched notes outside the usual range of the program.
+def sounding_shift(tr):
+    """Semitones added to a written note to get its sounding pitch: <chromatic> plus
+    12 per <octave-change>."""
+    if tr is None:
+        return 0
+    chromatic = int(float(tr.findtext('chromatic', '0')))
+    octave = int(tr.findtext('octave-change', '0'))
+    return chromatic + 12 * octave
+
+
+def notes_out_of_range(root, parts, transposing):
+    """Per (part, program): pitched notes whose sounding pitch is outside the usual range.
+    The sounding pitch is the written pitch moved by the part's <transpose>.
     A note uses its own <instrument> when the part has several, else the first of the part."""
     programs = {}
     for sp in root.iter('score-part'):
@@ -272,6 +284,7 @@ def notes_out_of_range(root, parts):
     stat = collections.OrderedDict()
     for part in parts:
         pid = part.get('id')
+        shift = sounding_shift(transposing.get(pid))
         for note in part.iter('note'):
             pitch = note.find('pitch')
             if pitch is None:
@@ -281,7 +294,7 @@ def notes_out_of_range(root, parts):
             if program is None or gm_range(program) is None:
                 continue
             n = 12 * (int(pitch.findtext('octave')) + 1) + STEP_PC[pitch.findtext('step')] \
-                + int(float(pitch.findtext('alter', '0')))
+                + int(float(pitch.findtext('alter', '0'))) + shift
             low, high = gm_range(program)
             d = stat.setdefault((pid, program), dict(total=0, out=0, lo=n, hi=n))
             d['total'] += 1
@@ -516,7 +529,7 @@ def main(path):
     line(f'transposing_key_mismatch count={len(wrong)}')
     out.extend(wrong)
 
-    ranges = notes_out_of_range(root, parts)
+    ranges = notes_out_of_range(root, parts, transposing)
     line(f'out_of_range count={sum(d["out"] for _, _, d in ranges)}')
     for pid, program, d in ranges:
         low, high = gm_range(program)
