@@ -27,6 +27,9 @@ import sys
 import xml.etree.ElementTree as ET
 from fractions import Fraction as F
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from fix_rehearsal_marks import rehearsal_suspects  # noqa: E402
+
 if sys.platform == 'win32':
     try:
         sys.stdout.reconfigure(encoding='utf-8')
@@ -507,6 +510,9 @@ def main(path):
     roots = roots_without_key_accidental(parts)
     line(f'harmony_root_without_key_accidental count={len(roots)}' +
          (' at=' + ' '.join(f'm{num}:{step}' for num, step in roots) if roots else ''))
+    suspects = rehearsal_suspects(parts[0])
+    line(f'rehearsal_mark_suspects count={len(suspects)}' +
+         (' at=' + ' '.join(f'm{num}:{txt}({reason})' for num, txt, reason in suspects) if suspects else ''))
     print('\n'.join(out))
 
 

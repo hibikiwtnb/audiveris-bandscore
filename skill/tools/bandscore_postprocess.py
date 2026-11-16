@@ -664,6 +664,8 @@ def main(song_dir):
                    check=True)
     subprocess.run([sys.executable, os.path.join(HERE, 'clean_score_noise.py'), merged],
                    check=True)
+    subprocess.run([sys.executable, os.path.join(HERE, 'fix_rehearsal_marks.py'), merged],
+                   check=True)
     hints = os.path.join(song_dir, 'context', 'instrument_changes.txt')
     if os.path.exists(hints):
         subprocess.run([sys.executable, os.path.join(HERE, 'apply_instrument_changes.py'),
