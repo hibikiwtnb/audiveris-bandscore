@@ -139,6 +139,7 @@ A.pf	1	15ma	247	1	247	end
 - 譜表 1 = 高音譜、2 = 低音譜。Audiveris 時間錯位的小節（如上例 m37、m84）用 `#k`（該譜表第 k 個起音），不要用拍數。資料行同樣不能加行內註解。
 - 小節 = 全曲小節號；位置 = 拍（1 起算，含該拍起音的音）、`#k` 或 `end`。
 - 8va/15ma：該譜表範圍內音高升 1/2 八度＋`<octave-shift type="down">`（direction 帶 `<staff>`；高低音譜同時有線時用不同 `number`）。coll8va：每個音加一個高八度**隱形音**（`print-object="no"`）＋文字，譜面不變、播放有重疊。
+- 可由 `python3 tools/ottava_from_labels.py "<song dir>" [--part=<縮寫>]` 依印刷的獨立 8va/15ma 標示產生草稿；配對與箭頭有疑問的地方會印 `# check:`，草稿必須對照譜面確認後才寫入 `context/ottava.txt`。音色名上的 `(8va)` 不走這裡，改寫進 `instrument_changes.txt`。
 - 目標小節沒音會印 `no notes`：多半是 Audiveris 漏音（297：m45 鋼琴整小節、m247 全音符），提示保留，補音後重跑即生效。
 
 

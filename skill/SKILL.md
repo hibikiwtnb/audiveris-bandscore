@@ -146,7 +146,7 @@ python3 tools/omr_beat_grid.py S <頁>              # 需要精確位置時：�
 - **只在清單判斷不了時看圖**（配不成對、分不出結束或提醒、不認得的音色名）。
 - 試過並放棄：用像素形狀自動判斷「┌」／「→┐」——符槓、小節線、斜譜線一直干擾，不划算。
 
-可以先跑 `python3 tools/labels_to_hints.py S --part=<縮寫>` 產生音色提示草稿（`# check:` 要人工補），再寫 `context/instrument_changes.txt`、`context/ottava.txt`（格式見 [formats.md](formats.md)），重跑 `bandscore_postprocess.py` 即可重建 preview。大譜表上下行不同音色（如 Keyboard 一行 Glocken、一行 Pan Flute）在音色提示加譜表欄，各譜表有自己的音色與八度時間線；音色名後的 `(8va)` 是該段的實際八度，不是另一條八度線。
+可以先跑 `python3 tools/labels_to_hints.py S --part=<縮寫>` 產生音色提示草稿、`python3 tools/ottava_from_labels.py S [--part=<縮寫>]` 產生獨立八度線草稿（兩者的 `# check:` 都要人工確認），再寫 `context/instrument_changes.txt`、`context/ottava.txt`（格式見 [formats.md](formats.md)），重跑 `bandscore_postprocess.py` 即可重建 preview。大譜表上下行不同音色（如 Keyboard 一行 Glocken、一行 Pan Flute）在音色提示加譜表欄，各譜表有自己的音色與八度時間線；音色名後的 `(8va)` 是該段的實際八度，不是另一條八度線。
 
 做法（已定，不用再試）：每種音色一個 instrument，**每個音符（含休止符）**帶 `<instrument id>`；八度用 `<octave-shift>`，不用樂器移調（MuseScore 只在換樂器時才套 transpose）；標示區段內 Audiveris 自己產生的 octave-shift 是把標示括號誤判成 8va 線，先移除並還原音高。
 
