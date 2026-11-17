@@ -113,7 +113,7 @@ python tools/bandscore_postprocess.py S
    - 自動將頁面拼接為全曲總譜。
    - 調用 `tools/fill_measure_repeats.py`：每頁分開做 OMR，頁首的小節反覆（%）沒有前一小節可抄，只剩休止符；合併後改抄上一頁最後一小節的音符（不抄 tie 與歌詞）。
    - 調用 `tools/fill_slash_chords.py`：斜線（吉他「前一個和弦照這個節奏再彈」）匯出時只有暫定音高；改成前一個和弦（同譜表同聲部，跨頁也算）的所有音，符頭保持斜線，時值與連結線照斜線。前面沒有和弦的斜線不動，輸出會列出來。
-   - 調用 `tools/clean_score_noise.py` 清除未經驗證之碎片化 `<slur>`、補齊和弦內聲部漏識的 Tie、清除異音或懸空的無效 Tie。
+   - 調用 `tools/clean_score_noise.py` 清除未經驗證之碎片化 `<slur>`、補齊和弦內聲部漏識的 Tie、清除異音或懸空的無效 Tie，以及被誤讀成歌詞的力度／表情文字（`mf`、`pp`、`dolce` 等，精確比對整條 `<lyric>`；哼鳴 `wu`／`hu` 保留）。
    - 有 `context/instrument_changes.txt` / `context/ottava.txt` 時接著自動套用（兩支都有防重複套用）。
    - 有 `context/song_metadata.md` 時接著由 `apply_score_hints.py` 套用拍號、速度與排練記號（格式見 Step 1）。
    - 有 `context/hook.py` 時接著執行 `python hook.py <preview>`（只放資料檔表達不了的逐曲修正，如 216 的 `<transpose>`）；沒有就跳過。

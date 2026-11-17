@@ -26,6 +26,9 @@ MusicXML DTD requirement, and removes only what Audiveris invented wrongly:
   8. spurious articulations -- drops staccatissimo (martellato is not used in band scores),
      vocal/chorus articulations caused by lyric characters/dakuten/i-dots/chords, and deep
      off-staff articulations (placement="below", default-y <= -50) colliding with TAB/lyrics.
+  9. dynamics words in lyrics -- a printed `mf`, `pp`, `dolce` ... read as a lyric line
+     takes one syllable slot and shifts the rest of the line.  A whole <lyric> whose text
+     is exactly one of DYNAMIC_WORDS is removed; hums (wu, hu, hm) stay.
 
 Usage:
     clean_score_noise.py FILE [FILE ...]
@@ -35,6 +38,17 @@ import sys
 import xml.etree.ElementTree as ET
 
 WEDGE_START = ("crescendo", "diminuendo")
+
+# Printed dynamics / expression words, in the spelling Audiveris writes them.
+# Only an exact match on a whole <lyric> text is dropped; case and a trailing
+# period are ignored.  Nothing here is a lyric syllable.
+DYNAMIC_WORDS = {
+    "p", "pp", "ppp", "pppp", "f", "ff", "fff", "ffff",
+    "mp", "mf", "pf", "fp", "sf", "sfz", "sfp", "sffz", "fz",
+    "cresc", "crescendo", "dim", "diminuendo",
+    "dolce", "rit", "riten", "ritenuto", "sempre", "subito",
+    "poco", "piu", "meno", "espress", "espressivo", "cantabile",
+}
 
 
 def strip_rest_positions(root):
@@ -388,6 +402,24 @@ def strip_empty_lyrics(root):
     return n
 
 
+def strip_dynamics_lyrics(root):
+    """Drop <lyric> slots holding a printed dynamics / expression word.
+
+    Audiveris sometimes classifies `mf`, `pp`, `dolce` ... as part of the lyric
+    line, so the word occupies a syllable slot and every syllable after it is
+    one or two places off.  Matching is exact (case-insensitive, one trailing
+    period allowed) so real syllables, including hums, are never touched.
+    """
+    n = 0
+    for parent in root.iter():
+        for l in list(parent.findall("lyric")):
+            text = (l.findtext("text") or "").strip().lower().rstrip(".")
+            if text in DYNAMIC_WORDS:
+                parent.remove(l)
+                n += 1
+    return n
+
+
 def strip_measure_repeat_overlays(root):
     """Strip redundant measure rest notes and backups in measures with measure-repeat notes.
 
@@ -485,6 +517,7 @@ def process(path):
     g = complete_chord_ties(root)
     e = strip_score_part_staves(root)
     f = strip_empty_lyrics(root)
+    k = strip_dynamics_lyrics(root)
     i = strip_measure_repeat_overlays(root)
     j = strip_spurious_articulations(root)
     ET.indent(root, space="  ")
@@ -496,8 +529,9 @@ def process(path):
            + body + "\n")
     open(path, "w", encoding="utf-8").write(out)
     print("%s: rest-pos %d, wedges %d, octave-shifts %d, slurs %d, pruned-ties %d, "
-          "added-chord-ties %d, sp-staves %d, empty-lyrics %d, repeat-overlays %d, spurious-art %d"
-          % (path, a, b, h, c, d, g, e, f, i, j))
+          "added-chord-ties %d, sp-staves %d, empty-lyrics %d, dynamics-lyrics %d, "
+          "repeat-overlays %d, spurious-art %d"
+          % (path, a, b, h, c, d, g, e, f, k, i, j))
 
 
 if __name__ == "__main__":
