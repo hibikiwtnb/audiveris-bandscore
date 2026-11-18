@@ -45,6 +45,7 @@ import glob
 import os
 import re
 import shutil
+import statistics
 import subprocess
 import sys
 import tempfile
@@ -671,6 +672,82 @@ def prune_virtual_measures(root, report=None):
             prev = m
 
 
+def _float_pos(val):
+    try:
+        x = float(val)
+    except (TypeError, ValueError):
+        return None
+    return x if x > 0 else None
+
+
+def _non_rest_count(measure):
+    return sum(1 for n in measure.findall('note') if n.find('rest') is None)
+
+
+def _insert_key_in_attributes(measure, key_el):
+    """Insert a <key> element into measure's <attributes> in MusicXML DTD order."""
+    attrs = measure.find('attributes')
+    if attrs is None:
+        attrs = ET.Element('attributes')
+        idx = 1 if len(measure) and measure[0].tag == 'print' else 0
+        measure.insert(idx, attrs)
+    after_tags = {'footnote', 'level', 'divisions'}
+    pos = 0
+    for i, child in enumerate(attrs):
+        if child.tag in after_tags:
+            pos = i + 1
+        elif child.tag == 'key':
+            pos = i + 1
+    attrs.insert(pos, key_el)
+
+
+def prune_page_edge_measures(pages, report=None):
+    """Remove spurious narrow page-edge measures (e.g. trailing cautionary key signatures).
+
+    Detects a page's final measure when it is much narrower than other measures on the page
+    (< 35% of median width), carries only noise across all parts (<= 3 non-rest notes per
+    part), and the next page's opening measure already has a key signature (or the key exists
+    only in the trailing measure and is moved to the next page's opening measure).
+    """
+    for idx in range(len(pages) - 1):
+        page_name, root = pages[idx]
+        _, next_root = pages[idx + 1]
+        parts = root.findall('part')
+        next_parts = next_root.findall('part')
+        if not parts or len(parts) != len(next_parts):
+            continue
+        if any(len(p.findall('measure')) < 2 for p in parts):
+            continue
+        last_ms = [p.findall('measure')[-1] for p in parts]
+        next_first_ms = [np.findall('measure')[0] for np in next_parts]
+        if any(m.find('print') is not None for m in last_ms):
+            continue
+        other_widths = [w for m in parts[0].findall('measure')[:-1]
+                        if (w := _float_pos(m.get('width'))) is not None]
+        last_w = _float_pos(last_ms[0].get('width'))
+        if not other_widths or last_w is None:
+            continue
+        med_w = statistics.median(other_widths)
+        if last_w >= 0.35 * med_w:
+            continue
+        if any(_non_rest_count(m) > 3 for m in last_ms):
+            continue
+        next_has_key = any(nm.find('.//key') is not None for nm in next_first_ms)
+        last_has_key = any(m.find('.//key') is not None for m in last_ms)
+        if not next_has_key and not last_has_key:
+            continue
+        for m, nm in zip(last_ms, next_first_ms):
+            if nm.find('.//key') is None:
+                src_key = m.find('.//key')
+                if src_key is not None:
+                    _insert_key_in_attributes(nm, copy.deepcopy(src_key))
+        for p, m in zip(parts, last_ms):
+            p.remove(m)
+        if report is not None:
+            report.setdefault('page_edge_pruned', []).append(
+                f'{page_name}: m{last_ms[0].get("number")} (w={last_w:g}, med={med_w:g})')
+
+
 # --------------------------------------------------------------------------------------------- #
 # Driver
 # --------------------------------------------------------------------------------------------- #
@@ -682,7 +759,7 @@ def main(song_dir):
     out_pages = os.path.join(song_dir, 'pages')
     os.makedirs(out_pages, exist_ok=True)
     report = {k: [] for k in ('drop_dot', 'overflow_cut', 'trim_gap', 'trim_rest', 'trim_note', 'padded',
-                              'extended', 'double_dot_merged',
+                              'extended', 'double_dot_merged', 'page_edge_pruned',
                               'rehearsal', 'lyric_words', 'lyric_dropped')}
     report['empty_filled'] = 0
     report['zero_divisions'] = 0
@@ -697,6 +774,7 @@ def main(song_dir):
         first_root = read_mxl(mxls[0])
         canonical_pids = [p.get('id') for p in first_root.findall('part')]
 
+    pages = []
     for i, mxl in enumerate(mxls, 1):
         page = os.path.basename(mxl)[:-4]
         root = read_mxl(mxl)
@@ -717,6 +795,10 @@ def main(song_dir):
         merge_double_dot_splits(root, report, page)
         lyrics_to_words(root, report, page)
         scrub_paths(root)
+        pages.append((page, root))
+
+    prune_page_edge_measures(pages, report)
+    for i, (page, root) in enumerate(pages, 1):
         tree = ET.ElementTree(root)
         tree.write(os.path.join(out_pages, page + '.musicxml'), encoding='UTF-8',
                    xml_declaration=True)
@@ -796,7 +878,7 @@ def main(song_dir):
     # Report
     print(f'pages: {len(mxls)}  empty measures filled: {report["empty_filled"]}  zero divisions fixed: {report["zero_divisions"]}')
     for k in ('rehearsal', 'lyric_words', 'lyric_dropped', 'drop_dot', 'trim_gap', 'trim_rest', 'trim_note', 'padded', 'extended',
-              'double_dot_merged', 'overflow_cut'):
+              'double_dot_merged', 'page_edge_pruned', 'overflow_cut'):
         print(f'{k}: {len(report[k])}')
         for line in report[k]:
             print('   ', line)
