@@ -5,8 +5,12 @@
 
 Converts the score with MuseScore (headless) to .mscx and compares, staff by staff and measure
 by measure, the pitches MuseScore stores (= displayed pitches: an 8va line is already taken
-off) with the XML pitches minus the octave-shift lines of that staff (a drum note's pitch is
-its instrument's midi-unpitched - 1, the GM key MuseScore stores). Also counts
+off) with the XML pitches minus the octave-shift that covers each note's exact onset (a drum
+note's pitch is its instrument's midi-unpitched - 1, the GM key MuseScore stores).  The onset
+and the octave-shift intervals come from tools/score_time.py, so backup / forward, voices,
+direction offsets and document order do not change the expectation; a stop is end-exclusive.
+All differing measures are listed, split into octave/pitch differences and
+note-set/measure-repeat differences (cross-staff notes are reported separately). Also counts
 InstrumentChange, Ottava and invisible notes per staff. Exit code 1 on any mismatch.
 MuseScore measure-repeat symbols represent the notes of the referenced earlier measures.
 
@@ -22,6 +26,8 @@ import subprocess
 import sys
 import tempfile
 import xml.etree.ElementTree as ET
+
+import score_time
 
 STEP = {'C': 0, 'D': 2, 'E': 4, 'F': 5, 'G': 7, 'A': 9, 'B': 11}
 
@@ -41,7 +47,12 @@ def transpose_offset(part):
 
 
 def xml_staves(path):
-    """[(label, [sorted display pitches per measure])] in MuseScore staff order."""
+    """[(label, [sorted display pitches per measure])] in MuseScore staff order.
+
+    The expected display pitch is taken from the note's exact onset (tools/score_time.py)
+    and the octave-shift interval containing it, so backup / forward, voices and document
+    order cannot move a note into or out of a shift.
+    """
     root = ET.parse(path).getroot()
     drum = {i.get('id'): int(i.findtext('midi-unpitched')) - 1
             for i in root.iter('midi-instrument') if i.findtext('midi-unpitched')}
@@ -50,24 +61,22 @@ def xml_staves(path):
         nst = max([int(e.text) for e in part.iter('staves')] or [1])
         transpose = transpose_offset(part)
         per = {str(s): [] for s in range(1, nst + 1)}
-        shift = {s: 0 for s in per}
-        for m in part.findall('measure'):
+        divs = score_time.measure_divs(part)
+        starts = score_time.measure_starts(part)
+        intervals = score_time.octave_intervals(part)
+        for m, div, st in zip(part.findall('measure'), divs, starts):
             cur = {s: [] for s in per}
-            for el in m:
-                if el.tag == 'direction':
-                    o = el.find('direction-type/octave-shift')
-                    if o is not None:
-                        s = el.findtext('staff') or '1'
-                        size = 2 if o.get('size') == '15' else 1
-                        shift[s] = 0 if o.get('type') == 'stop' else \
-                            size * (1 if o.get('type') == 'down' else -1)
-                elif el.tag == 'note' and el.find('pitch') is not None:
-                    s = el.findtext('staff') or '1'
-                    cur[s].append(midi(el) - 12 * shift[s] + transpose)
-                elif el.tag == 'note' and el.find('unpitched') is not None:
-                    i = el.find('instrument')
+            for e in score_time.walk(m, div, st):
+                if e.tag != 'note':
+                    continue
+                cur.setdefault(e.staff, [])
+                if e.el.find('pitch') is not None:
+                    shift = score_time.shift_at(intervals, e.staff, e.tick)
+                    cur[e.staff].append(midi(e.el) - 12 * shift + transpose)
+                elif e.el.find('unpitched') is not None:
+                    i = e.el.find('instrument')
                     if i is not None and i.get('id') in drum:
-                        cur[el.findtext('staff') or '1'].append(drum[i.get('id')])
+                        cur[e.staff].append(drum[i.get('id')])
             for s in per:
                 per[s].append((m.get('number'), sorted(cur[s])))
         for s in per:
@@ -136,10 +145,17 @@ def main():
         if len(xm) != len(st['measures']):
             note = f"  measure count XML {len(xm)} / MuseScore {len(st['measures'])}"
             bad += 1
-        print(f"{label}: {len(diffs)} measures differ, {st['changes']} instrument changes, "
+        pitch = [d for d in diffs
+                 if len(d[1]) == len(d[2]) and all((a - b) % 12 == 0
+                                                   for a, b in zip(d[1], d[2]))]
+        notes = [d for d in diffs if d not in pitch]
+        print(f"{label}: {len(diffs)} measures differ ({len(pitch)} octave/pitch, "
+              f"{len(notes)} note-set/measure-repeat), {st['changes']} instrument changes, "
               f"{st['ottava']} ottava, {st['invisible']} invisible notes{note}")
-        for num, p, q in diffs[:5]:
-            print(f'    m{num}: XML {p}  MuseScore {q}')
+        for num, p, q in pitch:
+            print(f'    m{num} [pitch]: XML {p}  MuseScore {q}')
+        for num, p, q in notes:
+            print(f'    m{num} [notes]: XML {p}  MuseScore {q}')
         bad += len(diffs)
     sys.exit(1 if bad else 0)
 

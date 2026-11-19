@@ -64,6 +64,7 @@ class TestPrunePageEdgeMeasures(unittest.TestCase):
         self.assertEqual(_count(p1), 2)
         self.assertEqual(p2.find('part/measure').findtext('attributes/key/fifths'), '5')
         self.assertEqual(rep['page_edge_pruned'], ['p1: m3 (crop p1 right edge: courtesy key only)'])
+        self.assertEqual(rep['measure_map_deleted'], [('p1', '3')])
 
     def test_refuses_listed_measure_without_evidence(self):
         p1 = _make_page([(400, 4, None), (400, 4, None), (80, 1, None)])
@@ -78,6 +79,19 @@ class TestPrunePageEdgeMeasures(unittest.TestCase):
         p2 = _make_page([(450, 4, 3)])
         bp.prune_page_edge_measures([('p1', p1), ('p2', p2)], {}, {('p1', '2'): 'crop'})
         self.assertEqual(_count(p1), 3)
+
+    def test_prune_virtual_measures_records_deleted(self):
+        root = ET.Element('score-partwise')
+        p = ET.SubElement(root, 'part', {'id': 'P1'})
+        for num in ('1', '2', '5+1'):
+            ET.SubElement(p, 'measure', {'number': num})
+        p2 = ET.SubElement(root, 'part', {'id': 'P2'})
+        for num in ('1', '2'):
+            ET.SubElement(p2, 'measure', {'number': num})
+        rep = {}
+        bp.prune_virtual_measures(root, rep, 'p03')
+        self.assertEqual(rep['measure_map_deleted'], [('p03', '5+1')])
+        self.assertEqual(len(root.findall('part')[0].findall('measure')), 2)
 
     def test_read_page_edge_list(self):
         with tempfile.TemporaryDirectory() as d:

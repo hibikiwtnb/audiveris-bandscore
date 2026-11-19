@@ -1,17 +1,26 @@
 #!/usr/bin/env python3
 """Apply printed 8va / 15ma / coll'8va markings (read by hand) to a merged score.
 
-    python3 tools/apply_ottava.py <score.musicxml> <song dir>/context/ottava.txt
+    python3 tools/apply_ottava.py <score.musicxml> <song dir>/context/ottava.txt \\
+        [<song dir>/context/measure_map.tsv] [--raw]
 
 Run on a freshly merged score (tools/bandscore_postprocess.py does); it refuses to run twice.
 Each hint line gives part, staff, kind and a start / end position (measure + beat, "#k" = k-th
-onset of that staff in the measure, or "end"). The notes of that staff in the range get:
+onset of that staff in the measure, or "end").  Measures are final merged numbers; with
+`--raw` the hint numbers are source (Audiveris) numbers and are converted through the map.
+A map names deleted / missing / ambiguous measures explicitly instead of guessing.
+
+The notes of that staff in the range get:
 
   * 8va / 15ma: pitch raised by 1 / 2 octaves and an <octave-shift type="down"> line around
     them. MusicXML <pitch> is the sounding pitch and the line displays it lower, so the page
     still shows the printed notes while playback is an octave higher;
   * coll8va: an invisible (print-object="no") copy one octave higher on every note (chord
     member), i.e. the octave doubling is heard but the page is unchanged, plus a "coll'8va" word.
+
+The stop sits at the end-exclusive tick of the last covered note (its onset + duration),
+measured with tools/score_time.py, so its position no longer depends on which voice's note
+happens to be last in document order; an <offset> corrects the direction when needed.
 
 OCR copies of these markings left as <words> in the listed parts ("8va", "18va", "coll'8va"...)
 are removed. The score's measure lengths should be equal across parts (bandscore_postprocess
@@ -23,11 +32,15 @@ import sys
 import xml.etree.ElementTree as ET
 from fractions import Fraction as F
 
+import measure_map
+import score_time
+
 NUMBER = {'1': '3', '2': '4'}   # octave-shift number per staff (2 is used by instrument changes)
 WORDS_RE = re.compile(r"8va|15ma|coll", re.I)
 NOTE_ORDER = ['grace', 'cue', 'chord', 'pitch', 'unpitched', 'rest', 'duration', 'tie',
               'instrument', 'voice', 'type', 'dot', 'accidental', 'time-modification', 'stem',
               'notehead', 'notehead-text', 'staff', 'beam', 'notations', 'lyric', 'play']
+DIRECTION_ORDER = ['direction-type', 'offset', 'footnote', 'level', 'voice', 'staff', 'sound']
 
 
 def insert_ordered(note, el):
@@ -52,20 +65,14 @@ def read_hints(path):
 
 def groups(m, div):
     """Chord groups of a measure: (onset in quarters, [note elements], staff), document order."""
-    t, out = F(0), []
-    for el in list(m):
-        if el.tag == 'note':
-            dur = F(int(el.findtext('duration') or 0), div)
-            if el.find('chord') is not None and out:
-                out[-1][1].append(el)
-                continue
-            out.append((t, [el], el.findtext('staff') or '1'))
-            if el.find('grace') is None:
-                t += dur
-        elif el.tag == 'backup':
-            t -= F(int(el.findtext('duration')), div)
-        elif el.tag == 'forward':
-            t += F(int(el.findtext('duration')), div)
+    out = []
+    for e in score_time.walk(m, div):
+        if e.tag != 'note':
+            continue
+        if e.el.find('chord') is not None and out:
+            out[-1][1].append(e.el)
+        else:
+            out.append((e.tick, [e.el], e.staff))
     return out
 
 
@@ -96,14 +103,18 @@ def shift(n, octaves):
     o.text = str(int(o.text) + octaves)
 
 
-def direction(staff, child):
+def insert_direction(measure, index, staff, child, offset=None):
+    """Insert a <direction> at `index`, with an optional <offset> in divisions."""
     d = ET.Element('direction', placement='above')
-    ET.SubElement(d, 'direction-type').append(child)
+    dt = ET.SubElement(d, 'direction-type')
+    dt.append(child)
+    if offset:
+        ET.SubElement(d, 'offset').text = str(int(offset))
     ET.SubElement(d, 'staff').text = staff
-    return d
+    measure.insert(index, d)
 
 
-def main(score, hints):
+def main(score, hints, map_path=None, raw_map=False):
     tree = ET.parse(score)
     root = tree.getroot()
     if any(o.get('number') in NUMBER.values() for o in root.iter('octave-shift')):
@@ -111,6 +122,18 @@ def main(score, hints):
     abbr = {sp.findtext('part-abbreviation'): sp.get('id') for sp in root.iter('score-part')}
     parts = {p.get('id'): p for p in root.findall('part')}
     hs = read_hints(hints)
+    rows = measure_map.read_map(map_path) if map_path else None
+
+    # resolve every hint coordinate before touching the score, so a deleted / missing /
+    # ambiguous measure stops the run instead of silently skipping the hint
+    for h in hs:
+        if rows is None:
+            continue
+        try:
+            h['m1'] = measure_map.resolve_measure(h['m1'], rows, raw_map)
+            h['m2'] = measure_map.resolve_measure(h['m2'], rows, raw_map)
+        except ValueError as e:
+            sys.exit(f'ottava hint {describe(h)}: {e}')
 
     # divisions per measure, per part
     divs = {}
@@ -138,7 +161,8 @@ def main(score, hints):
             print(f"   skipped out-of-range hint ({describe(h)}): measure not found")
             continue
         i1, i2 = nums.index(h['m1']), nums.index(h['m2'])
-        covered = []    # (measure, group)
+        starts = score_time.measure_starts(parts[pid])
+        covered = []    # (measure index, group)
         try:
             for i in range(i1, i2 + 1):
                 m = measures[i]
@@ -150,14 +174,15 @@ def main(score, hints):
                         continue
                     if (lo is not None and g[0] < lo) or (hi is not None and g[0] > hi):
                         continue
-                    covered.append((m, g))
+                    covered.append((i, g))
         except ValueError as e:
             print(f"   skipped out-of-range hint ({describe(h)}): {e}")
             continue
         if not covered:
             print(f'   {h}: no notes')
             continue
-        first_m, first_g = covered[0]
+        first_i, first_g = covered[0]
+        first_m = measures[first_i]
         n_notes = sum(len(pitched(g)) for _, g in covered)
         if h['kind'] in ('8va', '15ma'):
             octv, size = (1, '8') if h['kind'] == '8va' else (2, '15')
@@ -165,23 +190,27 @@ def main(score, hints):
                 for n in pitched(g):
                     shift(n, octv)
             num = NUMBER[h['staff']]
-            first_m.insert(list(first_m).index(first_g[1][0]),
-                           direction(h['staff'], ET.Element('octave-shift', type='down',
-                                                            size=size, number=num)))
-            # stop after the group that ends last (in its measure); break ties by document order
-            last_m = covered[-1][0]
+            insert_direction(first_m, list(first_m).index(first_g[1][0]), h['staff'],
+                             ET.Element('octave-shift', type='down', size=size, number=num))
+            # end-exclusive tick of the last covered note (onset + its own duration), measured
+            # per staff, not by whichever voice's group is last in the XML
+            end_idx, end_tick = max(
+                ((k, starts[i] + g[0] + max(F(int(n.findtext('duration') or 0),
+                                               divs[(pid, measures[i].get('number'))])
+                                             for n in g[1]))
+                 for k, (i, g) in enumerate(covered)),
+                key=lambda item: (item[1], item[0]))
+            last_i, last_g = covered[end_idx]
+            last_m = measures[last_i]
             div = divs[(pid, last_m.get('number'))]
-            _, last_g = max(
-                ((idx, g) for idx, (mm, g) in enumerate(covered) if mm is last_m),
-                key=lambda item: (item[1][0] + F(int(item[1][1][0].findtext('duration') or 0), div),
-                                  item[0]))
-            last_m.insert(list(last_m).index(last_g[1][-1]) + 1,
-                          direction(h['staff'], ET.Element('octave-shift', type='stop',
-                                                           size=size, number=num)))
+            offset = (end_tick - starts[last_i]) - score_time.local_cursor(last_m, last_g[1][-1], div)
+            insert_direction(last_m, list(last_m).index(last_g[1][-1]) + 1, h['staff'],
+                             ET.Element('octave-shift', type='stop', size=size, number=num),
+                             offset=offset * div)
         elif h['kind'] == 'coll8va':
             w = ET.Element('words')
             w.text = "coll'8va"
-            first_m.insert(list(first_m).index(first_g[1][0]), direction(h['staff'], w))
+            insert_direction(first_m, list(first_m).index(first_g[1][0]), h['staff'], w)
             for k, (m, g) in enumerate(covered):
                 have = {(n.findtext('pitch/step'), n.findtext('pitch/alter'),
                          n.findtext('pitch/octave')) for n in pitched(g)}
@@ -216,4 +245,6 @@ def main(score, hints):
 
 
 if __name__ == '__main__':
-    main(sys.argv[1], sys.argv[2])
+    argv = sys.argv[1:]
+    args = [a for a in argv if a != '--raw']
+    main(args[0], args[1], args[2] if len(args) > 2 else None, '--raw' in argv)
