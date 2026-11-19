@@ -19,6 +19,10 @@ Page-level fixes (a measure never gets longer than its time signature, except a 
     measure of all parts): a bogus leading gap (<forward>, no printed rest) or a bogus rest
     before a tie continuation is removed, otherwise the element crossing the barline is
     shortened and everything starting beyond it (notes too) is dropped;
+  * a <forward> left as the last event of a measure (an over-full voice cut at the barline
+    keeps its gap), or an empty <forward>+<backup> placeholder voice ending the measure, is
+    removed: a measure starts a new time for every voice, so a trailing gap only lengthens
+    the part time MuseScore uses (it would move octave-shift ends);
   * under-full voices are padded with rests up to the measure length of the time signature,
     also when the whole measure is short (a short measure would shift all following
     downbeats; otherwise the barline of that staff is drawn inside the measure); a last note
@@ -482,6 +486,50 @@ def trim_and_pad(root, report, page):
     for part, m, div, bar in part_measures(root):
         if m.get('implicit') != 'yes' and voices_of(m, div):
             pad_measure(part, m, div, bar, report, page)
+
+
+TIME_SKIP = ('barline', 'print', 'attributes')
+
+
+def timed_tail(m):
+    """The time-bearing elements of a measure in document order."""
+    return [el for el in m if el.tag not in TIME_SKIP]
+
+
+def drop_trailing_forwards(root, report, page):
+    """Remove the bogus gaps a cut or empty voice leaves at the end of a measure.
+
+    After the over-full trimming, the last time-bearing element is either a <forward> (the
+    gap of a voice whose note was cut) or an empty <forward> + <backup> pair (a placeholder
+    voice, the backup cancelling the gap).  Only non-time elements (barline, print,
+    attributes) may follow.  A measure is re-timed for every voice at its start, so such a
+    gap only lengthens the part time MuseScore uses (it would move octave-shift ends)."""
+    changed = 0
+    for part, m, div, bar in part_measures(root):
+        if m.get('implicit') == 'yes':
+            continue
+        if not any(el.tag == 'note' and el.find('grace') is None for el in m):
+            continue        # an empty measure keeps its content (filled later)
+        evs = timed_tail(m)
+        while evs:
+            last = evs[-1]
+            if last.tag == 'forward':
+                m.remove(last)
+                report['trailing_forward'].append(
+                    f'{page} m{m.get("number")} {part.get("id")} -{F(int(last.findtext("duration")), div)}')
+                changed += 1
+            elif (last.tag == 'backup' and len(evs) > 1 and evs[-2].tag == 'forward'
+                  and evs[-2].findtext('duration') == last.findtext('duration')):
+                m.remove(last)
+                m.remove(evs[-2])
+                report['trailing_forward'].append(
+                    f'{page} m{m.get("number")} {part.get("id")} '
+                    f'-{F(int(evs[-2].findtext("duration")), div)} (empty voice)')
+                changed += 1
+            else:
+                break
+            evs = timed_tail(m)
+    return changed
 
 
 def merge_double_dot_splits(root, report, page):
@@ -1068,7 +1116,8 @@ def main(song_dir):
     out_pages = os.path.join(song_dir, 'pages')
     os.makedirs(out_pages, exist_ok=True)
     report = {k: [] for k in ('drop_dot', 'overflow_cut', 'trim_gap', 'trim_rest', 'trim_note', 'padded',
-                              'extended', 'double_dot_merged', 'page_edge_candidates',
+                              'extended', 'double_dot_merged', 'trailing_forward',
+                              'page_edge_candidates',
                               'page_edge_pruned', 'page_edge_rejected',
                               'split_endings_merged', 'measure_map_deleted',
                               'type_fixed', 'type_skipped',
@@ -1106,6 +1155,7 @@ def main(song_dir):
         trim_and_pad(root, report, page)
         merge_double_dot_splits(root, report, page)
         fix_missing_values(root, report, page)
+        drop_trailing_forwards(root, report, page)
         lyrics_to_words(root, report, page)
         scrub_paths(root)
         pages.append((page, root))
@@ -1209,7 +1259,8 @@ def main(song_dir):
     # Report
     print(f'pages: {len(mxls)}  empty measures filled: {report["empty_filled"]}  zero divisions fixed: {report["zero_divisions"]}')
     for k in ('rehearsal', 'lyric_words', 'lyric_dropped', 'drop_dot', 'trim_gap', 'trim_rest', 'trim_note', 'padded', 'extended',
-              'double_dot_merged', 'page_edge_candidates', 'page_edge_pruned', 'page_edge_rejected',
+              'double_dot_merged', 'trailing_forward', 'page_edge_candidates', 'page_edge_pruned',
+              'page_edge_rejected',
               'split_endings_merged', 'overflow_cut'):
         print(f'{k}: {len(report[k])}')
         for line in report[k]:

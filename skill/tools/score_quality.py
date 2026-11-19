@@ -9,7 +9,10 @@ keys are the <fifths> values of the XML (3 = three sharps, -4 = four flats);
 length_mismatch = a voice ends earlier or later than the time signature says;
 length_mismatch_voices counts the voice-measures (each voice of each part in each measure) that
 do, out of all of them: finer than the measure count, use it on the raw Audiveris pages
-(raw/*.mxl, unzipped) to compare OMR settings, since the merged score is padded to length.
+(raw/*.mxl, unzipped) to compare OMR settings, since the merged score is padded to length;
+cross_part_length_mismatch = a part whose measure (its longest voice, <forward> gaps included)
+is longer or shorter than in most parts at the same measure (a trailing <forward> shifts
+the part time MuseScore uses for octave-shift ends).
 The last issues are lists to check against the printed score, not errors:
 staff_lines_change = a staff changes its number of lines inside the score (a 5-line staff read
 as a one-line staff); transposing_key_mismatch = a part with <transpose> whose key is not the
@@ -154,12 +157,14 @@ def read_measures(part):
                  new_page=m.find('print') is not None and m.find('print').get('new-page') == 'yes',
                  marks=[], endings=[], shifts=[], tempos=[],
                  segno=False, coda=False, dc=False, ds=False)
-        cur, ends = F(0), {}
+        cur, ends, last_voice = F(0), {}, '1'
         for el in m:
             if el.tag == 'backup':
                 cur -= F(int(el.findtext('duration')), div)
             elif el.tag == 'forward':
                 cur += F(int(el.findtext('duration')), div)
+                v = el.findtext('voice') or last_voice
+                ends[v] = max(ends.get(v, F(0)), cur)
             elif el.tag == 'barline':
                 order = 0 if el.get('location') == 'left' else 1
                 for r in el.findall('repeat'):
@@ -185,6 +190,7 @@ def read_measures(part):
                 chord = el.find('chord') is not None
                 v = el.findtext('voice', '1')
                 dur = F(int(el.findtext('duration') or 0), div)
+                last_voice = v
                 if rest is not None:
                     d['rests'] += 1
                     d['whole_rest'] |= rest.get('measure') == 'yes'
@@ -197,6 +203,7 @@ def read_measures(part):
                         d['value_bad'] = True
                     cur += dur
                     ends[v] = max(ends.get(v, F(0)), cur)
+        d['part_len'] = max(ends.values(), default=None)
         d['len_bad'] = m.get('implicit') != 'yes' and any(e != bar for e in ends.values())
         d['voices'] = len(ends)
         d['bad_voices'] = 0 if m.get('implicit') == 'yes' else sum(e != bar for e in ends.values())
@@ -356,6 +363,7 @@ def main(path):
             last = pm[p][-1]['key'] if pm[p] else None
             pm[p].append(dict(number=None, key=last, time=None, notes=0, rests=0, whole_rest=False,
                               has_note=True, len_bad=False, value_bad=False, new_page=False,
+                              part_len=None,
                               marks=[], endings=[], shifts=[], tempos=[],
                               segno=False, coda=False, dc=False, ds=False))
     first = pm[pids[0]]
@@ -426,6 +434,15 @@ def main(path):
     issue('length_mismatch_measures', [numbers[i] for i in range(N) if any(pm[p][i]['len_bad'] for p in pids)])
     line(f'length_mismatch_voices count={sum(d.get("bad_voices", 0) for p in pids for d in pm[p])}'
          f' of={sum(d.get("voices", 0) for p in pids for d in pm[p])}')
+    cross = []
+    for i in range(N):
+        lens = {p: pm[p][i].get('part_len') for p in pids if pm[p][i].get('part_len') is not None}
+        if len(set(lens.values())) > 1:
+            common = collections.Counter(lens.values()).most_common(1)[0][0]
+            cross.append((i, common, {p: v for p, v in lens.items() if v != common}))
+    issue('cross_part_length_mismatch', [numbers[i] for i, _, _ in cross])
+    for i, common, odd in cross:
+        line(f'  at=m{numbers[i]} most={common} ' + ' '.join(f'{p}={v}' for p, v in odd.items()))
     issue('nonstandard_duration_measures', [numbers[i] for i in range(N) if any(pm[p][i]['value_bad'] for p in pids)])
     line(f'unpaired_ties count={unpaired_ties(root)}')
     # chord names / directions placed before the measure start (drawn left of the clef) or past its end
