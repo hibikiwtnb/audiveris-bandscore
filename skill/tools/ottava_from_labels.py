@@ -3,12 +3,24 @@
 
     python3 tools/ottava_from_labels.py "<song dir>" [--part "A.pf"] > /tmp/ottava.txt
 
-Runs tools/locate_labels.py and pairs the printed octave marks of each part/staff in reading
-order: a mark with a printed arrow (or a left-margin mark) starts a region, the next mark ends
-it. Labels that carry an instrument name (e.g. "Glocken(8va)") belong in
-context/instrument_changes.txt instead and are skipped here. Every uncertainty is printed as a
-``# check:`` comment. The result is a DRAFT to review against the score; this tool never writes
-into the song directory.
+Runs tools/locate_labels.py and keeps every printed octave mark of each part/staff with its
+page, system, staff, measure, beat and original text. A mark is only paired when its role is
+explicit:
+
+    * start      opening bracket / box corner, or a right arrow ("┌ 8va", "8va →");
+    * stop       closing bracket / box corner, or an explicit end / stop / 止 word;
+    * continue   left arrow, "cont" / 續, or a bare mark between a start and its stop;
+    * single     one label that carries both an opening and a closing bracket, i.e. a local
+                 span; its end is taken as the measure end and flagged for review;
+    * reminder   a label ending with "." / "。" (e.g. 038 m126 "(8va)."); never starts a line.
+
+A continuation never changes the octave state. A start is not paired with a mark of a
+different kind. Anything ambiguous (bare hooks, reminders used as ends, nested starts, long
+gaps) becomes a ``# check:`` line and produces no executable hint. Exact duplicate OCR rows
+(same page, system, staff, measure, beat and text) are reported and dropped once. Labels
+that carry an instrument name (e.g. "Glocken(8va)") belong in context/instrument_changes.txt
+and are skipped here. The result is a DRAFT to review against the score; this tool never
+writes into the song directory.
 """
 import os
 import re
@@ -20,8 +32,11 @@ sys.path.insert(0, HERE)
 from apply_instrument_changes import DEFAULT_TIMBRES  # noqa: E402
 
 MARK = re.compile(r"(15\s*ma|8\s*va|coll\s*'?\s*8va)", re.I)
-CLEAN = re.compile(r"[\s\-—–~∼¬→←┌┐↓|()（）\[\]<>'\"·.,:;=]+")
+CLEAN = re.compile(r"[\s\-—–~∼¬→←┌┐└┘↓|()（）\[\]［］<>'\"·.,:;=]+")
 DIRS = {k.upper().replace('.', '').replace(' ', '') for k in DEFAULT_TIMBRES}
+OPEN = set('(（[［┌└{｛')
+CLOSE = set(')）]］┐┘}｝')
+LONG_MEASURES = 40
 
 
 def kind_of(text):
@@ -33,6 +48,36 @@ def kind_of(text):
 def labelled(text):
     body = CLEAN.sub('', text).upper().replace('.', '').replace(' ', '')
     return any(d in body for d in DIRS)
+
+
+MARK_BODY = re.compile(r"^(?:COLL)?(?:8VA|15MA)(?:8VA|15MA)?$")
+SINGLE_TEXT = re.compile(r"[\[(（［]\s*(?:coll\s*'?\s*)?(?:8\s*va|15\s*ma)\s*[)\]）］][.。]?")
+
+
+def mark_only(text):
+    """The label is nothing but an octave mark (plus artwork removed by CLEAN)."""
+    return bool(MARK_BODY.fullmatch(CLEAN.sub('', text).upper()))
+
+
+def role_of(text):
+    """Explicit role of one printed label, or 'unknown' when the hook / bracket is unclear."""
+    if re.search(r'[.。]\s*$', text):
+        return 'reminder'
+    op = any(c in text for c in OPEN)
+    cl = any(c in text for c in CLOSE)
+    if op and cl:
+        if SINGLE_TEXT.fullmatch(text.strip()):
+            return 'single'
+        return 'unknown'
+    if not mark_only(text):
+        return 'unknown'
+    if op or '→' in text:
+        return 'start'
+    if cl or re.search(r'\bend\b|\bstop\b|止', text, re.I):
+        return 'stop'
+    if '←' in text or re.search(r'\bcont(inue)?\b|續', text, re.I):
+        return 'continue'
+    return 'unknown'
 
 
 def rows(song_dir, part):
@@ -49,43 +94,136 @@ def rows(song_dir, part):
                    beat=f[5], x=float(f[6]), text=f[7])
 
 
+def _where(r):
+    return (f"p{r['page']} sys {r['system']} {r['part']} staff {r['staff']} "
+            f"m{r['measure']} {r['text']!r}")
+
+
+def _position(r):
+    return 'end' if r['beat'] in ('', '?', 'end') else r['beat']
+
+
+def _sort_key(r):
+    try:
+        page, system, measure = int(r['page']), int(r['system']), int(r['measure'])
+    except (TypeError, ValueError):
+        page, system, measure = 0, 0, 0
+    beat = 99 if r['beat'] in ('end', '?', '') else float(r['beat'])
+    return page, system, measure, beat, r['x']
+
+
+def dedupe(rs):
+    """Drop exact repeated OCR rows (same place and text); return (kept, checks)."""
+    seen, kept, checks = set(), [], []
+    for r in rs:
+        key = (r['page'], r['system'], r['part'], r['staff'], r['measure'], r['beat'],
+               r['text'])
+        if key in seen:
+            checks.append(f"{_where(r)}: duplicate OCR row dropped")
+            continue
+        seen.add(key)
+        kept.append(r)
+    return kept, checks
+
+
+def plan(rs):
+    """Pair one part/staff reading order. Returns (hints, checks).
+
+    A hint is (part, staff, kind, measure1, position1, measure2, position2). Ambiguous
+    marks only produce a check line, never an executable interval.
+    """
+    hints, checks = [], []
+    i = 0
+    while i < len(rs):
+        a = rs[i]
+        role = role_of(a['text'])
+        if role == 'reminder':
+            checks.append(f"{_where(a)}: reminder / hook, not a line start")
+            i += 1
+            continue
+        if role == 'continue':
+            checks.append(f"{_where(a)}: continuation without a known start, ignored")
+            i += 1
+            continue
+        if role == 'unknown':
+            checks.append(f"{_where(a)}: cannot tell start / stop / reminder, no hint")
+            i += 1
+            continue
+        if role == 'stop':
+            checks.append(f"{_where(a)}: stop without a known start, no hint")
+            i += 1
+            continue
+        if role == 'single':
+            kind = kind_of(a['text'])
+            hints.append((a['part'], a['staff'], kind, a['measure'], _position(a),
+                          a['measure'], 'end'))
+            checks.append(f"{_where(a)}: single bracketed label, assumed local span to the "
+                          f"measure end")
+            i += 1
+            continue
+        # role == 'start'
+        kind = kind_of(a['text'])
+        j, paired, gap = i + 1, None, 0
+        while j < len(rs):
+            b = rs[j]
+            brole = role_of(b['text'])
+            if brole in ('reminder', 'continue'):
+                if brole == 'continue':
+                    checks.append(f"{_where(b)}: read as a continuation of {_where(a)}")
+                else:
+                    checks.append(f"{_where(b)}: reminder inside the span, state unchanged")
+                j += 1
+                continue
+            if brole == 'single':
+                checks.append(f"{_where(b)}: independent local span inside the open region")
+                j += 1
+                continue
+            if brole == 'stop':
+                if kind_of(b['text']) != kind:
+                    checks.append(f"{_where(a)} -> {_where(b)}: stop of a different kind, "
+                                  f"not paired")
+                else:
+                    paired = b
+                break
+            # another start / unknown: only an explicit stop can close the region
+            checks.append(f"{_where(b)}: open or unclear mark before any stop, region "
+                          f"from {_where(a)} not paired")
+            break
+        if paired is None:
+            if j >= len(rs):
+                checks.append(f"{_where(a)}: no explicit stop, no hint")
+        else:
+            try:
+                gap = int(paired['measure']) - int(a['measure'])
+            except (TypeError, ValueError):
+                gap = 0
+            if gap > LONG_MEASURES:
+                checks.append(f"{_where(a)} -> {_where(paired)}: very long region "
+                              f"({gap} measures), check the pairing")
+            hints.append((a['part'], a['staff'], kind, a['measure'], _position(a),
+                          paired['measure'], _position(paired)))
+            i = j
+        i += 1
+    return hints, checks
+
+
 def main(song_dir, part):
-    groups, warnings = {}, []
+    groups, checks = {}, []
     for r in rows(song_dir, part):
         if r['measure'] == '?':
-            warnings.append(f"p{r['page']} {r['part']} staff {r['staff']} {r['text']!r}: "
-                            f"no measure")
+            checks.append(f"{_where(r)}: no measure")
             continue
         groups.setdefault((r['part'], r['staff']), []).append(r)
     print('# DRAFT generated by tools/ottava_from_labels.py; check every line against the score.')
     for (p, s), rs in groups.items():
-        rs.sort(key=lambda r: (int(r['page']), r['system'], int(r['measure']),
-                               float(r['beat']) if r['beat'] not in ('end', '?') else 99, r['x']))
-        i = 0
-        while i < len(rs):
-            a = rs[i]
-            if i + 1 >= len(rs):
-                warnings.append(f"{p} staff {s} m{a['measure']} {a['text']!r}: no paired end")
-                break
-            b = rs[i + 1]
-            k = kind_of(a['text'])
-            if '→' not in a['text'] and '←' not in a['text']:
-                warnings.append(f"{p} staff {s} m{a['measure']} {a['text']!r}: "
-                                f"no arrow, is it a start?")
-            if '→' not in b['text'] and '←' not in b['text']:
-                warnings.append(f"{p} staff {s} m{b['measure']} {b['text']!r}: "
-                                f"no arrow, is it an end?")
-            if kind_of(a['text']) != kind_of(b['text']):
-                warnings.append(f"{p} staff {s} m{a['measure']}-m{b['measure']}: "
-                                f"{a['text']!r} paired with {b['text']!r}")
-            try:
-                if int(b['measure']) - int(a['measure']) > 40:
-                    warnings.append(f"{p} staff {s} m{a['measure']}-m{b['measure']}: "
-                                    f"very long region, check the pairing")
-            except ValueError:
-                pass
-            print(f"{p}\t{s}\t{k}\t{a['measure']}\t1\t{b['measure']}\tend")
-            i += 2
+        kept, dups = dedupe(sorted(rs, key=_sort_key))
+        checks.extend(dups)
+        hints, more = plan(kept)
+        checks.extend(more)
+        for h in hints:
+            print('\t'.join(h))
+    for c in checks:
+        print(f'# check: {c}')
 
 
 if __name__ == '__main__':

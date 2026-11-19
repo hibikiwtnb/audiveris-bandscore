@@ -6,11 +6,22 @@
         the labels carried their instrument: only add sound/midi-instrument to the labels)
 
 Features a built-in General MIDI 1-128 instrument table, making the [timbres] section in hints optional.
+
+A change line may give the octave as a beat / "#k" bounded region of one staff:
+
+    measure  part  staff  label  timbre  octave  start  end  display
+
+``start`` / ``end`` use the ottava positions (a beat, "#k" = k-th onset of that staff in the
+measure, or "end"); only the notes in that range are shifted and the octave line covers just
+them. The 9-column form is distinguished from the legacy 8-column page / system / index line.
 """
 import os
 import re
 import sys
 import xml.etree.ElementTree as ET
+from fractions import Fraction as F
+
+import score_time
 
 # Built-in General MIDI instrument catalog (1-128)
 DEFAULT_TIMBRES = {
@@ -190,7 +201,12 @@ def read_hints(path):
             else:
                 defaults[f[0]] = f[1]
         elif sec == 'changes':
-            if len(f) >= 8:      # page, system, idx, part, staff, label, timbre, octave
+            if len(f) >= 9:      # measure, part, staff, label, timbre, octave, start, end, display
+                changes.append(dict(measure=f[0], part=f[1], staff=f[2], label=f[3],
+                                    timbre=f[4], octave=int(f[5]),
+                                    start=f[6] or '1', end=f[7] or 'end',
+                                    display=(f[8] or 'line').lower()))
+            elif len(f) == 8:    # page, system, idx, part, staff, label, timbre, octave
                 changes.append(dict(page=int(f[0]), system=int(f[1]), idx=int(f[2]), part=f[3],
                                     staff=f[4], label=f[5], timbre=f[6], octave=int(f[7])))
             elif len(f) >= 7:    # page, system, idx, part, label, timbre, octave
@@ -316,12 +332,97 @@ def pitched_staff(measure, staff):
             if n.find('pitch') is not None and note_staff(n) == staff]
 
 
-def shift_dir_staff(kind, size, staff):
+def shift_dir_staff(kind, size, staff, offset=None):
     d = ET.Element('direction', placement='above')
     ET.SubElement(ET.SubElement(d, 'direction-type'), 'octave-shift',
                   type=kind, size=str(size), number=OCTAVE_NUMBER.get(staff, '7'))
+    if offset:
+        ET.SubElement(d, 'offset').text = str(int(offset))
     ET.SubElement(d, 'staff').text = staff
     return d
+
+
+def timed_groups(measure, div, staff):
+    """Chord groups of one staff in document order: (onset quarters, [note elements])."""
+    out = []
+    for e in score_time.walk(measure, div):
+        if e.tag != 'note' or e.staff != staff:
+            continue
+        if e.el.find('chord') is not None and out:
+            out[-1][1].append(e.el)
+        else:
+            out.append((e.tick, [e.el]))
+    return out
+
+
+def resolve_pos(pos, gs, staff):
+    """Onset bound (quarters from the measure start) for a beat / '#k' / 'end' position."""
+    if pos in (None, '', 'end'):
+        return None
+    onsets = sorted({t for t, ns in gs if any(n.find('pitch') is not None for n in ns)})
+    if str(pos).startswith('#'):
+        k = int(str(pos)[1:])
+        if not 1 <= k <= len(onsets):
+            raise ValueError(f'position #{k} out of range: staff {staff} has '
+                             f'{len(onsets)} onset(s)')
+        return onsets[k - 1]
+    return F(pos) - 1
+
+
+def apply_local_octaves(key, part, cs, warnings):
+    """Beat / '#k' bounded timbre octave regions (e.g. 024 p01 Pan Flute mid-measure)."""
+    out = []
+    if not cs:
+        return out
+    measures = part.findall('measure')
+    divs = score_time.measure_divs(part)
+    nums = [m.get('number') for m in measures]
+    for c in cs:
+        staff = str(c.get('staff'))
+        try:
+            octv = int(c.get('octave') or 0)
+        except ValueError:
+            warnings.append(f'{key} staff {staff} m{c.get("measure")}: octave {c.get("octave")!r} '
+                            f'is not a number')
+            continue
+        if not octv:
+            continue
+        if c.get('measure') not in nums:
+            warnings.append(f'{key} staff {staff} m{c.get("measure")}: measure not found, '
+                            f'local octave ignored')
+            continue
+        i = nums.index(c['measure'])
+        m = measures[i]
+        gs = timed_groups(m, divs[i], staff)
+        try:
+            lo = resolve_pos(c.get('start'), gs, staff)
+            hi = resolve_pos(c.get('end'), gs, staff)
+        except ValueError as e:
+            warnings.append(f'{key} staff {staff} m{c.get("measure")}: {e}')
+            continue
+        covered = [g for g in gs if any(n.find('pitch') is not None for n in g[1])
+                   and (lo is None or g[0] >= lo) and (hi is None or g[0] <= hi)]
+        if not covered:
+            warnings.append(f'{key} staff {staff} m{c.get("measure")}: no notes in the '
+                            f'local octave region ({c.get("start")}-{c.get("end")})')
+            continue
+        for _, ns in covered:
+            for n in ns:
+                if n.find('pitch') is not None:
+                    shift_pitch(n, octv)
+        size = 8 if abs(octv) == 1 else 15
+        first = covered[0]
+        m.insert(list(m).index(first[1][0]),
+                 shift_dir_staff('down' if octv > 0 else 'up', size, staff))
+        end_tick = max(t + max(F(int(n.findtext('duration') or 0), divs[i]) for n in ns)
+                       for t, ns in covered)
+        last = max(enumerate(covered), key=lambda it: (it[1][0], it[0]))[1]
+        offset = (end_tick - score_time.local_cursor(m, last[1][-1], divs[i])) * divs[i]
+        m.insert(list(m).index(last[1][-1]) + 1,
+                 shift_dir_staff('stop', size, staff, offset))
+        out.append(f'{key} staff {staff} m{c.get("measure")} {c.get("start")}-{c.get("end")}: '
+                   f'local {"8va" if size == 8 else "15ma"} ({len(covered)} groups)')
+    return out
 
 
 def restore_omr_shifts_staff(ab, measures, octaves, staff):
@@ -413,6 +514,9 @@ def add_instruments(sp, pid, used, timbres, warnings, key):
 def apply_part_wide(key, sp, part, cs, defaults, order, timbres, warnings):
     """Legacy path: one instrument timeline for the whole part (all staves)."""
     pid = sp.get('id')
+    if any(c.get('start') for c in cs):
+        warnings.append(f'{key}: a beat / #k octave position needs an explicit staff field; '
+                        f'its octave is ignored')
     swaps = [c for c in cs if c['timbre'] != '-']
     first = defaults.get(key) or (swaps[0]['timbre'] if swaps else None)
     if first is None:
@@ -440,7 +544,8 @@ def apply_part_wide(key, sp, part, cs, defaults, order, timbres, warnings):
             if c['timbre'] != '-':
                 if c['timbre'] != timbre:
                     report.append(f'{key} m{m.get("number")}: {timbre} -> {c["timbre"]}')
-                timbre, octave = c['timbre'], c['octave']
+                octave_now = octave if c.get('start') else c['octave']
+                timbre, octave = c['timbre'], octave_now
         octaves.append(octave)
         active_iid = ids.get(timbre, ids[first])
         for n in m.iter('note'):
@@ -458,6 +563,7 @@ def apply_per_staff(key, sp, part, cs, defaults, staff_defaults, order, timbres,
     """New path: an instrument / octave timeline per staff of one part (grand staff)."""
     pid = sp.get('id')
     measures = part.findall('measure')
+    divs = score_time.measure_divs(part)
     staff_ids = sorted({note_staff(n) for m in measures for n in m.iter('note')},
                        key=lambda s: int(s) if s.isdigit() else 1)
     expanded = []
@@ -489,7 +595,7 @@ def apply_per_staff(key, sp, part, cs, defaults, staff_defaults, order, timbres,
     for s in staff_ids:
         timbre, octv, k = firsts[s], 0, 0
         octaves[s] = []
-        for m in measures:
+        for mi, m in enumerate(measures):
             while k < len(per_staff[s]) and \
                     order.get(per_staff[s][k]['measure'], 0) <= order.get(m.get('number'), 0):
                 c = per_staff[s][k]
@@ -497,6 +603,13 @@ def apply_per_staff(key, sp, part, cs, defaults, staff_defaults, order, timbres,
                 if c['label'] != '-':
                     d = ET.Element('direction', placement='above')
                     ET.SubElement(ET.SubElement(d, 'direction-type'), 'words').text = c['label']
+                    if c.get('start'):
+                        try:
+                            lo = resolve_pos(c['start'], timed_groups(m, divs[mi], s), s)
+                        except ValueError:
+                            lo = None
+                        if lo:
+                            ET.SubElement(d, 'offset').text = str(int(lo * divs[mi]))
                     ET.SubElement(d, 'staff').text = s
                     if c['timbre'] != '-':
                         ET.SubElement(ET.SubElement(d, 'sound'), 'midi-instrument',
@@ -509,7 +622,9 @@ def apply_per_staff(key, sp, part, cs, defaults, staff_defaults, order, timbres,
                     if timbre and c['timbre'] != timbre:
                         report.append(f'{key} staff {s} m{m.get("number")}: '
                                       f'{timbre} -> {c["timbre"]}')
-                    timbre, octv = c['timbre'], c['octave']
+                    timbre = c['timbre']
+                    if not c.get('start'):
+                        octv = c['octave']
             octaves[s].append(octv)
             if timbre:
                 iid = ids.get(timbre, ids.get(firsts[s]))
@@ -518,11 +633,13 @@ def apply_per_staff(key, sp, part, cs, defaults, staff_defaults, order, timbres,
                         n.remove(e)
                     insert_ordered(n, ET.Element('instrument', id=iid), NOTE_ORDER)
 
+    local = [c for c in expanded if c.get('start')]
     for s in staff_ids:
         if not firsts[s]:
             continue
         report.extend(restore_omr_shifts_staff(key, measures, octaves[s], s))
         report.extend(octave_lines_staff(key, measures, octaves[s], s))
+    report.extend(apply_local_octaves(key, part, local, warnings))
     report.append(f'{key}: {len(used)} timbres {used} on staves {staff_ids}')
     return report
 
