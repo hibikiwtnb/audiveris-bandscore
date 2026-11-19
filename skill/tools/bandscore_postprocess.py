@@ -61,7 +61,8 @@ REHEARSAL_RE = re.compile(r"^[A-H][0-9]?'?$")
 VALUES = [(F(4), 'whole', 0), (F(7, 2), 'half', 2), (F(3), 'half', 1), (F(2), 'half', 0),
           (F(7, 4), 'quarter', 2), (F(3, 2), 'quarter', 1), (F(1), 'quarter', 0),
           (F(3, 4), 'eighth', 1), (F(1, 2), 'eighth', 0), (F(3, 8), '16th', 1),
-          (F(1, 4), '16th', 0), (F(3, 16), '32nd', 1), (F(1, 8), '32nd', 0)]
+          (F(1, 4), '16th', 0), (F(3, 16), '32nd', 1), (F(1, 8), '32nd', 0),
+          (F(3, 32), '64th', 1), (F(1, 16), '64th', 0)]
 
 # MusicXML <note> children order (subset relevant here)
 NOTE_ORDER = ['grace', 'cue', 'chord', 'pitch', 'unpitched', 'rest', 'duration', 'tie',
@@ -542,6 +543,236 @@ def merge_double_dot_splits(root, report, page):
                     break
 
 
+# Note type reached by each beam count in a beamed group (written value, quarters).
+BEAM_VALUE = {1: F(1, 2), 2: F(1, 4), 3: F(1, 8), 4: F(1, 16)}
+
+
+def value_type(q):
+    """Return (type, dots) for a standard note value in quarters, else None."""
+    for v, t, d in VALUES:
+        if v == q:
+            return t, d
+    return None
+
+
+def set_type_only(note, q):
+    """Set <type>/<dot> for q without touching the duration."""
+    match = value_type(q)
+    if match is None:
+        return False
+    for tag in ('type', 'dot'):
+        for e in note.findall(tag):
+            note.remove(e)
+    te = ET.Element('type')
+    te.text = match[0]
+    insert_ordered(note, te)
+    for _ in range(match[1]):
+        insert_ordered(note, ET.Element('dot'))
+    return True
+
+
+def set_time_modification(note, actual, normal):
+    for e in note.findall('time-modification'):
+        note.remove(e)
+    tm = ET.Element('time-modification')
+    ET.SubElement(tm, 'actual-notes').text = str(actual)
+    ET.SubElement(tm, 'normal-notes').text = str(normal)
+    insert_ordered(note, tm)
+
+
+def add_tie(note, kind):
+    """Mark a note with a MusicXML tie, creating a notation tied element."""
+    tie = ET.Element('tie')
+    tie.set('type', kind)
+    insert_ordered(note, tie)
+    nots = note.find('notations')
+    if nots is None:
+        nots = ET.Element('notations')
+        insert_ordered(note, nots)
+    tied = ET.SubElement(nots, 'tied')
+    tied.set('type', kind)
+
+
+def tuplet_for(q, max_actual=8):
+    """Represent q as a standard written value under a small time-modification."""
+    for actual in range(2, max_actual + 1):
+        for normal in range(actual - 1, 0, -1):
+            w = q * actual / normal
+            if value_type(w) is not None:
+                return w, actual, normal
+    return None
+
+
+def split_standard(q):
+    """Split q into standard values only (no tuplets), or None."""
+    out = []
+    while q > 0:
+        v = next((v for v, _, _ in VALUES if v <= q), None)
+        if v is None:
+            return None
+        out.append((v, None))
+        q -= v
+    return out
+
+
+def split_value(q):
+    """Split q into standard values plus, if needed, one small-tuplet segment."""
+    out = []
+    while q > 0:
+        if value_type(q) is not None:
+            out.append((q, None))
+            break
+        tup = tuplet_for(q, 4)
+        if tup is not None:
+            out.append((q, (tup[1], tup[2])))
+            break
+        v = next((v for v, _, _ in VALUES if v < q), None)
+        if v is None:
+            return None
+        out.append((v, None))
+        q -= v
+    return out
+
+
+def _clone_note(note):
+    new = copy.deepcopy(note)
+    for tag in ('duration', 'type', 'dot', 'tie', 'time-modification'):
+        for e in new.findall(tag):
+            new.remove(e)
+    nots = new.find('notations')
+    if nots is not None:
+        for e in nots.findall('tied'):
+            nots.remove(e)
+    return new
+
+
+def split_event(m, event, div, segments, tie_chain=False):
+    """Replace a note/rest (with its chord members) by segments [(quarters, tm or None)]."""
+    members = event.members
+    anchor = list(m).index(members[0])
+    for el in members:
+        m.remove(el)
+    pos = anchor
+    for i, (q, tup) in enumerate(segments):
+        for orig in members:
+            n = _clone_note(orig)
+            if i:
+                for e in n.findall('notations'):
+                    n.remove(e)
+            dur = ET.Element('duration')
+            dur.text = str(int(q * div))
+            insert_ordered(n, dur)
+            if tup is None:
+                set_type_only(n, q)
+            else:
+                set_type_only(n, q * F(tup[0], tup[1]))
+                set_time_modification(n, tup[0], tup[1])
+            if tie_chain:
+                if i == 0:
+                    add_tie(n, 'start')
+                elif i == len(segments) - 1:
+                    add_tie(n, 'stop')
+                else:
+                    add_tie(n, 'start')
+                    add_tie(n, 'stop')
+            m.insert(pos, n)
+            pos += 1
+
+
+def fix_missing_values(root, report, page=''):
+    """Give missing <type> values to page tails, preserving every total duration.
+
+    A1: a time-modification fixes the written value; only the type is added.
+    B:  a beamed, short note without time-modification; the beam count gives the written
+        value and the missing tuplet ratio.
+    C:  a long unbewed note at the end of a complete voice; the total is split into a
+        tied chain of standard values.
+    D:  a rest with a non-standard duration; the total is split into standard rests
+        (one small tuplet segment when the remainder has no standard value).
+    A2: an incomplete six-tuplet is left alone and listed for rebuilding.
+    """
+    stats = {}
+    for part, m, div, bar in part_measures(root):
+        num = m.get('number')
+        if m.get('implicit') == 'yes':
+            continue
+        for v, evs in voices_of(m, div).items():
+            if not evs or max(e.end for e in evs) != bar:
+                continue
+            e = evs[-1]
+            el = e.el
+            if el.findtext('type') is not None:
+                continue
+            tm = el.find('time-modification')
+            beams = len(el.findall('beam'))
+            is_rest = e.is_rest
+            d = e.dur
+            tag = f'{page} m{num} {part.get("id")} v{v}'
+            if is_rest and el.find('rest').get('measure') == 'yes':
+                continue
+            if tm is not None:
+                actual = int(tm.findtext('actual-notes', '0') or 0)
+                normal = int(tm.findtext('normal-notes', '0') or 0)
+                if actual <= 0 or normal <= 0:
+                    report['type_skipped'].append(f'{tag} bad time-modification')
+                    continue
+                same = sum(1 for x in evs if x.el.find('time-modification') is not None
+                           and x.el.findtext('time-modification/actual-notes') == str(actual)
+                           and x.el.findtext('time-modification/normal-notes') == str(normal))
+                if actual >= 6 and same < actual:
+                    report['type_skipped'].append(
+                        f'{tag} A2 incomplete {actual}-tuplet ({same} notes)')
+                    continue
+                written = d * F(actual, normal)
+                if value_type(written) is not None:
+                    for member in e.members:
+                        set_type_only(member, written)
+                    report['type_fixed'].append(f'{tag} A1 {d} tm{actual}:{normal} -> {value_type(written)[0]}')
+                    stats['A1'] = stats.get('A1', 0) + 1
+                else:
+                    report['type_skipped'].append(f'{tag} A1 written {written} not standard')
+                continue
+            if is_rest:
+                segments = [(d, None)] if value_type(d) is not None else split_value(d)
+                if segments is None:
+                    report['type_skipped'].append(f'{tag} D rest {d} has no standard split')
+                    continue
+                if len(segments) == 1 and segments[0][1] is None:
+                    set_type_only(el, d)
+                else:
+                    split_event(m, e, div, segments)
+                report['type_fixed'].append(f'{tag} D rest {d} -> {len(segments)} value(s)')
+                stats['D'] = stats.get('D', 0) + 1
+                continue
+            if beams and d <= 1 and len(e.members) == 1:
+                written = BEAM_VALUE.get(beams)
+                if written is None or written <= d:
+                    report['type_skipped'].append(f'{tag} B beam {beams} does not fit {d}')
+                    continue
+                ratio = written / d
+                if ratio.numerator > 8 or ratio.denominator >= ratio.numerator:
+                    report['type_skipped'].append(f'{tag} B ratio {ratio} not a small tuplet')
+                    continue
+                set_type_only(el, written)
+                set_time_modification(el, ratio.numerator, ratio.denominator)
+                report['type_fixed'].append(
+                    f'{tag} B {d} beam{beams} -> {value_type(written)[0]} tm{ratio.numerator}:{ratio.denominator}')
+                stats['B'] = stats.get('B', 0) + 1
+                continue
+            if not beams and d > 1 and not any(
+                    el.findall('tie')):
+                segments = split_standard(d)
+                if segments is None:
+                    report['type_skipped'].append(f'{tag} C note {d} has no standard tie chain')
+                    continue
+                split_event(m, e, div, segments, tie_chain=True)
+                report['type_fixed'].append(f'{tag} C note {d} -> {len(segments)} tied value(s)')
+                stats['C'] = stats.get('C', 0) + 1
+                continue
+            report['type_skipped'].append(f'{tag} not a supported tail case (d={d})')
+    return stats
+
+
 def rehearsals_from_credits(root, omr_path, report, page):
     """Move rehearsal-like page credits back into boxed rehearsal directions."""
     credits = []
@@ -760,6 +991,7 @@ def main(song_dir):
     os.makedirs(out_pages, exist_ok=True)
     report = {k: [] for k in ('drop_dot', 'overflow_cut', 'trim_gap', 'trim_rest', 'trim_note', 'padded',
                               'extended', 'double_dot_merged', 'page_edge_pruned',
+                              'type_fixed', 'type_skipped',
                               'rehearsal', 'lyric_words', 'lyric_dropped')}
     report['empty_filled'] = 0
     report['zero_divisions'] = 0
@@ -793,6 +1025,7 @@ def main(song_dir):
         fill_empty_measures(root, report)
         trim_and_pad(root, report, page)
         merge_double_dot_splits(root, report, page)
+        fix_missing_values(root, report, page)
         lyrics_to_words(root, report, page)
         scrub_paths(root)
         pages.append((page, root))
