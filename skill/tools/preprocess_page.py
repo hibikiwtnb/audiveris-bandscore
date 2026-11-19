@@ -11,8 +11,9 @@ first near-white horizontal band in the upper part of the page whose height is
 at least --gap-frac of the page, and crop 1% of the page height above its lower
 edge (still inside the band, so the music keeps some white above it).  This
 removes the title while keeping tempo, rehearsal marks and chord symbols that
-sit just above the first system.  This is for the first page of a song, whose title block takes
-about half the page.  On the other pages (--no-title) the band is looked for in the top 10% only
+sit just above the first system, and never cuts below the first staff line (a first page without
+a title block would lose its whole first system).  This is for the first page of a song, whose
+title block takes about half the page.  On the other pages (--no-title) the band is looked for in the top 10% only
 (a running header), and nothing is cropped when there is none there: searched lower, the first
 large band could be the one between two systems, and the whole first system was cut off (mu's
 book, 004 p09).  A running header close to the music is kept:
@@ -54,11 +55,13 @@ def col_ink(gray, thresh=200):
     return dark.sum(axis=0) / float(r1 - r0)
 
 
-def top_crop(ink, gap_frac=0.05, ink_thresh=0.004, search_frac=0.55):
-    """Return crop_top from the first large white band in the upper page."""
+def top_crop(ink, gap_frac=0.05, ink_thresh=0.004, search_frac=0.55, staff_ink=0.5):
+    """Return crop_top from the first large white band in the upper page, but never from a
+    band at or below the first staff line."""
     h = len(ink)
     limit = int(h * search_frac)
     min_gap = int(h * gap_frac)
+    cut = 0
     run_start = None
     for y in range(limit):
         if ink[y] <= ink_thresh:
@@ -67,11 +70,19 @@ def top_crop(ink, gap_frac=0.05, ink_thresh=0.004, search_frac=0.55):
         else:
             if run_start is not None and y - run_start >= min_gap:
                 # white band [run_start, y); crop a little above its lower edge
-                return y - int(h * 0.01)
+                cut = y - int(h * 0.01)
+                break
             run_start = None
-    if run_start is not None and limit - run_start >= min_gap:
-        return limit - int(h * 0.01)
-    return 0
+    else:
+        if run_start is not None and limit - run_start >= min_gap:
+            cut = limit - int(h * 0.01)
+    # The music starts at the first staff line, which covers most of the page width, so the
+    # first row above staff_ink is the top of the first system. A first page whose title block
+    # is thinner than the gap between two systems would otherwise lose its whole first system.
+    first_staff = next((y for y in range(h) if ink[y] >= staff_ink), None)
+    if first_staff is not None:
+        cut = min(cut, max(0, first_staff - int(h * 0.01)))
+    return cut
 
 
 def content_box(gray, thresh=200, pad_frac=0.005):
