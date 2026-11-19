@@ -33,7 +33,9 @@ Page-level fixes (a measure never gets longer than its time signature, except a 
     <song dir>/context/page_edge_prune.txt are removed.
 
 Score-level fixes after merge: tools/fill_measure_repeats.py (measure repeats at the top of a
-page get the notes of the last measure of the previous page), tools/fill_slash_chords.py (each
+page get the notes of the last measure of the previous page), a 1st ending split over a page
+break is joined back into one span (start on the first page, stop at the backward repeat),
+tools/fill_slash_chords.py (each
 slash gets the pitches of the chord before it), tools/clean_score_noise.py (drops slurs, completes chord ties,
 prunes invalid ties, ...), then tools/apply_instrument_changes.py when
 <song dir>/context/instrument_changes.txt exists (printed timbre changes -> real instrument changes),
@@ -999,6 +1001,55 @@ def prune_page_edge_measures(pages, report=None, verified=None):
         rep.setdefault('page_edge_pruned', []).append(f'{page_name}: m{num} ({evidence})')
 
 
+def merge_split_first_endings(root, report=None):
+    """Join a 1st ending that a page break split into two <ending> elements.
+
+    Audiveris closes the ending on the page where the bracket starts (start+discontinue)
+    and opens a second one at the page holding the closing barline (start+stop/discontinue
+    with the backward repeat).  Playback then leaves the 1st ending early and the second
+    fragment has no backward repeat of its own.  When no other ending or repeat lies
+    between the two, keep the first <start> and close it where the backward repeat is.
+    A start+discontinue without a later closing ending and backward repeat (a stray
+    ending) is left alone.
+    """
+    rep = report if report is not None else {}
+    for part in root.findall('part'):
+        measures = part.findall('measure')
+        for i, m in enumerate(measures):
+            if m.find('.//repeat') is not None:
+                continue
+            a_ends = [(b, e) for b in m.findall('barline') for e in b.findall('ending')]
+            if len(a_ends) != 2 or any(e.get('number') != '1' for _, e in a_ends):
+                continue
+            if sorted(e.get('type') for _, e in a_ends) != ['discontinue', 'start']:
+                continue
+            for j in range(i + 1, len(measures)):
+                nb = measures[j].findall('barline')
+                b_ends = [(b, e) for b in nb for e in b.findall('ending')]
+                b_reps = [r for b in nb for r in b.findall('repeat')]
+                if b_ends or b_reps:
+                    break
+            else:
+                continue
+            if (len(b_ends) != 2 or any(e.get('number') != '1' for _, e in b_ends)
+                    or sorted(e.get('type') for _, e in b_ends)
+                    not in (['start', 'stop'], ['discontinue', 'start'])
+                    or [(r.get('direction'), r.get('times')) for r in b_reps]
+                    != [('backward', None)]):
+                continue
+            for b, e in a_ends:
+                if e.get('type') == 'discontinue':
+                    b.remove(e)
+                    break
+            for b, e in b_ends:
+                if e.get('type') == 'start':
+                    b.remove(e)
+                elif e.get('type') == 'discontinue':
+                    e.set('type', 'stop')
+            rep.setdefault('split_endings_merged', []).append(
+                f'{part.get("id")} m{m.get("number")}-m{measures[j].get("number")}')
+
+
 # --------------------------------------------------------------------------------------------- #
 # Driver
 # --------------------------------------------------------------------------------------------- #
@@ -1012,6 +1063,7 @@ def main(song_dir):
     report = {k: [] for k in ('drop_dot', 'overflow_cut', 'trim_gap', 'trim_rest', 'trim_note', 'padded',
                               'extended', 'double_dot_merged', 'page_edge_candidates',
                               'page_edge_pruned', 'page_edge_rejected',
+                              'split_endings_merged',
                               'type_fixed', 'type_skipped',
                               'rehearsal', 'lyric_words', 'lyric_dropped')}
     report['empty_filled'] = 0
@@ -1085,6 +1137,9 @@ def main(song_dir):
     merged = os.path.join(os.path.abspath(song_dir), re.sub(r'[/?:]', '_', name) + '.musicxml')
     shutil.move(os.path.join(tmp, base, f'{base}_merged.musicxml'), merged)
     shutil.rmtree(tmp)
+    merged_tree = ET.parse(merged)
+    merge_split_first_endings(merged_tree.getroot(), report)
+    merged_tree.write(merged, encoding='UTF-8', xml_declaration=True)
     subprocess.run([sys.executable, os.path.join(HERE, 'fill_measure_repeats.py'), merged],
                    check=True)
     subprocess.run([sys.executable, os.path.join(HERE, 'fill_slash_chords.py'), merged],
@@ -1134,7 +1189,7 @@ def main(song_dir):
     print(f'pages: {len(mxls)}  empty measures filled: {report["empty_filled"]}  zero divisions fixed: {report["zero_divisions"]}')
     for k in ('rehearsal', 'lyric_words', 'lyric_dropped', 'drop_dot', 'trim_gap', 'trim_rest', 'trim_note', 'padded', 'extended',
               'double_dot_merged', 'page_edge_candidates', 'page_edge_pruned', 'page_edge_rejected',
-              'overflow_cut'):
+              'split_endings_merged', 'overflow_cut'):
         print(f'{k}: {len(report[k])}')
         for line in report[k]:
             print('   ', line)
