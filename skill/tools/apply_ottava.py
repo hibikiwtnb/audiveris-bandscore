@@ -42,7 +42,9 @@ from fractions import Fraction as F
 import measure_map
 import score_time
 
-NUMBER = {'1': '3', '2': '4'}   # octave-shift number per staff (2 is used by instrument changes)
+NUMBER = {'1': '3', '2': '4'}   # octave-shift number per staff (5/6/7/8 are used by instrument changes)
+INSTRUMENT_NUMBERS = {'5', '6', '7', '8'}
+TOOL_NUMBERS = set(NUMBER.values()) | INSTRUMENT_NUMBERS
 WORDS_RE = re.compile(r"8va|15ma|coll", re.I)
 NOTE_ORDER = ['grace', 'cue', 'chord', 'pitch', 'unpitched', 'rest', 'duration', 'tie',
               'instrument', 'voice', 'type', 'dot', 'accidental', 'time-modification', 'stem',
@@ -156,6 +158,7 @@ def main(score, hints, map_path=None, raw_map=False):
 
     # resolve every hint coordinate before touching the score, so a deleted / missing /
     # ambiguous measure stops the run instead of silently skipping the hint
+    applied_ranges = {}
     for h in hs:
         if rows is None:
             continue
@@ -183,6 +186,7 @@ def main(score, hints, map_path=None, raw_map=False):
                     m.remove(d)
                     removed += 1
 
+    applied_ranges = {}
     for h in hs:
         pid = abbr[h['part']]
         measures = parts[pid].findall('measure')
@@ -217,14 +221,31 @@ def main(score, hints, map_path=None, raw_map=False):
         covered_start = min(starts[i] + g[0] for i, g in covered)
         covered_end = group_end_tick(measures, starts, covered, divs, pid)
         taken = [iv for iv in score_time.octave_intervals(parts[pid])
-                 if iv.number not in NUMBER.values()]
+                 if iv.number in TOOL_NUMBERS]
         hit = next((iv for iv in taken if iv.staff == h['staff']
                     and (iv.end is None or iv.end > covered_start)
                     and iv.start < covered_end), None)
         if hit is not None:
-            print(f"   skipped {describe(h)}: instrument octave line #{hit.number} already "
+            print(f"   skipped {describe(h)}: instrument/ottava octave line #{hit.number} already "
                   f"covers this staff interval")
             continue
+        prev_hit = next(
+            ((s, e, k) for s, e, k in applied_ranges.get((pid, h['staff']), [])
+             if e > covered_start and s < covered_end),
+            None,
+        )
+        if prev_hit is not None:
+            print(f"   skipped {describe(h)}: overlapping {prev_hit[2]} hint already applied on "
+                  f"staff {h['staff']}")
+            continue
+        ok, reason, restored_msgs = score_time.restore_native_octave_shifts(
+            parts[pid], h['staff'], covered_start, covered_end, exclude_numbers=TOOL_NUMBERS
+        )
+        if not ok:
+            print(f"   stopped {describe(h)}: {reason}")
+            continue
+        for msg in restored_msgs:
+            print(f"   {msg}")
         if h['kind'] in ('8va', '15ma'):
             octv, size = (1, '8') if h['kind'] == '8va' else (2, '15')
             for _, g in covered:
@@ -303,6 +324,9 @@ def main(score, hints, map_path=None, raw_map=False):
                     c.set('print-object', 'no')
                     m.insert(idx, c)
                     idx += 1
+        applied_ranges.setdefault((pid, h['staff']), []).append(
+            (covered_start, covered_end, h['kind'])
+        )
         print(f"   {h['part']} staff {h['staff']} {h['kind']} m{h['m1']}-m{h['m2']}: {n_notes} notes")
 
     tree.write(score, encoding='UTF-8', xml_declaration=True)

@@ -167,9 +167,9 @@ def read_measures(part):
                 for e in el.findall('ending'):
                     d['endings'].append((e.get('number'), e.get('type')))
             elif el.tag == 'direction':
-                st = el.findtext('staff', '1')
+                st = el.findtext('staff') or '1'
                 for o in el.iter('octave-shift'):
-                    d['shifts'].append((st, o.get('number', '1'), o.get('type')))
+                    d['shifts'].append((st, o.get('number') or '1', o.get('type')))
                 d['segno'] |= el.find('.//segno') is not None
                 d['coda'] |= el.find('.//coda') is not None
                 for w in el.iter('words'):

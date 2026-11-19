@@ -102,48 +102,65 @@ def strip_dangling_wedges(root):
     return n
 
 
-def strip_dangling_octave_shifts(root):
+def _remove_octave_shift_el(root, o):
+    parent = None
+    for p in root.iter():
+        if o in list(p):
+            parent = p
+            break
+    if parent is None:
+        return
+    parent.remove(o)
+    if parent.tag == "direction-type" and len(parent) == 0:
+        direction = None
+        for p in root.iter():
+            if parent in list(p):
+                direction = p
+                break
+        if direction is not None:
+            direction.remove(parent)
+            if not any(c.tag == "direction-type" for c in direction):
+                up = None
+                for p in root.iter():
+                    if direction in list(p):
+                        up = p
+                        break
+                if up is not None:
+                    up.remove(direction)
+
+
+def strip_dangling_octave_shifts(root, warnings=None):
     n = 0
     for part in root.findall("part"):
+        pid = part.get("id") or "?"
+        open_ = {}
         unbalanced = []
         for m in part.findall("measure"):
+            m_num = m.get("number") or "?"
             for d in m.findall("direction"):
-                st = d.findtext("staff", "1")
+                st = d.findtext("staff") or "1"
                 for o in d.iter("octave-shift"):
+                    num = o.get("number") or "1"
                     t = o.get("type")
                     if t in ("up", "down"):
-                        unbalanced.append((o, st))
+                        if (st, num) in open_:
+                            prev_o, prev_m = open_[(st, num)]
+                            unbalanced.append((prev_o, st, num, prev_m, "duplicate start"))
+                        open_[(st, num)] = (o, m_num)
                     elif t == "stop":
-                        match_idx = next((i for i in reversed(range(len(unbalanced))) if unbalanced[i][1] == st), None)
-                        if match_idx is not None:
-                            unbalanced.pop(match_idx)
+                        if (st, num) in open_:
+                            open_.pop((st, num))
                         else:
-                            unbalanced.append((o, st))
-        for o, _ in unbalanced:
-            parent = None
-            for p in root.iter():
-                if o in list(p):
-                    parent = p
-                    break
-            if parent is None:
-                continue
-            parent.remove(o)
-            if parent.tag == "direction-type" and len(parent) == 0:
-                direction = None
-                for p in root.iter():
-                    if parent in list(p):
-                        direction = p
-                        break
-                if direction is not None:
-                    direction.remove(parent)
-                    if not any(c.tag == "direction-type" for c in direction):
-                        up = None
-                        for p in root.iter():
-                            if direction in list(p):
-                                up = p
-                                break
-                        if up is not None:
-                            up.remove(direction)
+                            unbalanced.append((o, st, num, m_num, "orphan stop"))
+        for (st, num), (o, m_num) in open_.items():
+            unbalanced.append((o, st, num, m_num, "unclosed start"))
+        for o, st, num, m_num, reason in unbalanced:
+            _remove_octave_shift_el(root, o)
+            if warnings is not None:
+                warnings.append(
+                    f"{pid} m{m_num} staff {st} number {num}: removed dangling "
+                    f"octave-shift ({reason})（未自動改音高，待確認）"
+                )
             n += 1
     return n
 
@@ -511,7 +528,8 @@ def process(path):
     root = ET.fromstring(text)
     a = strip_rest_positions(root)
     b = strip_dangling_wedges(root)
-    h = strip_dangling_octave_shifts(root)
+    octave_warnings = []
+    h = strip_dangling_octave_shifts(root, warnings=octave_warnings)
     c = strip_all_slurs(root)
     d = prune_invalid_ties(root)
     g = complete_chord_ties(root)
@@ -532,6 +550,8 @@ def process(path):
           "added-chord-ties %d, sp-staves %d, empty-lyrics %d, dynamics-lyrics %d, "
           "repeat-overlays %d, spurious-art %d"
           % (path, a, b, h, c, d, g, e, f, k, i, j))
+    for w in octave_warnings:
+        print("WARNING:", w)
 
 
 if __name__ == "__main__":

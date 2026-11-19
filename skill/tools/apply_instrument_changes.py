@@ -174,7 +174,7 @@ LABEL_RE = re.compile(
 NOTE_ORDER = ['grace', 'cue', 'chord', 'pitch', 'unpitched', 'rest', 'duration', 'tie',
               'instrument', 'voice', 'type', 'dot', 'accidental', 'time-modification', 'stem',
               'notehead', 'notehead-text', 'staff', 'beam', 'notations', 'lyric', 'play']
-SHIFT_NUMBER = '2'
+SHIFT_NUMBER = '8'
 PART_LIST_ORDER = ['identification', 'part-link', 'part-name', 'part-name-display',
                    'part-abbreviation', 'part-abbreviation-display', 'group', 'score-instrument',
                    'player', 'midi-device', 'midi-instrument']
@@ -260,24 +260,20 @@ def shift_dir(kind, size):
     return d
 
 
-def restore_omr_shifts(ab, measures, octaves):
-    out, active = [], None
-    for m, octv in zip(measures, octaves):
-        for el in list(m):
-            osh = el.find('direction-type/octave-shift') if el.tag == 'direction' else None
-            if osh is not None:
-                if osh.get('type') in ('up', 'down') and octv > 0:
-                    size = 2 if osh.get('size') == '15' else 1
-                    active = size if osh.get('type') == 'down' else -size
-                    m.remove(el)
-                    out.append(f'{ab} m{m.get("number")}: removed OMR {osh.get("size")}va line '
-                               f'inside labelled octave region')
-                elif osh.get('type') == 'stop' and active is not None:
-                    m.remove(el)
-                    active = None
-            elif el.tag == 'note' and active is not None and el.find('pitch') is not None:
-                shift_pitch(el, -active)
-    return out
+def _measure_ends(part):
+    starts = score_time.measure_starts(part)
+    beats, beat_type = score_time.DEFAULT_BEATS, score_time.DEFAULT_BEAT_TYPE
+    ends = []
+    for st, m in zip(starts, part.findall('measure')):
+        t = m.find('attributes/time')
+        if t is not None and t.find('beats') is not None:
+            beats = sum(int(x) for x in t.findtext('beats').split('+'))
+            beat_type = int(t.findtext('beat-type'))
+        ends.append(st + score_time.bar_length(beats, beat_type))
+    return starts, ends
+
+
+TOOL_SHIFT_NUMBERS = {'5', '6', '7', '8'}
 
 
 def octave_lines(ab, measures, octaves):
@@ -376,6 +372,7 @@ def apply_local_octaves(key, part, cs, warnings):
         return out
     measures = part.findall('measure')
     divs = score_time.measure_divs(part)
+    starts, _ = _measure_ends(part)
     nums = [m.get('number') for m in measures]
     for c in cs:
         staff = str(c.get('staff'))
@@ -406,6 +403,25 @@ def apply_local_octaves(key, part, cs, warnings):
             warnings.append(f'{key} staff {staff} m{c.get("measure")}: no notes in the '
                             f'local octave region ({c.get("start")}-{c.get("end")})')
             continue
+        covered_start = starts[i] + min(t for t, _ in covered)
+        covered_end = starts[i] + max(
+            t + max(F(int(n.findtext('duration') or 0), divs[i]) for n in ns)
+            for t, ns in covered
+        )
+        taken = [iv for iv in score_time.octave_intervals(part)
+                 if iv.number in TOOL_SHIFT_NUMBERS and iv.staff == staff
+                 and (iv.end is None or iv.end > covered_start) and iv.start < covered_end]
+        if taken:
+            warnings.append(f'{key} staff {staff} m{c.get("measure")}: overlapping octave line '
+                            f'#{taken[0].number}, local octave skipped')
+            continue
+        ok, reason, msgs = score_time.restore_native_octave_shifts(
+            part, staff, covered_start, covered_end, exclude_numbers=TOOL_SHIFT_NUMBERS
+        )
+        if not ok:
+            warnings.append(f'{key} staff {staff} m{c.get("measure")}: stopped local octave ({reason})')
+            continue
+        out.extend(f'{key} {msg}' for msg in msgs)
         for _, ns in covered:
             for n in ns:
                 if n.find('pitch') is not None:
@@ -422,33 +438,6 @@ def apply_local_octaves(key, part, cs, warnings):
                  shift_dir_staff('stop', size, staff, offset))
         out.append(f'{key} staff {staff} m{c.get("measure")} {c.get("start")}-{c.get("end")}: '
                    f'local {"8va" if size == 8 else "15ma"} ({len(covered)} groups)')
-    return out
-
-
-def restore_omr_shifts_staff(ab, measures, octaves, staff):
-    """Undo Audiveris' own octave lines inside one staff's labelled region."""
-    out, active = [], None
-    for m, octv in zip(measures, octaves):
-        for el in list(m):
-            if el.tag == 'direction':
-                osh = el.find('direction-type/octave-shift')
-                if osh is None:
-                    continue
-                st = el.findtext('staff')
-                if st not in (None, staff):
-                    continue
-                if osh.get('type') in ('up', 'down') and octv > 0:
-                    size = 2 if osh.get('size') == '15' else 1
-                    active = size if osh.get('type') == 'down' else -size
-                    m.remove(el)
-                    out.append(f'{ab} staff {staff} m{m.get("number")}: removed OMR '
-                               f'{osh.get("size")}va line inside labelled octave region')
-                elif osh.get('type') == 'stop' and active is not None:
-                    m.remove(el)
-                    active = None
-            elif el.tag == 'note' and active is not None and note_staff(el) == staff \
-                    and el.find('pitch') is not None:
-                shift_pitch(el, -active)
     return out
 
 
@@ -553,8 +542,43 @@ def apply_part_wide(key, sp, part, cs, defaults, order, timbres, warnings):
                 n.remove(e)
             insert_ordered(n, ET.Element('instrument', id=active_iid), NOTE_ORDER)
 
-    report.extend(restore_omr_shifts(key, measures, octaves))
-    report.extend(octave_lines(key, measures, octaves))
+    starts, ends = _measure_ends(part)
+    safe_octaves = list(octaves)
+    i = 0
+    while i < len(measures):
+        if safe_octaves[i] <= 0 or not pitched(measures[i]):
+            i += 1
+            continue
+        octv = safe_octaves[i]
+        j = i + 1
+        while j < len(measures) and safe_octaves[j] == octv and pitched(measures[j]):
+            j += 1
+        hint_start, hint_end = starts[i], ends[j - 1]
+        staves = sorted({note_staff(n) for m in measures[i:j] for n in m.iter('note')}) or ['1']
+        bad_reason = None
+        for st in staves:
+            ok, reason, _ = score_time.restore_native_octave_shifts(
+                part, st, hint_start, hint_end, exclude_numbers=TOOL_SHIFT_NUMBERS, check_only=True
+            )
+            if not ok:
+                bad_reason = reason
+                break
+        if bad_reason is not None:
+            warnings.append(
+                f'{key} m{measures[i].get("number")}-m{measures[j - 1].get("number")}: '
+                f'stopped octave line ({bad_reason})'
+            )
+            for k_idx in range(i, j):
+                safe_octaves[k_idx] = 0
+        else:
+            for st in staves:
+                _, _, msgs = score_time.restore_native_octave_shifts(
+                    part, st, hint_start, hint_end, exclude_numbers=TOOL_SHIFT_NUMBERS
+                )
+                report.extend(f'{key} {msg}' for msg in msgs)
+        i = j
+
+    report.extend(octave_lines(key, measures, safe_octaves))
     report.append(f'{key}: {len(used)} timbres {used}')
     return report
 
@@ -634,11 +658,36 @@ def apply_per_staff(key, sp, part, cs, defaults, staff_defaults, order, timbres,
                     insert_ordered(n, ET.Element('instrument', id=iid), NOTE_ORDER)
 
     local = [c for c in expanded if c.get('start')]
+    starts, ends = _measure_ends(part)
     for s in staff_ids:
         if not firsts[s]:
             continue
-        report.extend(restore_omr_shifts_staff(key, measures, octaves[s], s))
-        report.extend(octave_lines_staff(key, measures, octaves[s], s))
+        safe_octs = list(octaves[s])
+        i = 0
+        while i < len(measures):
+            if safe_octs[i] <= 0:
+                i += 1
+                continue
+            octv = safe_octs[i]
+            j = i + 1
+            while j < len(measures) and safe_octs[j] == octv:
+                j += 1
+            if any(pitched_staff(m, s) for m in measures[i:j]):
+                hint_start, hint_end = starts[i], ends[j - 1]
+                ok, reason, msgs = score_time.restore_native_octave_shifts(
+                    part, s, hint_start, hint_end, exclude_numbers=TOOL_SHIFT_NUMBERS
+                )
+                if not ok:
+                    warnings.append(
+                        f'{key} staff {s} m{measures[i].get("number")}-m{measures[j - 1].get("number")}: '
+                        f'stopped octave line ({reason})'
+                    )
+                    for k_idx in range(i, j):
+                        safe_octs[k_idx] = 0
+                else:
+                    report.extend(f'{key} {msg}' for msg in msgs)
+            i = j
+        report.extend(octave_lines_staff(key, measures, safe_octs, s))
     report.extend(apply_local_octaves(key, part, local, warnings))
     report.append(f'{key}: {len(used)} timbres {used} on staves {staff_ids}')
     return report
