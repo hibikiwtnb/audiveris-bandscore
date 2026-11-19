@@ -27,7 +27,10 @@ Page-level fixes (a measure never gets longer than its time signature, except a 
     printed rest there is not in the score);
   * lyrics of instrumental parts (misread staff text; open syllables draw hyphen dashes
     across systems) become below-staff words, OCR fragments (va, **, b) are dropped;
-  * source paths (which may contain the user name) are reduced to file names.
+  * source paths (which may contain the user name) are reduced to file names;
+  * narrow page-final measures (a trailing courtesy key signature read as a measure) are
+    reported as candidates; only those listed with printed-page evidence in
+    <song dir>/context/page_edge_prune.txt are removed.
 
 Score-level fixes after merge: tools/fill_measure_repeats.py (measure repeats at the top of a
 page get the notes of the last measure of the previous page), tools/fill_slash_chords.py (each
@@ -932,51 +935,68 @@ def _insert_key_in_attributes(measure, key_el):
     attrs.insert(pos, key_el)
 
 
-def prune_page_edge_measures(pages, report=None):
-    """Remove spurious narrow page-edge measures (e.g. trailing cautionary key signatures).
+def read_page_edge_list(path):
+    """Read <song dir>/context/page_edge_prune.txt: {(page, measure number): evidence}.
 
-    Detects a page's final measure when it is much narrower than other measures on the page
-    (< 35% of median width), carries only noise across all parts (<= 3 non-rest notes per
-    part), and the next page's opening measure already has a key signature (or the key exists
-    only in the trailing measure and is moved to the next page's opening measure).
+    One line per verified page-edge measure: `<page> <measure number> <evidence>`, where the
+    evidence names what the printed page shows there (e.g. `crop p12 right edge: courtesy key
+    signature only`).  '#' starts a comment.  An entry without evidence maps to ''.
     """
-    for idx in range(len(pages) - 1):
-        page_name, root = pages[idx]
-        _, next_root = pages[idx + 1]
+    entries = {}
+    if not os.path.isfile(path):
+        return entries
+    with open(path, encoding='utf-8') as f:
+        for line in f:
+            fields = line.split('#', 1)[0].split(None, 2)
+            if len(fields) >= 2:
+                entries[(fields[0], fields[1])] = fields[2].strip() if len(fields) == 3 else ''
+    return entries
+
+
+def prune_page_edge_measures(pages, report=None, verified=None):
+    """Report narrow page-edge measures; remove only those verified against the printed page.
+
+    A candidate is a page's final measure that is much narrower than the other measures of the
+    page (< 35% of their median width) and has <= 3 non-rest notes in every part: the shape a
+    trailing courtesy key signature takes, but also of a short real measure, which the MusicXML
+    cannot tell apart.  Candidates are only reported.  A page's final measure is removed only
+    when `verified` (read_page_edge_list) lists its page and measure number with evidence; its
+    key signature then moves to the next page's opening measure where that one has none.
+    """
+    verified = verified or {}
+    rep = report if report is not None else {}
+    for idx, (page_name, root) in enumerate(pages):
         parts = root.findall('part')
-        next_parts = next_root.findall('part')
-        if not parts or len(parts) != len(next_parts):
-            continue
-        if any(len(p.findall('measure')) < 2 for p in parts):
+        if not parts or any(len(p.findall('measure')) < 2 for p in parts):
             continue
         last_ms = [p.findall('measure')[-1] for p in parts]
-        next_first_ms = [np.findall('measure')[0] for np in next_parts]
-        if any(m.find('print') is not None for m in last_ms):
-            continue
+        num = last_ms[0].get('number')
         other_widths = [w for m in parts[0].findall('measure')[:-1]
                         if (w := _float_pos(m.get('width'))) is not None]
         last_w = _float_pos(last_ms[0].get('width'))
-        if not other_widths or last_w is None:
+        notes = max(_non_rest_count(m) for m in last_ms)
+        if other_widths and last_w is not None:
+            med_w = statistics.median(other_widths)
+            if last_w < 0.35 * med_w and notes <= 3:
+                rep.setdefault('page_edge_candidates', []).append(
+                    f'{page_name}: m{num} (w={last_w:g}, med={med_w:g}, notes={notes})')
+        evidence = verified.get((page_name, num))
+        if evidence is None:
             continue
-        med_w = statistics.median(other_widths)
-        if last_w >= 0.35 * med_w:
+        if not evidence:
+            rep.setdefault('page_edge_rejected', []).append(f'{page_name}: m{num} (no evidence)')
             continue
-        if any(_non_rest_count(m) > 3 for m in last_ms):
-            continue
-        next_has_key = any(nm.find('.//key') is not None for nm in next_first_ms)
-        last_has_key = any(m.find('.//key') is not None for m in last_ms)
-        if not next_has_key and not last_has_key:
-            continue
-        for m, nm in zip(last_ms, next_first_ms):
-            if nm.find('.//key') is None:
-                src_key = m.find('.//key')
-                if src_key is not None:
-                    _insert_key_in_attributes(nm, copy.deepcopy(src_key))
+        if idx + 1 < len(pages):
+            next_parts = pages[idx + 1][1].findall('part')
+            if len(next_parts) == len(parts):
+                for m, np_ in zip(last_ms, next_parts):
+                    nm = np_.find('measure')
+                    src_key = m.find('.//key')
+                    if nm is not None and nm.find('.//key') is None and src_key is not None:
+                        _insert_key_in_attributes(nm, copy.deepcopy(src_key))
         for p, m in zip(parts, last_ms):
             p.remove(m)
-        if report is not None:
-            report.setdefault('page_edge_pruned', []).append(
-                f'{page_name}: m{last_ms[0].get("number")} (w={last_w:g}, med={med_w:g})')
+        rep.setdefault('page_edge_pruned', []).append(f'{page_name}: m{num} ({evidence})')
 
 
 # --------------------------------------------------------------------------------------------- #
@@ -990,7 +1010,8 @@ def main(song_dir):
     out_pages = os.path.join(song_dir, 'pages')
     os.makedirs(out_pages, exist_ok=True)
     report = {k: [] for k in ('drop_dot', 'overflow_cut', 'trim_gap', 'trim_rest', 'trim_note', 'padded',
-                              'extended', 'double_dot_merged', 'page_edge_pruned',
+                              'extended', 'double_dot_merged', 'page_edge_candidates',
+                              'page_edge_pruned', 'page_edge_rejected',
                               'type_fixed', 'type_skipped',
                               'rehearsal', 'lyric_words', 'lyric_dropped')}
     report['empty_filled'] = 0
@@ -1030,7 +1051,8 @@ def main(song_dir):
         scrub_paths(root)
         pages.append((page, root))
 
-    prune_page_edge_measures(pages, report)
+    prune_page_edge_measures(pages, report, read_page_edge_list(
+        os.path.join(song_dir, 'context', 'page_edge_prune.txt')))
     for i, (page, root) in enumerate(pages, 1):
         tree = ET.ElementTree(root)
         tree.write(os.path.join(out_pages, page + '.musicxml'), encoding='UTF-8',
@@ -1111,7 +1133,8 @@ def main(song_dir):
     # Report
     print(f'pages: {len(mxls)}  empty measures filled: {report["empty_filled"]}  zero divisions fixed: {report["zero_divisions"]}')
     for k in ('rehearsal', 'lyric_words', 'lyric_dropped', 'drop_dot', 'trim_gap', 'trim_rest', 'trim_note', 'padded', 'extended',
-              'double_dot_merged', 'page_edge_pruned', 'overflow_cut'):
+              'double_dot_merged', 'page_edge_candidates', 'page_edge_pruned', 'page_edge_rejected',
+              'overflow_cut'):
         print(f'{k}: {len(report[k])}')
         for line in report[k]:
             print('   ', line)
