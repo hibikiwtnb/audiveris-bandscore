@@ -168,11 +168,13 @@ def main(score, hints):
             first_m.insert(list(first_m).index(first_g[1][0]),
                            direction(h['staff'], ET.Element('octave-shift', type='down',
                                                             size=size, number=num)))
-            # stop after the group that ends last (in its measure)
+            # stop after the group that ends last (in its measure); break ties by document order
             last_m = covered[-1][0]
             div = divs[(pid, last_m.get('number'))]
-            last_g = max((g for mm, g in covered if mm is last_m),
-                         key=lambda g: g[0] + F(int(g[1][0].findtext('duration') or 0), div))
+            _, last_g = max(
+                ((idx, g) for idx, (mm, g) in enumerate(covered) if mm is last_m),
+                key=lambda item: (item[1][0] + F(int(item[1][1][0].findtext('duration') or 0), div),
+                                  item[0]))
             last_m.insert(list(last_m).index(last_g[1][-1]) + 1,
                           direction(h['staff'], ET.Element('octave-shift', type='stop',
                                                            size=size, number=num)))
