@@ -127,6 +127,7 @@
   - 目前只支援 4/4。其他拍子要用時再擴充 `hook_lib`，不要在歌裡另抄一份。
 - **divisions 每頁不同**：合併後各頁保留自己的 divisions，時值要按該小節的 divisions 換算，不能寫死。
 - **8va**：優先寫 `context/ottava.txt`。hook 在 `apply_ottava` 之後跑，hook 重寫的小節若在已套用的 8va 範圍內，要寫成升八度後的音高（`write_measures(..., octave_up=ottava_measures(...))`）。
+- **雙譜表單手調號（`<key number="1|2">`）**：鋼琴等雙譜表樂器在轉調時，Audiveris 偶爾只讀出其中一個譜表的調號（產生 `<key number="1">` 或 `<key number="2">`）。`tools/unify_keys.py` 會將比對聲部的編號調號正規化為全聲部統一調號並移除 `number` 屬性（同小節兩譜表給出不同 `fifths` 時記錄衝突並以其他聲部時間線為準），不必再於 song hook 逐曲補救。
 - **time-only 只在真的分遍時用**。「( ) = 某樂器」的括號不是分遍；只在 D.S.①等某一遍才奏的段落才寫 time-only。寫了以後匯出 MIDI 確認只響一次，且位置對。
 - **必須可重複執行**：每項先檢查「是否已經修過」，修過就跳過；跑兩次後 `cmp` 結果相同。小心：一個函式提前 `return` 會連帶跳過後面寫在同一函式裡的修正（098 m138 曾因此沒套上），不相干的修正分成不同函式。
 - **元素順序**：`<notations>` 要在 `<lyric>` 之前，加連結線時插在 lyric、play、listen 之前，否則 `dtd_order_check.py` 報錯。

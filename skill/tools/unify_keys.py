@@ -23,14 +23,27 @@ ATTR_ORDER = ['footnote', 'level', 'divisions', 'key', 'time', 'staves', 'part-s
               'instruments', 'clef', 'staff-details', 'transpose', 'directive', 'measure-style']
 
 
-def key_events(part):
+def has_numbered_key(part):
+    """True if any <key> in the part carries a staff number attribute."""
+    return part.find('.//attributes/key[@number]') is not None
+
+
+def key_events(part, conflicts=None):
     """[(measure index, fifths)] where the key differs from the previous one."""
     events, prev = [], None
     for i, m in enumerate(part.findall('measure')):
-        k = m.find('attributes/key/fifths')
-        if k is not None and k.text != prev:
-            events.append((i, k.text))
-            prev = k.text
+        fifths = []
+        for k in m.findall('attributes/key'):
+            f = k.find('fifths')
+            if f is not None and f.text is not None and f.text not in fifths:
+                fifths.append(f.text)
+        if len(fifths) > 1:
+            if conflicts is not None:
+                conflicts.append((i, fifths))
+            continue
+        if len(fifths) == 1 and fifths[0] != prev:
+            events.append((i, fifths[0]))
+            prev = fifths[0]
     return events
 
 
@@ -101,20 +114,31 @@ def main(path):
         return
     skipped = [p.get('id') for p in parts if p.find('.//transpose') is not None
                or p.find('.//clef/sign[.="percussion"]') is not None or p.find('.//unpitched') is not None]
-    compared = [p for p in parts if p.get('id') not in skipped and key_events(p)]
+    compared = [p for p in parts if p.get('id') not in skipped
+                and (key_events(p) or has_numbered_key(p))]
     if len(compared) < 2:
         print('unify_keys: fewer than two parts with keys, nothing done')
         return
-    events = {p.get('id'): key_events(p) for p in compared}
+    events, conflicts = {}, {}
+    for p in compared:
+        pid = p.get('id')
+        part_conflicts = []
+        events[pid] = key_events(p, part_conflicts)
+        if part_conflicts:
+            conflicts[pid] = part_conflicts
     timeline, log = unified_timeline(events, len(compared))
     numbers = [m.get('number') for m in parts[0].findall('measure')]
-    changed = [p.get('id') for p in compared if events[p.get('id')] != timeline]
+    changed = [p.get('id') for p in compared
+               if events[p.get('id')] != timeline or has_numbered_key(p) or p.get('id') in conflicts]
     for p in compared:
-        if events[p.get('id')] != timeline:
+        if p.get('id') in changed:
             rewrite_part(p, timeline)
     print('unify_keys: compared ' + ' '.join(p.get('id') for p in compared)
           + (' (left alone: ' + ' '.join(skipped) + ')' if skipped else ''))
     print('  key timeline: ' + ' '.join(f'm{numbers[i]}:{v}' for i, v in timeline))
+    for pid, part_conflicts in conflicts.items():
+        for i, vals in part_conflicts:
+            print(f'  m{numbers[i]} {pid} conflicting staff keys {"/".join(vals)} (using other parts\' timeline)')
     for i, v, ps, what in log:
         if what != 'accepted':
             print(f'  m{numbers[i]} key {v} from {" ".join(ps)}: {what}')
