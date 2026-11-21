@@ -9,6 +9,7 @@ from fractions import Fraction as F
 TOOLS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, TOOLS_DIR)
 import apply_ottava  # noqa: E402
+import mscore_env  # noqa: E402
 import score_time  # noqa: E402
 import verify_musescore  # noqa: E402
 
@@ -82,6 +83,8 @@ class TestApplyOttava(unittest.TestCase):
             self.assertEqual(staves, [('P1 staff 1', [('1', [67, 72])])])
 
             # MuseScore conversion + verify_musescore.py must report 0 differences
+            if not mscore_env.musescore_bin():
+                self.skipTest('MuseScore not installed')
             res = subprocess.run(
                 [sys.executable, os.path.join(TOOLS_DIR, 'verify_musescore.py'), score_path],
                 capture_output=True, text=True,

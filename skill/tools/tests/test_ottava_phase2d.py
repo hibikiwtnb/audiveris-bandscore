@@ -9,7 +9,7 @@ import xml.etree.ElementTree as ET
 TOOLS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, TOOLS_DIR)
 import apply_ottava  # noqa: E402
-import env  # noqa: E402
+import mscore_env  # noqa: E402
 import score_time  # noqa: E402
 import verify_musescore  # noqa: E402
 
@@ -54,8 +54,13 @@ def _note(step, octave, dur, typ=None, voice='1', staff='1', alter=None,
     return ''.join(parts)
 
 
+def _require_mscore(testcase):
+    if not mscore_env.musescore_bin():
+        testcase.skipTest('MuseScore not installed')
+
+
 def _run_mscore_staves(xml_str):
-    mscore_bin = env.load(('MUSESCORE_BIN',))['MUSESCORE_BIN']
+    mscore_bin = mscore_env.musescore_bin()
     with tempfile.TemporaryDirectory() as td:
         in_xml = os.path.join(td, 'score.musicxml')
         out_mscx = os.path.join(td, 'score.mscx')
@@ -66,6 +71,7 @@ def _run_mscore_staves(xml_str):
 
 
 def _verify_zero_diff(testcase, xml_str, hints_text=None):
+    _require_mscore(testcase)
     with tempfile.TemporaryDirectory() as td:
         score = os.path.join(td, 'score.musicxml')
         with open(score, 'w', encoding='utf-8') as f:
@@ -215,6 +221,7 @@ class TestOttavaPhase2D(unittest.TestCase):
         self.assertEqual([(i.start, i.end) for i in iv], [(F(0), F(4))])
 
     def test_297_short_span_p5_m204_m212_single_part_and_unequal_parts(self):
+        _require_mscore(self)
         # Single-part 297 P5 m212 shape: 4/4 div=4, half+quarter rest, 4x 16th on beat 4, stop in next measure
         p2_m1 = (
             '<measure number="1">'
@@ -264,6 +271,7 @@ class TestOttavaPhase2D(unittest.TestCase):
         self.assertEqual(ms[1]['measures'][1], [71, 74, 92, 95])
 
     def test_297_cross_measure_stop_p4_m228_single_part_and_unequal_parts(self):
+        _require_mscore(self)
         # 297 P4 m227-m229 shape: div=2, 8va from m227 beat 3.5 across m228 (ending with eighth C#6), stop at m229
         p2_m1 = (
             '<measure number="1">'

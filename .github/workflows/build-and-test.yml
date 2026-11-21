@@ -1,8 +1,9 @@
 name: Build & Test Audiveris
 
-# Execute this workflow on every push
+# Execute this workflow on every push and pull request
 on:
   - push
+  - pull_request
   - workflow_dispatch
 
 permissions:
@@ -56,3 +57,20 @@ jobs:
 
       - name: Unit-Test Audiveris
         run: ./gradlew test
+
+  skill-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install skill dependencies
+        run: pip install -r skill/requirements.txt
+
+      - name: Unit-Test skill tools
+        run: python3 -m unittest discover -s skill/tools/tests -v
