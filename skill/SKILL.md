@@ -174,11 +174,11 @@ python3 tools/omr_beat_grid.py S <頁>              # 需要精確位置時：�
   - **死鎖排查**：轉檔進度必須順利完成，不能因 0 duration 空小節卡住。
   - **修復要求**：若有轉檔錯誤，需定位至具體小節修復 XML，直到 MuseScore 載入無報錯。
 
-- **MuseScore 實際結果檢查**（顯示音高、換樂器、8va；exit 0 才算過）：
+- **MuseScore 實際結果檢查**（顯示音高、小節長度、換樂器、8va；exit 0 才算過）：
   ```bash
   python3 tools/verify_musescore.py S/<merged>.musicxml
   ```
-  逐譜表、逐小節比對 MuseScore `.mscx` 的顯示音高與「XML 音高 − 該譜表 8va 線」，並列出每譜表 InstrumentChange / Ottava / 隱形音數；同一聲部兩譜表間移動的音標為 cross-staff，不算錯。8va 之後才開始的差異，通常是各聲部小節長度不一致（見避坑 4）。
+  逐譜表、逐小節比對 MuseScore `.mscx` 的顯示音高與「XML 音高 − 該譜表 8va 線」，並列出每譜表 InstrumentChange / Ottava / 隱形音數；同一聲部兩譜表間移動的音標為 cross-staff，不算錯。8va 之後才開始的差異，通常是各聲部小節長度不一致（見避坑 4）。另讀 MuseScore 算出的小節長度（`.mscx` 的 `<Measure len>`），與拍號不符時列出並 exit 1：MusicXML 的 `<duration>` 加起來正確、MuseScore 仍可能因 tuplet 切碎而做出 irregular 小節（畫面上顯示「?」），`score_quality.py` 的長度檢查抓不到這種情況。
 - 事實報告（後處理已自動產生 `<id>_quality.txt`；`tools/score_quality.py` 只印事實、不下判斷、永遠 exit 0，輸出給 agent 讀；手動重跑：`python3 tools/score_quality.py S/<merged>.musicxml`）：
   前段是基本資訊（頁數、小節數、音符數、速度、排練記號、反覆記號、房子、Segno/Coda/D.S./D.C.、各聲部音符數與調號）；`[issues]` 段列出樂理上的不一致（小節長度不符拍號、非標準時值、tie／八度線不成對、各聲部調號不一致、反覆記號與房子不完整或各聲部不一致），每項給次數與小節位置。`[issues]` 只是「檢查到什麼」，是否真的錯要對照譜面判斷。交付時在回報裡附上 `[issues]` 各項次數，說明哪些已對照譜面確認是原譜本來如此、哪些是未處理的已知缺口。移調樂器（有 `<transpose>`）不參與調號比對。
   - **排練標記常識檢查**：審視報告中的 `rehearsal_marks` 序列是否連續（如 A->B->C... 或 A1->B1->C1...）；若出現跳字母（如 A->C、A1->D1），視為 OMR 漏識或認偏異常，建議優先以低成本手段修復（見避坑指南 8）。
