@@ -1,4 +1,5 @@
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -40,6 +41,7 @@ class FixCreditsTest(unittest.TestCase):
 
     def run_fix(self, xml, meta=None):
         tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
         path = os.path.join(tmp, 'score.musicxml')
         with open(path, 'w', encoding='utf-8') as f:
             f.write(xml)
