@@ -41,7 +41,8 @@ page get the notes of the last measure of the previous page), a 1st ending split
 break is joined back into one span (start on the first page, stop at the backward repeat),
 tools/fill_slash_chords.py (each
 slash gets the pitches of the chord before it), tools/clean_score_noise.py (drops slurs, completes chord ties,
-prunes invalid ties, ...), then tools/apply_instrument_changes.py when
+prunes invalid ties, ...), tools/fix_credits.py (first-page author lines and title into a proper
+title frame, later-page page-number/OCR credits removed), then tools/apply_instrument_changes.py when
 <song dir>/context/instrument_changes.txt exists (printed timbre changes -> real instrument changes),
 and tools/apply_ottava.py when <song dir>/context/ottava.txt exists (8va / 15ma / coll'8va);
 tools/apply_capo.py writes <transpose> on the parts flagged ":capoN" in audiveris_hints.txt;
@@ -1197,6 +1198,8 @@ def main(song_dir):
     merged_tree = ET.parse(merged)
     merge_split_first_endings(merged_tree.getroot(), report)
     merged_tree.write(merged, encoding='UTF-8', xml_declaration=True)
+    subprocess.run([sys.executable, os.path.join(HERE, 'fix_credits.py'), merged,
+                    os.path.join(song_dir, 'context', 'song_metadata.md')], check=True)
     # trace every source measure stack (page unit, system, raw number) to its final measure;
     # verified page-edge / virtual removals keep a `deleted` row.  A count mismatch means an
     # unrecorded deletion (e.g. a song hook): the map is not written rather than guessed.
