@@ -2,6 +2,10 @@
 
 這裡只記 `skill/`（AI agent 用的 BandScore 流程、工具、模板、文件）的變更。Audiveris 本體（Java）的改進見根目錄 README 第 2 節。日期是同步到本 repo 的日期，括號裡是 commit。
 
+## 2026-11-22：第一頁作者欄與標題
+
+- **`tools/fix_credits.py`（新）**：把第一頁的多個作者行依原譜順序併成一個 composer creator、將 `- Title:` 寫入 `<work-title>`，並把被誤讀成第一系統上方文字的作家行移回作者欄；第 2 頁以後的頁碼／OCR credit 刪除。MuseScore 匯入時建立標題置中、作者欄靠右且不重疊的標準標題框。由 `bandscore_postprocess.py` 在合併後執行。（`a6d58136d`）
+
 ## 2026-11-20：半譜表調號正規化
 
 - **`tools/unify_keys.py`**：雙譜表樂器若只有單手讀出調號（`<key number="1|2">`），`key_events()` 現在會收集同小節的編號調號（同小節兩譜表給出不同 `fifths` 時記錄衝突並以其他聲部時間線為準），且 `main()` 在比對聲部仍含 `<key number>` 時強制改寫為單一全聲部 `<key>`，移除編號屬性。維持 `<transpose>` 與打擊樂跳過規則。
