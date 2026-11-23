@@ -314,6 +314,46 @@ def attribute_boundary_components(arr, crop_arr, x0, top_y, bot_y, lid, system, 
         crop_arr[:sub_mask.shape[0], :sub_mask.shape[1]][sub_mask > 0] = 255
 
 
+def clean_edge_debris(crop_arr, x0, top_y, bot_y, lid, system, boxes, interline):
+    """Remove small edge-touching ink fragments and unattributed speckles near the top/bottom
+    crop borders, while protecting ledger-line notes, stems, beams and lyrics belonging to lid."""
+    ch, cw = crop_arr.shape
+    if ch < 6 or cw < 6:
+        return
+    ext, _, _ = system_spans(system)
+    my_staff_top, my_staff_bot = ext.get(lid, (top_y, bot_y))
+    my_boxes = [b for b in boxes if b.get('lid', 0) == lid and (
+        b['tag'] in CONTENT_TAGS or b['tag'] in ('lyric-line', 'lyric-item') or b['role'] == 'Lyrics')]
+    mask = (crop_arr < 220).astype(np.uint8)
+    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+    band = max(4, int(1.4 * interline))
+    max_edge_h = max(6, int(1.6 * interline))
+    max_edge_area = max(36, int(1.8 * interline * interline))
+    max_speck_h = max(3, int(0.45 * interline))
+    max_speck_area = max(12, int(0.35 * interline * interline))
+    erase_mask = np.zeros_like(mask)
+    for lbl in range(1, num_labels):
+        cx, cy, bw, bh, area = stats[lbl]
+        gy0, gy1 = top_y + cy, top_y + cy + bh
+        gx0, gx1 = x0 + cx, x0 + cx + bw
+        # Protect anything that reaches our own staff line band
+        if gy0 <= my_staff_bot + 0.3 * interline and gy1 >= my_staff_top - 0.3 * interline:
+            continue
+        # Protect anything overlapping an Audiveris symbol/lyric box of our own part
+        if any(max(gx0, b['x'] - 2) < min(gx1, b['x'] + b['w'] + 2)
+               and max(gy0, b['y'] - 2) < min(gy1, b['y'] + b['h'] + 2) for b in my_boxes):
+            continue
+        touches_border = (cy <= 1 or cy + bh >= ch - 1)
+        in_edge_band = (cy + bh <= band or cy >= ch - band)
+        if touches_border and bh <= max_edge_h and area <= max_edge_area:
+            erase_mask[labels == lbl] = 1
+        elif in_edge_band and bh <= max_speck_h and area <= max_speck_area:
+            erase_mask[labels == lbl] = 1
+    if erase_mask.any():
+        erase_mask = cv2.dilate(erase_mask, np.ones((3, 3), np.uint8), iterations=1)
+        crop_arr[erase_mask > 0] = 255
+
+
 def system_spans(system):
     """Top/bottom staff line for each logical part and for the whole system."""
     ext = {lid: (min(t for t, _ in st), max(b for _, b in st))
@@ -434,31 +474,51 @@ def part_crop(arr, image, interline, system, lid, x0, x1, gaps, vocal=False, box
     box = (int(max(0, x0)), int(max(0, top_cut)), int(min(image.width, x1)),
            int(min(image.height, bot_cut)))
     cropped = image.crop(box)
+    crop_arr = np.asarray(cropped).copy()
     if need_cc or above_parts or below_parts:
-        crop_arr = np.asarray(cropped).copy()
         attribute_boundary_components(arr, crop_arr, box[0], box[1], box[3], lid, system,
                                       c_spans, boxes, interline)
-        cropped = Image.fromarray(crop_arr)
-    return cropped
+    clean_edge_debris(crop_arr, box[0], box[1], box[3], lid, system, boxes, interline)
+    return Image.fromarray(crop_arr)
+
+
+HEADER_ROLES = frozenset({
+    'Direction', 'Rehearsal', 'rehearsal', 'metronome', 'ending',
+    'EndingText', 'EndingNumber', 'segno', 'coda',
+})
 
 
 def header_crop(image, system, boxes, interline, x0, x1, with_chords):
-    """System-level marks above the top staff; chord names are blanked unless --with-chords."""
-    _, top, _ = system_spans(system)
-    near = [b for b in boxes if b['y'] + b['h'] <= top + interline and b['y'] >= top - 10 * interline
+    """System-level marks above the top staff; chord names are excluded unless --with-chords."""
+    ext, top, _ = system_spans(system)
+    # When the top staff (Vocal, lid 1) was omitted in Audiveris export, avoid reaching across
+    # the unexported Vocal staff into the page top unless we clamp above the actual top staff.
+    if 1 not in ext and top > 18 * interline:
+        top = top - 14 * interline
+    near = [b for b in boxes if b['y'] + b['h'] <= top - 0.3 * interline and b['y'] >= top - 9 * interline
             and x0 - 80 <= b['x'] <= x1]
-    htop = min((b['y'] for b in near), default=top - 4 * interline) - 0.8 * interline
-    htop = int(max(0, htop))
-    hbottom = int(top - 1.2 * interline)
-    img = image.crop((int(x0), htop, int(x1), hbottom))
-    if not with_chords:
-        d = ImageDraw.Draw(img)
-        pad = int(0.7 * interline)
-        for b in near:
-            if b['role'] == 'ChordName':
-                d.rectangle([b['x'] - pad - x0, b['y'] - pad - htop,
-                             b['x'] + b['w'] + pad - x0, b['y'] + b['h'] + pad - htop],
-                            fill=255)
+    keep = [b for b in near if b['role'] in HEADER_ROLES or (with_chords and b['role'] == 'ChordName')]
+    if not keep:
+        return None
+    htop = int(max(0, min(b['y'] for b in keep) - 0.6 * interline))
+    hbottom = int(min(top - 1.0 * interline, max(b['y'] + b['h'] for b in keep) + 0.6 * interline))
+    if hbottom <= htop + 2:
+        return None
+    if with_chords:
+        img = image.crop((int(x0), htop, int(x1), hbottom))
+        arr = np.asarray(img).copy()
+        clean_edge_debris(arr, int(x0), htop, hbottom, 0, dict(parts={}), [], interline)
+        return trim_rows(Image.fromarray(arr))
+    img = Image.new('L', (int(x1) - int(x0), hbottom - htop), 255)
+    pad = int(0.6 * interline)
+    for b in keep:
+        bx0 = int(max(x0, b['x'] - pad))
+        by0 = int(max(htop, b['y'] - pad))
+        bx1 = int(min(x1, b['x'] + b['w'] + pad))
+        by1 = int(min(hbottom, b['y'] + b['h'] + pad))
+        if bx1 > bx0 and by1 > by0:
+            sub = image.crop((bx0, by0, bx1, by1))
+            img.paste(sub, (bx0 - int(x0), by0 - htop))
     return trim_rows(img)
 
 

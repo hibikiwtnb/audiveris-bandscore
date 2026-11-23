@@ -144,6 +144,31 @@ class TestPartCrop(unittest.TestCase):
         # Guitar crop must start below y=128 (bottom=240, so height <= 112)
         self.assertLessEqual(g_crop.height, 112)
 
+    def test_clean_edge_debris_removes_edge_fragments_and_preserves_high_ledger_notes(self):
+        arr = np.full((300, 300), 255, np.uint8)
+        for y in range(120, 161, 10):
+            arr[y:y + 2, 20:280] = 0   # 5-line staff (lid 1, y=120..160)
+        # High ledger-line note above the staff at y=85..100 connected via stem to staff at y=125
+        arr[90:92, 145:165] = 0        # ledger line
+        arr[85:95, 150:160] = 0        # high notehead
+        arr[88:125, 158:160] = 0       # stem connecting notehead to staff
+        # Unrelated edge-touching fragment at top border of the crop
+        system = dict(stacks=[(20, 280)], parts={1: [(120.0, 160.0)]})
+        boxes = [
+            dict(tag='head', role='head', staff=1, lid=1, system=0, x=150, y=85, w=10, h=10),
+            dict(tag='ledger', role='ledger', staff=1, lid=1, system=0, x=145, y=90, w=20, h=2),
+            dict(tag='stem', role='stem', staff=1, lid=1, system=0, x=158, y=88, w=2, h=37),
+        ]
+        # Top cut will be min(120 - 12, 85 - 4) = 81; put a small 5x6 debris fragment touching y=81..86 at x=60..66
+        arr[81:86, 60:66] = 0
+        image = Image.fromarray(arr)
+        cropped = extract_parts.part_crop(arr, image, 10, system, 1, 10, 290, [], boxes=boxes)
+        c_arr = np.asarray(cropped)
+        # Edge fragment at x=60..66 (crop x=50..56, crop y=0..5) is removed
+        self.assertEqual((c_arr[:8, 50:56] < 128).sum(), 0)
+        # High ledger-line notehead at x=150..160 (crop x=140..150, crop y=4..14) is intact
+        self.assertGreater((c_arr[4:14, 140:150] < 128).sum(), 50)
+
 
 if __name__ == '__main__':
     unittest.main()
