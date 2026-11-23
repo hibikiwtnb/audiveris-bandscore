@@ -58,25 +58,51 @@ def read_book(omr):
 
 
 def read_texts(omr):
-    """Text boxes on the page: sentences (role) and printed chord names."""
+    """Text, lyric, rehearsal and symbol boxes from every sheet#N/sheet#N.xml in the .omr."""
     with zipfile.ZipFile(omr) as z:
-        root = ET.fromstring(z.read('sheet#1/sheet#1.xml'))
+        book = ET.fromstring(z.read('book.xml'))
+        sheets = sorted((n for n in z.namelist() if re.match(r'^sheet#\d+/sheet#\d+\.xml$', n)),
+                        key=lambda n: int(n.split('#', 1)[1].split('/', 1)[0]))
+        roots = [ET.fromstring(z.read(sh)) for sh in sheets]
+    logical = [[int(p.get('logical-id')) for p in s.findall('part')] for s in book.iter('system')]
     boxes = []
-    for tag, role in (('sentence', None), ('chord-name', 'ChordName')):
-        for e in root.iter(tag):
-            b = e.find('bounds')
-            if b is None:
-                continue
-            boxes.append(dict(role=role or e.get('role', ''), staff=int(e.get('staff', '0')),
-                              x=int(b.get('x')), y=int(b.get('y')),
-                              w=int(b.get('w')), h=int(b.get('h'))))
+    sys_idx = 0
+    for root in roots:
+        for sys_el in root.iter('system'):
+            smap = {}
+            for j, p in enumerate(sys_el.findall('part')):
+                if sys_idx < len(logical) and j < len(logical[sys_idx]):
+                    lid = logical[sys_idx][j]
+                    for st in p.findall('staff'):
+                        smap[int(st.get('id'))] = lid
+            for e in sys_el.iter():
+                if e.tag in ('system', 'part', 'staff', 'lines', 'line', 'stack', 'bar-connector', 'word'):
+                    continue
+                b = e.find('bounds')
+                if b is None:
+                    continue
+                sid = int(e.get('staff', '0'))
+                role = 'ChordName' if e.tag == 'chord-name' else (e.get('role') or e.tag)
+                boxes.append(dict(tag=e.tag, role=role, staff=sid, lid=smap.get(sid, 0),
+                                  system=sys_idx,
+                                  x=int(b.get('x')), y=int(b.get('y')),
+                                  w=int(b.get('w')), h=int(b.get('h'))))
+            sys_idx += 1
     seen, unique = set(), []
     for b in boxes:
-        key = (b['role'], b['x'], b['y'], b['w'], b['h'])
+        key = (b['system'], b['tag'], b['role'], b['lid'], b['x'], b['y'], b['w'], b['h'])
         if key not in seen:
             seen.add(key)
             unique.append(b)
     return unique
+
+
+def lyric_bottom(top, bottom, boxes, lid, interline):
+    """Bottom of lyric lines belonging to lid (within a reasonable distance below its staff)."""
+    ends = [b['y'] + b['h'] for b in boxes
+            if b['lid'] == lid and (b['tag'] in ('lyric-line', 'lyric-item') or b['role'] == 'Lyrics')
+            and b['w'] >= interline // 2 and bottom <= b['y'] + b['h'] <= bottom + 5.8 * interline]
+    return max(ends, default=bottom)
 
 
 def extend_missing_staves(systems, book, interline):
@@ -176,31 +202,32 @@ def title_image(song, stem):
     return trim_rows(img)
 
 
-def part_crop(arr, image, interline, system, lid, x0, x1, gaps, vocal=False):
+def part_crop(arr, image, interline, system, lid, x0, x1, gaps, vocal=False, boxes=()):
     """Crop one logical part (all its staves) and note unclean cuts in gaps."""
     ext, _, _ = system_spans(system)
     if lid not in ext:
         return None
     top, bottom = ext[lid]
-    above = [b for o, (_, b) in ext.items() if o != lid and b < top]
+    my_low = lyric_bottom(top, bottom, boxes, lid, interline)
+    above = [lyric_bottom(t, b, boxes, o, interline) for o, (t, b) in ext.items() if o != lid and b < top]
     below = [t for o, (t, _) in ext.items() if o != lid and t > bottom]
     if above:
-        cut, clean = find_split(arr, interline, x0, x1, max(above), top, (max(above) + top) / 2)
+        low_a = max(above)
+        cut, clean = find_split(arr, interline, x0, x1, low_a, top, (low_a + top) / 2)
         if not clean:
             gaps.append(('top', lid))
         top = cut
     else:
         top = top - 1.2 * interline
-    if below and vocal:
-        bottom = (bottom + min(below)) / 2
-    elif below:
-        cut, clean = find_split(arr, interline, x0, x1, bottom, min(below),
-                                (bottom + min(below)) / 2)
+    if below:
+        high_b = min(below)
+        prefer = my_low + 0.6 * interline if (vocal and my_low > bottom) else (my_low + high_b) / 2
+        cut, clean = find_split(arr, interline, x0, x1, my_low, high_b, prefer)
         if not clean:
             gaps.append(('bottom', lid))
         bottom = cut
     else:
-        bottom = bottom + 3 * interline
+        bottom = max(my_low + 0.8 * interline, bottom + 3 * interline)
     box = (int(max(0, x0)), int(max(0, top)), int(min(image.width, x1)),
            int(min(image.height, bottom)))
     return image.crop(box)
@@ -364,7 +391,8 @@ def main():
             spans = [(system_spans(s)[1], system_spans(s)[2]) for s in systems]
             boxes = read_texts(path)
             for b in boxes:
-                b['system'] = assign_system(b, spans, interline)
+                if 'system' not in b:
+                    b['system'] = assign_system(b, spans, interline)
             page = int(stem.rsplit('_p', 1)[1][:2])
             for k, system in enumerate(systems, 1):
                 ext = system_spans(system)[0]
@@ -378,13 +406,14 @@ def main():
                 if hdr is not None:
                     strips.append(hdr)
                 if args.with_lyrics and vocal and lid != vocal and vocal in ext:
-                    vc = part_crop(arr, image, interline, system, vocal, x0, x1, [], vocal=True)
+                    vc = part_crop(arr, image, interline, system, vocal, x0, x1, [], vocal=True,
+                                   boxes=local)
                     if vc is not None:
                         strips.append(trim_rows(vc))
                 crop, cut = None, []
                 if lid in ext:
                     crop = part_crop(arr, image, interline, system, lid, x0, x1, cut,
-                                     vocal=(lid == vocal))
+                                     vocal=(lid == vocal), boxes=local)
                     gaps.extend((stem, k, book[lid]['name'], side) for side, _ in cut)
                 if crop is not None:
                     strips.append(trim_rows(crop))
