@@ -30,7 +30,11 @@ import sys
 import xml.etree.ElementTree as ET
 import zipfile
 
-import cv2
+_env = dict(os.environ)
+import cv2  # noqa: E402
+# opencv-python sets Qt plugin paths and LD_LIBRARY_PATH on import; keep them out of child processes (MuseScore).
+os.environ.clear()
+os.environ.update(_env)
 import numpy as np
 from PIL import Image, ImageDraw, ImageOps
 
