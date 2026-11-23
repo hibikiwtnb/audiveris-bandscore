@@ -30,6 +30,7 @@ import sys
 import xml.etree.ElementTree as ET
 import zipfile
 
+import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageOps
 
@@ -105,12 +106,46 @@ def lyric_bottom(top, bottom, boxes, lid, interline):
     return max(ends, default=bottom)
 
 
-def extend_missing_staves(systems, book, interline):
+def find_tab_staff(arr, interline, x0, x1, bottom, next_top, is_bass=False):
+    """Locate an unexported 4-line (bass) or 6-line (guitar) TAB staff between bottom and next_top."""
+    n_lines = 4 if is_bass else 6
+    y_a = int(max(0, bottom + 2.5 * interline))
+    y_b = int(min(arr.shape[0], next_top - 3.5 * interline))
+    if y_b - y_a < int(3.8 * interline):
+        if next_top - 4 * interline > bottom + 4 * interline:
+            return float(bottom + 4.5 * interline), float(min(next_top - 4 * interline, bottom + 11.5 * interline))
+        return None
+    x_s, x_e = int(max(0, x0)), int(min(arr.shape[1], x1))
+    if x_e <= x_s:
+        return None
+    profile = (arr[y_a:y_b, x_s:x_e] < 215).mean(axis=1)
+    smooth = np.convolve(profile, [0.25, 0.5, 0.25], mode='same')
+    best_score, best_span = -1.0, None
+    for step_10 in range(max(1, int(11.5 * interline)), int(14.0 * interline) + 1):
+        step = step_10 / 10.0
+        span = round((n_lines - 1) * step)
+        if span >= len(smooth):
+            continue
+        for y0 in range(0, len(smooth) - span):
+            ys = [y0 + round(k * step) for k in range(n_lines)]
+            mids = [y0 + round((k + 0.5) * step) for k in range(n_lines - 1)]
+            score = sum(smooth[y] for y in ys) / n_lines - 0.5 * sum(smooth[m] for m in mids) / (n_lines - 1)
+            if score > best_score:
+                best_score = float(score)
+                best_span = (float(y_a + y0), float(y_a + ys[-1]))
+    if best_span and best_score > 0.08:
+        return best_span
+    return float(bottom + 5 * interline), float(min(next_top - 4 * interline, bottom + 11.5 * interline))
+
+
+def extend_missing_staves(systems, book, interline, arr=None):
     """Audiveris sometimes exports only the first staff of a two-staff part (a TAB staff is a
-    common miss).  The whole gap down to the next printed part then stays with that part, so the
-    missing staff is not cut into the part below."""
+    common miss).  Locate the actual TAB staff lines (or reserve the expected TAB band) so the
+    TAB staff stays with its own part without swallowing the gap above the next part."""
     for system in systems:
         order = sorted(system['parts'], key=lambda lid: min(t for t, _ in system['parts'][lid]))
+        x0 = system['stacks'][0][0] if system.get('stacks') else 0
+        x1 = system['stacks'][-1][1] if system.get('stacks') else (arr.shape[1] if arr is not None else 0)
         for i, lid in enumerate(order):
             staves = system['parts'][lid]
             missing = book.get(lid, {}).get('staves', 1) - len(staves)
@@ -118,9 +153,165 @@ def extend_missing_staves(systems, book, interline):
                 continue
             next_top = min(t for t, _ in system['parts'][order[i + 1]])
             bottom = max(b for _, b in staves)
-            if next_top - 1.5 * interline > bottom:
-                staves.append((bottom, next_top - 1.5 * interline))
+            is_bass = 'bass' in book.get(lid, {}).get('name', '').lower()
+            if arr is not None and x1 > x0:
+                span = find_tab_staff(arr, interline, x0, x1, bottom, next_top, is_bass=is_bass)
+            else:
+                span = (bottom, min(next_top - 4 * interline, bottom + 11.5 * interline)) if next_top - 4 * interline > bottom else None
+            if span is not None and span[1] > bottom:
+                staves.append(span)
                 system['parts'][lid].sort()
+
+
+CONTENT_TAGS = frozenset({
+    'head', 'head-chord', 'stem', 'beam', 'beam-group', 'flag', 'ledger',
+    'rest', 'rest-chord', 'articulation', 'fermata', 'tuplet', 'ornament',
+    'augmentation-dot', 'alter', 'pedal',
+})
+
+
+def part_content_spans(system, boxes, interline, arr=None, vocal_lid=None):
+    """Actual vertical content span (min_y, max_y) for each logical part in the system,
+    combining staff lines, TAB staves, lyrics, stems, beams and noteheads."""
+    ext, _, _ = system_spans(system)
+    if not ext:
+        return {}
+    spans = {lid: [t, lyric_bottom(t, b, boxes, lid, interline)] for lid, (t, b) in ext.items()}
+    order = sorted(ext, key=lambda l: ext[l][0])
+    pos = {l: i for i, l in enumerate(order)}
+    x_min = (system['stacks'][0][0] + interline) if system.get('stacks') else 0
+    for b in boxes:
+        lid = b.get('lid', 0)
+        if lid not in spans or b['tag'] not in CONTENT_TAGS:
+            continue
+        if b['x'] + b['w'] < x_min:
+            continue
+        idx = pos[lid]
+        lim_top = (ext[order[idx - 1]][1] + 0.5 * interline) if idx > 0 else 0
+        # Multi-staff parts (guitar/bass with TAB below) have no pitch symbols extending
+        # more than 0.6*interline below their bottom TAB line; single-staff parts allow 3.5*interline.
+        max_below = 0.6 * interline if len(system['parts'].get(lid, ())) > 1 else 3.5 * interline
+        lim_bot = (ext[order[idx + 1]][0] - 0.5 * interline) if idx + 1 < len(order) else 999999
+        by0, by1 = b['y'], b['y'] + b['h']
+        if b['tag'] in ('rest', 'rest-chord', 'articulation', 'ornament', 'augmentation-dot') and (
+                by1 < ext[lid][0] - 0.5 * interline or by0 > ext[lid][1] + 0.5 * interline):
+            continue
+        if by0 >= max(lim_top, ext[lid][0] - 6.5 * interline) and by1 <= min(lim_bot, ext[lid][1] + max_below):
+            spans[lid][0] = min(spans[lid][0], float(by0))
+            spans[lid][1] = max(spans[lid][1], float(by1))
+    if (arr is not None and vocal_lid in spans and len(order) > 1 and order[0] == vocal_lid
+            and spans[vocal_lid][1] < ext[vocal_lid][1] + 2.5 * interline and system.get('stacks')):
+        ya = int(max(0, ext[vocal_lid][1] + 2.4 * interline))
+        yb = int(min(arr.shape[0], ext[vocal_lid][1] + 5.6 * interline, spans[order[1]][0] - 0.3 * interline))
+        xs = int(max(0, system['stacks'][0][0] + 2 * interline))
+        xe = int(min(arr.shape[1], system['stacks'][-1][1] - interline))
+        if yb > ya and xe > xs:
+            sub_ink = (arr[ya:yb, xs:xe] < 185).sum(axis=1)
+            lyric_rows = [ya + r for r, v in enumerate(sub_ink) if v > 8]
+            if len(lyric_rows) >= max(4, int(0.6 * interline)):
+                spans[vocal_lid][1] = max(spans[vocal_lid][1], float(max(lyric_rows)))
+    return {lid: (lo, hi) for lid, (lo, hi) in spans.items()}
+
+
+def attribute_boundary_components(arr, crop_arr, x0, top_y, bot_y, lid, system, c_spans, boxes, interline):
+    """When two adjacent parts have overlapping or tight vertical ranges, erase connected ink
+    components near the top/bottom boundary that belong to the neighboring part (by Audiveris
+    symbol bounds or staff connection)."""
+    ext, _, _ = system_spans(system)
+    if lid not in ext:
+        return
+    H, W = arr.shape
+    ch, cw = crop_arr.shape
+    x_s, x_e = int(max(0, x0)), int(min(W, x0 + cw))
+    if x_e <= x_s or ch < 4:
+        return
+    pad = int(6 * interline)
+    wy0 = int(max(0, min([top_y - pad] + [t - pad for t, _ in ext.values()])))
+    wy1 = int(min(H, max([bot_y + pad] + [b + pad for _, b in ext.values()])))
+    win = (arr[wy0:wy1, x_s:x_e] < 195).astype(np.uint8)
+    # Break thin 1-2px vertical bar-connector lines on the left margin
+    left_w = min(win.shape[1], int(2.5 * interline))
+    if left_w > 0:
+        win[:, :left_w] = cv2.morphologyEx(win[:, :left_w], cv2.MORPH_OPEN, np.ones((1, 5), np.uint8))
+    my_staff_top, my_staff_bot = ext[lid]
+    other_ext = {o: s for o, s in ext.items() if o != lid}
+    if not other_ext:
+        return
+    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(win, connectivity=8)
+    my_c_top, my_c_bot = c_spans.get(lid, (my_staff_top, my_staff_bot))
+    other_boxes = [b for b in boxes if b.get('lid', 0) in other_ext and b['x'] + b['w'] >= x_s + interline]
+    my_boxes = [b for b in boxes if b.get('lid', 0) == lid and b['x'] + b['w'] >= x_s + interline]
+    # Also prepare a staff-broken window to separate symbols attached to neighbor staff lines
+    h_runs = cv2.morphologyEx(win, cv2.MORPH_OPEN, np.ones((1, max(15, int(2.5 * interline))), np.uint8))
+    h_thick = cv2.morphologyEx(h_runs, cv2.MORPH_OPEN, np.ones((7, 1), np.uint8))
+    thin_lines = (h_runs > 0) & (h_thick == 0)
+    ms0 = max(0, int(my_staff_top - 0.5 * interline) - wy0)
+    ms1 = min(win.shape[0], int(my_staff_bot + 0.5 * interline) - wy0)
+    thin_lines[ms0:ms1, :] = False
+    win_sub = win.copy()
+    win_sub[thin_lines] = 0
+    num_sub, labels_sub, stats_sub, _ = cv2.connectedComponentsWithStats(win_sub, connectivity=8)
+
+    def _box_overlap(gx0, gy0, gx1, gy1, b_list):
+        best = 0
+        for b in b_list:
+            ix0, iy0 = max(gx0, b['x'] - 2), max(gy0, b['y'] - 2)
+            ix1, iy1 = min(gx1, b['x'] + b['w'] + 2), min(gy1, b['y'] + b['h'] + 2)
+            if ix1 > ix0 and iy1 > iy0:
+                best = max(best, (ix1 - ix0) * (iy1 - iy0))
+        return best
+
+    erase_mask = np.zeros_like(win)
+    # Also erase any pixel inside an Audiveris-attributed neighbor symbol box that does not overlap
+    # our own staff band or our own symbol boxes.
+    for ob in other_boxes:
+        ox0, oy0, ox1, oy1 = ob['x'], ob['y'], ob['x'] + ob['w'], ob['y'] + ob['h']
+        if oy1 <= top_y or oy0 >= bot_y:
+            continue
+        if oy0 <= my_staff_bot + 0.3 * interline and oy1 >= my_staff_top - 0.3 * interline:
+            continue
+        if _box_overlap(ox0, oy0, ox1, oy1, my_boxes) == 0:
+            ry0, ry1 = max(0, oy0 - 1 - wy0), min(win.shape[0], oy1 + 1 - wy0)
+            rx0, rx1 = max(0, ox0 - 1 - x_s), min(win.shape[1], ox1 + 1 - x_s)
+            if ry1 > ry0 and rx1 > rx0:
+                erase_mask[ry0:ry1, rx0:rx1] = 1
+    for cur_num, cur_labels, cur_stats in ((num_labels, labels, stats), (num_sub, labels_sub, stats_sub)):
+        for lbl in range(1, cur_num):
+            cx, cy, bw, bh, _ = cur_stats[lbl]
+            gy0, gy1 = wy0 + cy, wy0 + cy + bh
+            gx0, gx1 = x_s + cx, x_s + cx + bw
+            if gy1 <= top_y or gy0 >= bot_y:
+                continue
+            if gy0 <= my_staff_bot + 0.3 * interline and gy1 >= my_staff_top - 0.3 * interline:
+                continue
+            touches_other_staff = any(
+                gy0 <= ob + 0.3 * interline and gy1 >= ot - 0.3 * interline
+                for ot, ob in other_ext.values()
+            )
+            ov_my = _box_overlap(gx0, gy0, gx1, gy1, my_boxes)
+            ov_other = _box_overlap(gx0, gy0, gx1, gy1, other_boxes)
+            erase = False
+            if touches_other_staff and ov_my == 0:
+                erase = True
+            elif ov_other > ov_my and ov_other >= 0.25 * max(1, bw * bh):
+                erase = True
+            elif ov_my == 0 and (gy0 < top_y or gy1 > bot_y):
+                yc = (gy0 + gy1) / 2.0
+                d_my = 0.0 if my_staff_top <= yc <= my_staff_bot else min(abs(yc - my_staff_top), abs(yc - my_staff_bot))
+                d_other = min(
+                    0.0 if ot <= yc <= ob else min(abs(yc - ot), abs(yc - ob))
+                    for ot, ob in other_ext.values()
+                )
+                if d_other + 0.2 * interline < d_my:
+                    erase = True
+            if erase:
+                erase_mask[cur_labels == lbl] = 1
+    if erase_mask.any():
+        erase_mask = cv2.dilate(erase_mask, np.ones((3, 3), np.uint8), iterations=1)
+        cy0 = max(0, top_y - wy0)
+        cy1 = min(win.shape[0], cy0 + ch)
+        sub_mask = erase_mask[cy0:cy1, :cw]
+        crop_arr[:sub_mask.shape[0], :sub_mask.shape[1]][sub_mask > 0] = 255
 
 
 def system_spans(system):
@@ -145,26 +336,32 @@ def assign_system(box, spans, interline):
 
 def find_split(arr, interline, x0, x1, low, high, prefer):
     """A blank row band near prefer, between low and high.  Returns (y, clean)."""
-    low, high = int(max(0, low)), int(min(arr.shape[0], high))
-    if high - low < 2:
+    low_i, high_i = int(max(0, min(low, high))), int(min(arr.shape[0], max(low, high)))
+    if high_i - low_i >= 2 and high >= low:
+        ink = (arr[low_i:high_i, max(0, int(x0)):int(x1)] < 160).sum(axis=1)
+        blank = ink <= max(2, int((x1 - x0) * 0.005))
+        runs, y = [], 0
+        while y < len(blank):
+            if not blank[y]:
+                y += 1
+                continue
+            start = y
+            while y < len(blank) and blank[y]:
+                y += 1
+            if y - start >= 2:
+                runs.append((low_i + start, low_i + y, (2 * low_i + start + y - 1) / 2))
+        near = [r for r in runs if abs(r[2] - prefer) <= 6 * interline]
+        if near:
+            _, _, center = max(near, key=lambda r: (r[1] - r[0], -abs(r[2] - prefer)))
+            return center, True
+    # No complete blank band: pick the minimum-ink row inside [min(low, high), max(low, high)]
+    s_lo = int(max(0, min(low, high)))
+    s_hi = int(min(arr.shape[0], max(low, high)))
+    if s_hi - s_lo < 2:
         return prefer, False
-    ink = (arr[low:high, max(0, x0):x1] < 160).sum(axis=1)
-    blank = ink <= max(2, int((x1 - x0) * 0.005))
-    runs, y = [], 0
-    while y < len(blank):
-        if not blank[y]:
-            y += 1
-            continue
-        start = y
-        while y < len(blank) and blank[y]:
-            y += 1
-        if y - start >= 2:
-            runs.append((low + start, low + y, (2 * low + start + y - 1) / 2))
-    near = [r for r in runs if abs(r[2] - prefer) <= 6 * interline]
-    if not near:
-        return prefer, False
-    _, _, center = max(near, key=lambda r: (r[1] - r[0], -abs(r[2] - prefer)))
-    return center, True
+    ink = (arr[s_lo:s_hi, max(0, int(x0)):int(x1)] < 160).sum(axis=1)
+    best_y = min(range(len(ink)), key=lambda i: (int(ink[i]), abs(s_lo + i - prefer)))
+    return float(s_lo + best_y), False
 
 
 def trim_rows(img):
@@ -202,35 +399,47 @@ def title_image(song, stem):
     return trim_rows(img)
 
 
-def part_crop(arr, image, interline, system, lid, x0, x1, gaps, vocal=False, boxes=()):
-    """Crop one logical part (all its staves) and note unclean cuts in gaps."""
+def part_crop(arr, image, interline, system, lid, x0, x1, gaps, vocal=False, boxes=(), vocal_lid=None):
+    """Crop one logical part (all its staves) using content extents and component attribution."""
     ext, _, _ = system_spans(system)
     if lid not in ext:
         return None
+    c_spans = part_content_spans(system, boxes, interline, arr=arr, vocal_lid=vocal_lid or (lid if vocal else None))
     top, bottom = ext[lid]
-    my_low = lyric_bottom(top, bottom, boxes, lid, interline)
-    above = [lyric_bottom(t, b, boxes, o, interline) for o, (t, b) in ext.items() if o != lid and b < top]
-    below = [t for o, (t, _) in ext.items() if o != lid and t > bottom]
-    if above:
-        low_a = max(above)
-        cut, clean = find_split(arr, interline, x0, x1, low_a, top, (low_a + top) / 2)
+    my_top, my_low = c_spans.get(lid, (top, bottom))
+    above_parts = [(o, c_spans[o][1], ext[o][1]) for o, (_, b) in ext.items() if o != lid and b < top]
+    below_parts = [(o, c_spans[o][0], ext[o][0]) for o, (t, _) in ext.items() if o != lid and t > bottom]
+    need_cc = False
+    if above_parts:
+        _, low_a, staff_b_a = max(above_parts, key=lambda item: item[2])
+        prefer = (low_a + my_top) / 2 if low_a <= my_top else (staff_b_a + top) / 2
+        cut, clean = find_split(arr, interline, x0, x1, low_a, my_top, prefer)
         if not clean:
             gaps.append(('top', lid))
-        top = cut
+            need_cc = True
+        top_cut = min(cut, my_top - 4) if not clean else cut
     else:
-        top = top - 1.2 * interline
-    if below:
-        high_b = min(below)
-        prefer = my_low + 0.6 * interline if (vocal and my_low > bottom) else (my_low + high_b) / 2
+        top_cut = min(top - 1.5 * interline, my_top - 4)
+    if below_parts:
+        _, high_b, staff_t_b = min(below_parts, key=lambda item: item[2])
+        prefer = (my_low + 0.6 * interline if (vocal and my_low > bottom)
+                  else ((my_low + high_b) / 2 if my_low <= high_b else (bottom + staff_t_b) / 2))
         cut, clean = find_split(arr, interline, x0, x1, my_low, high_b, prefer)
         if not clean:
             gaps.append(('bottom', lid))
-        bottom = cut
+            need_cc = True
+        bot_cut = max(cut, my_low + 4) if not clean else cut
     else:
-        bottom = max(my_low + 0.8 * interline, bottom + 3 * interline)
-    box = (int(max(0, x0)), int(max(0, top)), int(min(image.width, x1)),
-           int(min(image.height, bottom)))
-    return image.crop(box)
+        bot_cut = max(my_low + 0.8 * interline, bottom + 3 * interline)
+    box = (int(max(0, x0)), int(max(0, top_cut)), int(min(image.width, x1)),
+           int(min(image.height, bot_cut)))
+    cropped = image.crop(box)
+    if need_cc or above_parts or below_parts:
+        crop_arr = np.asarray(cropped).copy()
+        attribute_boundary_components(arr, crop_arr, box[0], box[1], box[3], lid, system,
+                                      c_spans, boxes, interline)
+        cropped = Image.fromarray(crop_arr)
+    return cropped
 
 
 def header_crop(image, system, boxes, interline, x0, x1, with_chords):
@@ -387,7 +596,7 @@ def main():
                 sys.exit('%s: scan %s and .omr %s have different sizes'
                          % (stem, image.size, geometry.size))
             arr = np.asarray(image)
-            extend_missing_staves(systems, book, interline)
+            extend_missing_staves(systems, book, interline, arr=arr)
             spans = [(system_spans(s)[1], system_spans(s)[2]) for s in systems]
             boxes = read_texts(path)
             for b in boxes:
@@ -407,13 +616,13 @@ def main():
                     strips.append(hdr)
                 if args.with_lyrics and vocal and lid != vocal and vocal in ext:
                     vc = part_crop(arr, image, interline, system, vocal, x0, x1, [], vocal=True,
-                                   boxes=local)
+                                   boxes=local, vocal_lid=vocal)
                     if vc is not None:
                         strips.append(trim_rows(vc))
                 crop, cut = None, []
                 if lid in ext:
                     crop = part_crop(arr, image, interline, system, lid, x0, x1, cut,
-                                     vocal=(lid == vocal), boxes=local)
+                                     vocal=(lid == vocal), boxes=local, vocal_lid=vocal)
                     gaps.extend((stem, k, book[lid]['name'], side) for side, _ in cut)
                 if crop is not None:
                     strips.append(trim_rows(crop))

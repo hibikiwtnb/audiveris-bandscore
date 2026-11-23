@@ -83,6 +83,29 @@ class TestFindSplit(unittest.TestCase):
         self.assertFalse(clean)
         self.assertEqual(y, 100)
 
+    def test_connected_component_attribution_removes_neighbor_stem(self):
+        arr = np.full((300, 300), 255, np.uint8)
+        for y in range(40, 81, 10):
+            arr[y:y + 2, 20:280] = 0   # upper 5-line staff (lid 1)
+        arr[60:145, 120:124] = 0       # upper part stem extending down to y=145
+        arr[135:175, 200:204] = 0      # lower part stem extending up to y=135 (overlap in y=135..145!)
+        for y in range(175, 216, 10):
+            arr[y:y + 2, 20:280] = 0   # lower 5-line staff (lid 2)
+        image = Image.fromarray(arr)
+        system = dict(stacks=[(20, 280)], parts={1: [(40.0, 80.0)], 2: [(175.0, 215.0)]})
+        boxes = [
+            dict(tag='stem', role='stem', staff=1, lid=1, system=0, x=120, y=60, w=4, h=85),
+            dict(tag='stem', role='stem', staff=2, lid=2, system=0, x=200, y=135, w=4, h=60),
+        ]
+        gaps = []
+        c2 = extract_parts.part_crop(arr, image, 10, system, 2, 10, 290, gaps, boxes=boxes)
+        c2_arr = np.asarray(c2)
+        # In part 2's crop, the neighbor stem at x=120..124 (crop x=110..114) above staff 2
+        # must be erased to white (255), while part 2's own stem at x=200..204 (crop x=190..194)
+        # above staff 2 remains black (0).
+        self.assertEqual((c2_arr[:30, 110:114] < 128).sum(), 0)
+        self.assertGreater((c2_arr[:30, 190:194] < 128).sum(), 0)
+
 
 class TestPartCrop(unittest.TestCase):
     def test_absent_part_returns_none_and_gaps_are_cut(self):
