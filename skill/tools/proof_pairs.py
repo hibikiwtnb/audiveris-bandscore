@@ -63,7 +63,7 @@ def read_systems(omr, min_stack):
             for st in p.findall('staff'):
                 ys = [float(pt.get('y')) for ln in st.find('lines') for pt in ln.findall('point')]
                 staves.append((min(ys), max(ys)))
-            parts[logical[k][j]] = staves
+            parts.setdefault(logical[k][j], []).extend(staves)
         systems.append(dict(stacks=stacks, parts=parts))
     return image, interline, systems
 

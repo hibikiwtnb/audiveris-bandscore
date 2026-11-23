@@ -32,6 +32,16 @@ agent 會照 [requirements.txt](requirements.txt) 準備環境、建立 `environ
 - **TAB**：有 TAB 的譜可以轉，音高從上方的五線譜讀；TAB 的品格數字目前不讀。
 - **版權**：請用你合法取得的樂譜，在自己的電腦上轉。轉出的檔案不要公開散佈市售樂譜的內容。
 
+## 圖片式分譜
+
+已跑過 OMR 的歌曲資料夾可再用 `tools/extract_parts.py` 從原始掃描頁裁出各樂器的圖片分譜（不重新打譜、保留原版印刷）：
+
+```bash
+python tools/extract_parts.py S [--with-chords] [--with-lyrics]
+```
+
+輸出在 `S/parts/`，每個樂器一份 A4 PDF，另有 `overview.png` 裁切總覽。Image parts: `extract_parts.py` cuts each instrument's staves from the original scan pages and writes one PDF per part; `--with-chords` / `--with-lyrics` add chord symbols or the vocal staff.
+
 ## 結構
 
 ```

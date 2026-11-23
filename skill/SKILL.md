@@ -194,6 +194,20 @@ python tools/proof_pairs.py S <merged.musicxml> S/proof_units [--parts P1,P3] [-
 ```
 每個單位是原譜一行（約 4 小節）裡最多兩行譜表（`--max-staves`）：大譜表自己一個單位，單行的聲部兩兩一組，一個聲部不會被拆開。`pNN_sK_<group>.png` 上半原譜、下半 MusicXML 渲染，小節線對齊；`.txt` 是同樣小節的音符清單。需要 Pillow 和 `raw/*.omr`；標籤的中文字型由 `tools/fonts.py` 自動找（macOS、Linux、Windows 的常見中文字型），找不到時 stderr 會警告。交給 agent 時只讓它看指定單位的 png 和 txt、不准跑程式，每看完一個單位就寫結果（一次給一頁的單位）。
 
+### 裁切圖片式分譜（`extract_parts.py`）
+
+需要一個已跑完 OMR 的歌曲資料夾（`raw/*.omr`，以及 `input/omr_in/*.png` 原始掃描頁）：
+
+```bash
+python tools/extract_parts.py S [--out S/parts] [--with-chords] [--with-lyrics]
+```
+
+只讀 `.omr` 的版面與原始掃描圖，不讀音符，所以分譜保留原版印刷、不受辨識錯誤影響。每個系統都保留，與總譜一一對應；原譜省略空白聲部時該分譜放一格「未印此聲部」的佔位；Audiveris 漏匯出的 TAB 等第二譜表依 `book.xml` 的譜表數留在原聲部，不會切給下一個聲部。系統頂部的速度與排練記號會附在每份分譜上方。`--with-chords` 另加印出的和弦代號列，`--with-lyrics` 在人聲以外的分譜上方加人聲譜表與歌詞；兩者預設關閉。切縫在相鄰譜表中線附近找最寬空白列，找不到時退回中線並列在 `check_gaps.txt`。第一頁放標題裁圖與樂器名，統一 A4 寬度、加頁碼。
+
+輸出 `<out>/NN_<樂器>.pdf`、`overview.png`（所有裁切縮圖）與 `index.txt`。
+
+English: `extract_parts.py` cuts per-instrument image parts from a scanned band score using only the Audiveris layout (`raw/*.omr`) and the original pages (`input/omr_in`); it writes one A4 PDF per part without re-reading notes, plus an overview image. `--with-chords` and `--with-lyrics` add the printed chord row or the vocal staff with lyrics.
+
 ### 結果報告 `S/omr_report.md`（每次跑 OMR 都寫）
 跑完 Step 5 後寫（重跑時整份改成這次的結果）。內容：
 - 輸入：頁面來源、送進 OMR 的頁（沒送的頁與原因）、`audiveris_hints.txt` 的重點（partsHint、templateDir、開關）。
