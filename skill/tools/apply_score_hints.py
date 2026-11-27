@@ -8,6 +8,7 @@ The md carries these lines (anywhere in the file, everything else is free text):
     - tempo_changes: 194=120 195=80   (measure=bpm, playable only, nothing printed)
     - rehearsals: 2=A1 11=B1 19=C1    (measure=mark, boxed, on the first part)
     - keys: 48=4 74=1                 (measure=fifths concert key, fixes OMR key misreads)
+    - lyric_syllables: P1@9 ri chu you ri luo - -   (part[@bar], one syllable per note, "-" holds)
 Without any of these lines nothing is changed.
 
 Usage: python tools/apply_score_hints.py <score.musicxml> <song_metadata.md>
@@ -33,9 +34,13 @@ def reorder(el, order):
 def read_hints(md_path):
     hints = {}
     for line in open(md_path, encoding='utf-8'):
-        m = re.match(r'\s*[-*]\s*(time|tempo_changes|tempo|rehearsals|keys)\s*[:：]\s*(.+?)\s*$', line)
+        m = re.match(r'\s*[-*]\s*(time|tempo_changes|tempo|rehearsals|keys|lyric_syllables)\s*[:：]\s*(.+?)\s*$', line)
         if m:
-            hints[m.group(1)] = m.group(2)
+            key, value = m.group(1), m.group(2)
+            if key == 'lyric_syllables':
+                hints.setdefault(key, []).append(value)
+            else:
+                hints[key] = value
     return hints
 
 
@@ -51,6 +56,55 @@ def insert_after_header(measure, el):
         else:
             break
     measure.insert(idx, el)
+
+
+def apply_lyric_syllables(root, lines):
+    """Write one syllable on each note, so MIDI export keeps one lyric event per note.
+
+    Each line is "<part-id>[@<measure>] <syllable> ..."; "-" or "—" marks a held
+    note.  @measure starts at that measure; a line without it continues where the
+    previous line for that part stopped.  Rests, chord members and grace notes are
+    skipped; notes past the list keep their existing lyric.  Only a single melodic
+    voice is assumed: notes of other voices in the same measure advance the cursor
+    too, so give a monophonic line (or split the line by @measure).
+    """
+    note_cache, cursors, report = {}, {}, []
+    for line in lines:
+        fields = line.split()
+        if len(fields) < 2:
+            raise SystemExit('lyric_syllables: expected "<part-id>[@<measure>] <syllable> ..."')
+        head = fields[0]
+        part_id, _, start = head.partition('@')
+        if part_id not in note_cache:
+            part = next((p for p in root.findall('part') if p.get('id') == part_id), None)
+            if part is None:
+                raise SystemExit('lyric_syllables: no part %s' % part_id)
+            note_cache[part_id] = [(int(m.get('number')), n)
+                                   for m in part.findall('measure')
+                                   for n in m.findall('note')
+                                   if n.find('rest') is None and n.find('chord') is None
+                                   and n.find('grace') is None]
+        notes = note_cache[part_id]
+        i = cursors.get(part_id, 0)
+        if start:
+            bar = int(start)
+            i = next((j for j, (num, _) in enumerate(notes) if num >= bar), len(notes))
+        if i + len(fields) - 1 > len(notes):
+            raise SystemExit('lyric_syllables: %d syllables exceed %d notes in %s'
+                             % (i + len(fields) - 1, len(notes), part_id))
+        for syl in fields[1:]:
+            note = notes[i][1]
+            for old in note.findall('lyric'):
+                note.remove(old)
+            lyric = ET.Element('lyric', number='1')
+            ET.SubElement(lyric, 'text').text = syl
+            pos = next((j for j, c in enumerate(list(note))
+                        if c.tag in ('play', 'listen')), len(list(note)))
+            note.insert(pos, lyric)
+            i += 1
+        cursors[part_id] = i
+        report.append('%s: %s' % (part_id, ' '.join(fields[1:])))
+    return ' | '.join(report)
 
 
 def main(score_path, md_path):
@@ -208,6 +262,10 @@ def main(score_path, md_path):
                     reorder(attr, ATTR_ORDER)
                     prev_k = kv
         done.append(f'{len(key_fixes)} key fix(es)')
+
+    if 'lyric_syllables' in hints:
+        done.append('lyric_syllables ' +
+                    apply_lyric_syllables(root, hints['lyric_syllables']))
 
     tree.write(score_path, encoding='UTF-8', xml_declaration=True)
     print('apply_score_hints:', ', '.join(done))
