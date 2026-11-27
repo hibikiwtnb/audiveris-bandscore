@@ -222,6 +222,7 @@ import org.audiveris.proxymusic.TimeSymbol;
 import org.audiveris.proxymusic.Tuplet;
 import org.audiveris.proxymusic.TypedText;
 import org.audiveris.proxymusic.Unpitched;
+import org.audiveris.proxymusic.UpDown;
 import org.audiveris.proxymusic.UpDownStopContinue;
 import org.audiveris.proxymusic.UprightInverted;
 import org.audiveris.proxymusic.Wedge;
@@ -1285,6 +1286,11 @@ public class PartwiseBuilder
             logger.debug("Visiting {}", arpeggiate);
 
             Arpeggiate pmArpeggiate = factory.createArpeggiate();
+
+            // direction: MusicXML allows an arpeggiate without a direction, but MuseScore 3
+            // logs "unknown arpeggio type none" and does not play the roll.  The printed
+            // mark is a plain roll, so export it as up.
+            pmArpeggiate.setDirection(UpDown.UP);
 
             // relative-x
             pmArpeggiate.setRelativeX(
